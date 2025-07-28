@@ -7,14 +7,14 @@
   - _Requirements: 1.1, 7.1_
 
 - [ ] 2. Implement CS2 data models and database schemas
-  - [-] 2.1 Create CS2Match Mongoose model with comprehensive schema
+  - [x] 2.1 Create CS2Match Mongoose model with comprehensive schema
     - Define match schema with HLTV ID, tournament info, teams, maps, and rounds
     - Include prediction tracking fields and embedding storage
     - Add indexes for efficient querying by date, teams, and tournament
     - Write unit tests for model validation and constraints
     - _Requirements: 2.1, 2.4_
 
-  - [ ] 2.2 Create CS2Team and CS2Player models with relationships
+  - [x] 2.2 Create CS2Team and CS2Player models with relationships
     - Implement team model with ranking, recent form, and player roster
     - Create player model with statistics and performance metrics
     - Establish proper relationships between matches, teams, and players

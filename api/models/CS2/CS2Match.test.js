@@ -12,21 +12,18 @@ const {
   updateMatchByHltvId,
   findMatchesByTeam,
   findLiveMatches,
-  findUpcomingMatches,
   updateMatchPredictions,
 } = require('./CS2Match');
 
 let mongoServer;
-let CS2Match, CS2Team;
+let models;
 
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
   
-  const models = createModels(mongoose);
-  CS2Match = models.CS2Match;
-  CS2Team = models.CS2Team;
+  models = createModels(mongoose);
 });
 
 afterAll(async () => {
@@ -35,8 +32,8 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await CS2Match.deleteMany({});
-  await CS2Team.deleteMany({});
+  await models.CS2Match.deleteMany({});
+  await models.CS2Team.deleteMany({});
 });
 
 describe('CS2Match Model Methods', () => {
@@ -44,7 +41,7 @@ describe('CS2Match Model Methods', () => {
   
   beforeEach(async () => {
     // Create test teams
-    testTeam1 = await CS2Team.create({
+    testTeam1 = await models.CS2Team.create({
       hltvId: 'team1',
       name: 'Team Alpha',
       country: 'US',
@@ -70,7 +67,7 @@ describe('CS2Match Model Methods', () => {
       },
     });
     
-    testTeam2 = await CS2Team.create({
+    testTeam2 = await models.CS2Team.create({
       hltvId: 'team2',
       name: 'Team Beta',
       country: 'SE',
