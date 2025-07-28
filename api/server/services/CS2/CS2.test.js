@@ -4,12 +4,12 @@
 
 const config = require('./config');
 const { CS2ScraperError, HLTVParsingError } = require('./errors');
-const { 
-  sanitizeTeamName, 
-  parseMatchId, 
+const {
+  sanitizeTeamName,
+  parseMatchId,
   standardizeMapName,
   calculateWinRate,
-  validateMatchData 
+  validateMatchData,
 } = require('./utils');
 
 describe('CS2 Scraper Configuration', () => {
@@ -72,7 +72,7 @@ describe('CS2 Scraper Utils', () => {
     const validMatch = {
       hltvId: '123',
       date: new Date(),
-      teams: []
+      teams: [],
     };
     expect(validateMatchData(validMatch)).toBe(true);
     expect(validateMatchData({})).toBe(false);

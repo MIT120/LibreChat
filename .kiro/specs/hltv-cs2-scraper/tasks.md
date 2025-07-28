@@ -21,15 +21,15 @@
     - Write unit tests for model relationships and data integrity
     - _Requirements: 2.1, 2.4_
 
-- [ ] 3. Build HLTV scraper service with error handling
-  - [ ] 3.1 Implement core scraping functionality with Puppeteer
+- [-] 3. Build HLTV scraper service with error handling
+  - [x] 3.1 Implement core scraping functionality with Puppeteer
     - Create HLTVScraperService class with browser automation setup
     - Implement methods for scraping match lists, match details, and team info
     - Add proper user-agent and request headers to avoid detection
     - Write unit tests with mocked browser responses
     - _Requirements: 1.1, 1.2, 1.4_
 
-  - [ ] 3.2 Add rate limiting and retry mechanisms
+  - [x] 3.2 Add rate limiting and retry mechanisms
     - Implement exponential backoff with jitter for failed requests
     - Add request throttling to respect HLTV server limits
     - Create circuit breaker pattern for handling extended outages
