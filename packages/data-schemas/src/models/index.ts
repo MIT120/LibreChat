@@ -21,6 +21,9 @@ import { createConversationTagModel } from './conversationTag';
 import { createSharedLinkModel } from './sharedLink';
 import { createToolCallModel } from './toolCall';
 import { createMemoryModel } from './memory';
+import { createCS2MatchModel } from './cs2Match';
+import { createCS2TeamModel } from './cs2Team';
+import { createCS2PlayerModel } from './cs2Player';
 
 /**
  * Creates all database models for all collections
@@ -50,5 +53,8 @@ export function createModels(mongoose: typeof import('mongoose')) {
     SharedLink: createSharedLinkModel(mongoose),
     ToolCall: createToolCallModel(mongoose),
     MemoryEntry: createMemoryModel(mongoose),
+    CS2Match: createCS2MatchModel(mongoose),
+    CS2Team: createCS2TeamModel(mongoose),
+    CS2Player: createCS2PlayerModel(mongoose),
   };
 }

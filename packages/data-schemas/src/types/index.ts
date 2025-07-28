@@ -17,3 +17,5 @@ export * from './share';
 export * from './pluginAuth';
 /* Memories */
 export * from './memory';
+/* CS2 */
+export * from './cs2';

@@ -1,13 +1,13 @@
 # Implementation Plan
 
-- [-] 1. Set up project structure and core dependencies
+- [x] 1. Set up project structure and core dependencies
   - Create directory structure for CS2 scraper components in api/server/services/
   - Install required dependencies: puppeteer, cheerio, node-cron for scheduling
   - Set up environment variables for HLTV scraping configuration
   - _Requirements: 1.1, 7.1_
 
 - [ ] 2. Implement CS2 data models and database schemas
-  - [ ] 2.1 Create CS2Match Mongoose model with comprehensive schema
+  - [-] 2.1 Create CS2Match Mongoose model with comprehensive schema
     - Define match schema with HLTV ID, tournament info, teams, maps, and rounds
     - Include prediction tracking fields and embedding storage
     - Add indexes for efficient querying by date, teams, and tournament
