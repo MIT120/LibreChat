@@ -1,6 +1,6 @@
 /**
  * Team Parser for HLTV Team Pages
- * 
+ *
  * Handles parsing of team data from HLTV team pages
  * with fallback mechanisms for structure changes.
  */
@@ -19,9 +19,9 @@ class TeamParser {
         playerName: '.player-nick, .player-name',
         playerFlag: '.flag',
         recentMatches: '.recent-results .result, .match-result',
-        teamLogo: '.team-logo, .logo'
+        teamLogo: '.team-logo, .logo',
       },
-      
+
       // Fallback selectors (alternative structures)
       fallback: {
         teamName: '.team-title, .teamname, h1',
@@ -30,8 +30,8 @@ class TeamParser {
         playerName: '.name, .nick, .player-title',
         playerFlag: '.country, .flag-icon',
         recentMatches: '.results .match, .match-history .match',
-        teamLogo: 'img[alt*="logo"], .team-image'
-      }
+        teamLogo: 'img[alt*="logo"], .team-image',
+      },
     };
   }
 
@@ -44,19 +44,19 @@ class TeamParser {
     try {
       // Try primary selectors first
       let teamData = this.parseWithSelectors(document, this.selectors.primary);
-      
+
       // If incomplete data, try fallback selectors
       if (!teamData.name || teamData.players.length === 0) {
         const fallbackData = this.parseWithSelectors(document, this.selectors.fallback);
         teamData = this.mergeTeamData(teamData, fallbackData);
       }
-      
+
       return teamData;
     } catch (error) {
       throw new HLTVParsingError(
         `Failed to parse team stats: ${error.message}`,
         window.location?.href || 'unknown',
-        { originalError: error.message }
+        { originalError: error.message },
       );
     }
   }
@@ -74,7 +74,7 @@ class TeamParser {
       players: [],
       recentMatches: [],
       logo: '',
-      stats: {}
+      stats: {},
     };
 
     // Parse team name
@@ -114,13 +114,13 @@ class TeamParser {
    */
   parseRanking(element) {
     const text = element.textContent?.trim() || '';
-    
+
     // Try different ranking formats
     const patterns = [
-      /#(\d+)/,           // #5
-      /(\d+)/,            // 5
-      /rank\s*(\d+)/i,    // Rank 5
-      /position\s*(\d+)/i // Position 5
+      /#(\d+)/, // #5
+      /(\d+)/, // 5
+      /rank\s*(\d+)/i, // Rank 5
+      /position\s*(\d+)/i, // Position 5
     ];
 
     for (const pattern of patterns) {
@@ -144,16 +144,16 @@ class TeamParser {
     const playerElements = document.querySelectorAll(selectors.players);
     const players = [];
 
-    Array.from(playerElements).forEach(playerEl => {
+    Array.from(playerElements).forEach((playerEl) => {
       try {
         const nameElement = playerEl.querySelector(selectors.playerName) || playerEl;
         const flagElement = playerEl.querySelector(selectors.playerFlag);
-        
+
         const player = {
           name: nameElement.textContent?.trim() || '',
           country: flagElement?.title || flagElement?.alt || '',
           role: this.parsePlayerRole(playerEl),
-          stats: this.parsePlayerStats(playerEl)
+          stats: this.parsePlayerStats(playerEl),
         };
 
         if (player.name) {
@@ -176,7 +176,7 @@ class TeamParser {
     const roleElement = element.querySelector('.role, .player-role, .position');
     if (roleElement) {
       const role = roleElement.textContent?.trim().toLowerCase();
-      
+
       // Standardize role names
       if (role.includes('igl') || role.includes('leader')) return 'IGL';
       if (role.includes('awp')) return 'AWPer';
@@ -184,7 +184,7 @@ class TeamParser {
       if (role.includes('support')) return 'Support';
       if (role.includes('lurk')) return 'Lurker';
     }
-    
+
     return 'Rifler'; // Default role
   }
 
@@ -195,14 +195,14 @@ class TeamParser {
    */
   parsePlayerStats(element) {
     const stats = {};
-    
+
     // Look for common stat elements
     const statElements = element.querySelectorAll('.stat, .player-stat, .statistic');
-    
-    Array.from(statElements).forEach(statEl => {
+
+    Array.from(statElements).forEach((statEl) => {
       const label = statEl.querySelector('.label, .stat-name')?.textContent?.trim().toLowerCase();
       const value = statEl.querySelector('.value, .stat-value')?.textContent?.trim();
-      
+
       if (label && value) {
         stats[label] = value;
       }
@@ -221,25 +221,28 @@ class TeamParser {
     const matchElements = document.querySelectorAll(selectors.recentMatches);
     const matches = [];
 
-    Array.from(matchElements).slice(0, 10).forEach(matchEl => { // Limit to 10 recent matches
-      try {
-        const opponent = matchEl.querySelector('.opponent, .vs, .enemy')?.textContent?.trim();
-        const result = matchEl.querySelector('.result, .score')?.textContent?.trim();
-        const date = matchEl.querySelector('.date, .time')?.textContent?.trim();
-        const map = matchEl.querySelector('.map, .mapname')?.textContent?.trim();
+    Array.from(matchElements)
+      .slice(0, 10)
+      .forEach((matchEl) => {
+        // Limit to 10 recent matches
+        try {
+          const opponent = matchEl.querySelector('.opponent, .vs, .enemy')?.textContent?.trim();
+          const result = matchEl.querySelector('.result, .score')?.textContent?.trim();
+          const date = matchEl.querySelector('.date, .time')?.textContent?.trim();
+          const map = matchEl.querySelector('.map, .mapname')?.textContent?.trim();
 
-        if (opponent) {
-          matches.push({
-            opponent: sanitizeTeamName(opponent),
-            result: result || '',
-            date: date || '',
-            map: map || ''
-          });
+          if (opponent) {
+            matches.push({
+              opponent: sanitizeTeamName(opponent),
+              result: result || '',
+              date: date || '',
+              map: map || '',
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to parse recent match:', error.message);
         }
-      } catch (error) {
-        console.warn('Failed to parse recent match:', error.message);
-      }
-    });
+      });
 
     return matches;
   }
@@ -251,21 +254,21 @@ class TeamParser {
    */
   parseTeamStatistics(document) {
     const stats = {};
-    
+
     // Parse various team statistics
     const statSelectors = [
       { selector: '.team-stat', label: 'stat-name', value: 'stat-value' },
       { selector: '.statistic', label: 'label', value: 'value' },
-      { selector: '.team-info .stat', label: 'name', value: 'number' }
+      { selector: '.team-info .stat', label: 'name', value: 'number' },
     ];
 
     for (const config of statSelectors) {
       const statElements = document.querySelectorAll(config.selector);
-      
-      Array.from(statElements).forEach(statEl => {
+
+      Array.from(statElements).forEach((statEl) => {
         const label = statEl.querySelector(`.${config.label}`)?.textContent?.trim().toLowerCase();
         const value = statEl.querySelector(`.${config.value}`)?.textContent?.trim();
-        
+
         if (label && value) {
           stats[label] = value;
         }
@@ -306,9 +309,10 @@ class TeamParser {
       name: primary.name || fallback.name,
       ranking: primary.ranking !== null ? primary.ranking : fallback.ranking,
       players: primary.players.length > 0 ? primary.players : fallback.players,
-      recentMatches: primary.recentMatches.length > 0 ? primary.recentMatches : fallback.recentMatches,
+      recentMatches:
+        primary.recentMatches.length > 0 ? primary.recentMatches : fallback.recentMatches,
       logo: primary.logo || fallback.logo,
-      stats: { ...fallback.stats, ...primary.stats }
+      stats: { ...fallback.stats, ...primary.stats },
     };
   }
 
@@ -333,7 +337,10 @@ class TeamParser {
     }
 
     // Ranking should be null or a positive number
-    if (teamData.ranking !== null && (typeof teamData.ranking !== 'number' || teamData.ranking < 1)) {
+    if (
+      teamData.ranking !== null &&
+      (typeof teamData.ranking !== 'number' || teamData.ranking < 1)
+    ) {
       return false;
     }
 

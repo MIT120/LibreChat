@@ -1,0 +1,23 @@
+{
+  "enabled": true,
+  "name": "Refactor Business Logic",
+  "description": "Monitors JavaScript/TypeScript files for changes and suggests refactoring reusable business logic into enums, classes, and types to eliminate code duplication and improve type safety",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "api/**/*.js",
+      "api/**/*.ts",
+      "client/src/**/*.js",
+      "client/src/**/*.ts",
+      "client/src/**/*.jsx",
+      "client/src/**/*.tsx",
+      "packages/**/*.js",
+      "packages/**/*.ts"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Analyze the changed files and identify opportunities to refactor reusable business logic into:\n\n1. **Enums**: For constants, status codes, error types, configuration keys, and other fixed value sets\n2. **Classes**: For complex business logic that can be encapsulated with methods and properties\n3. **Types/Interfaces**: For data structures, API responses, and function signatures to ensure type safety\n4. **Utility Functions**: For shared logic that doesn't fit into classes\n\nFocus on:\n- Eliminating code duplication across services\n- Creating centralized type definitions\n- Improving type safety throughout the codebase\n- Making business logic more maintainable and testable\n\nProvide specific refactoring suggestions with code examples showing:\n- What should be extracted into enums/classes/types\n- Where the new code should be placed in the project structure\n- How existing code should be updated to use the new abstractions\n- Any breaking changes and migration steps needed"
+  }
+}

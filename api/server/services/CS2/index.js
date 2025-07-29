@@ -1,9 +1,9 @@
 /**
  * CS2 Services Module
- * 
+ *
  * This module exports all CS2-related services for HLTV data scraping,
  * vector processing, MCP integration, and prediction engine functionality.
- * 
+ *
  * @module CS2Services
  */
 
@@ -52,7 +52,7 @@ module.exports = {
   CS2VectorService,
   CS2MCPServer,
   CS2PredictionEngine,
-  
+
   // Utilities and configuration
   config,
   errors,

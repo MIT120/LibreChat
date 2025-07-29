@@ -35,69 +35,75 @@ const cs2TeamSchema = new Schema<ICS2Team>(
         type: Date,
       },
     },
-    players: [{
-      player: {
-        type: Schema.Types.ObjectId,
-        ref: 'CS2Player',
-        required: true,
+    players: [
+      {
+        player: {
+          type: Schema.Types.ObjectId,
+          ref: 'CS2Player',
+          required: true,
+        },
+        role: {
+          type: String,
+          enum: ['IGL', 'AWPer', 'Entry', 'Support', 'Lurker'],
+        },
+        isActive: {
+          type: Boolean,
+          default: true,
+        },
+        joinDate: {
+          type: Date,
+        },
       },
-      role: {
-        type: String,
-        enum: ['IGL', 'AWPer', 'Entry', 'Support', 'Lurker'],
+    ],
+    recentForm: [
+      {
+        matchId: {
+          type: Schema.Types.ObjectId,
+          ref: 'CS2Match',
+        },
+        result: {
+          type: Number,
+          enum: [0, 1], // 0 = loss, 1 = win
+        },
+        date: {
+          type: Date,
+        },
+        opponent: {
+          type: Schema.Types.ObjectId,
+          ref: 'CS2Team',
+        },
+        mapScore: {
+          type: String, // e.g., "16-12", "2-1"
+        },
       },
-      isActive: {
-        type: Boolean,
-        default: true,
+    ],
+    mapStats: [
+      {
+        mapName: {
+          type: String,
+          required: true,
+        },
+        wins: {
+          type: Number,
+          default: 0,
+        },
+        losses: {
+          type: Number,
+          default: 0,
+        },
+        winRate: {
+          type: Number,
+          default: 0,
+        },
+        avgRounds: {
+          type: Number,
+          default: 0,
+        },
+        lastPlayed: {
+          type: Date,
+        },
       },
-      joinDate: {
-        type: Date,
-      },
-    }],
-    recentForm: [{
-      matchId: {
-        type: Schema.Types.ObjectId,
-        ref: 'CS2Match',
-      },
-      result: {
-        type: Number,
-        enum: [0, 1], // 0 = loss, 1 = win
-      },
-      date: {
-        type: Date,
-      },
-      opponent: {
-        type: Schema.Types.ObjectId,
-        ref: 'CS2Team',
-      },
-      mapScore: {
-        type: String, // e.g., "16-12", "2-1"
-      },
-    }],
-    mapStats: [{
-      mapName: {
-        type: String,
-        required: true,
-      },
-      wins: {
-        type: Number,
-        default: 0,
-      },
-      losses: {
-        type: Number,
-        default: 0,
-      },
-      winRate: {
-        type: Number,
-        default: 0,
-      },
-      avgRounds: {
-        type: Number,
-        default: 0,
-      },
-      lastPlayed: {
-        type: Date,
-      },
-    }],
+    ],
     statistics: {
       totalMatches: {
         type: Number,
@@ -131,20 +137,22 @@ const cs2TeamSchema = new Schema<ICS2Team>(
         type: Date,
       },
     },
-    achievements: [{
-      tournament: {
-        type: String,
+    achievements: [
+      {
+        tournament: {
+          type: String,
+        },
+        placement: {
+          type: String, // e.g., "1st", "2nd", "3-4th"
+        },
+        date: {
+          type: Date,
+        },
+        prizePool: {
+          type: Number,
+        },
       },
-      placement: {
-        type: String, // e.g., "1st", "2nd", "3-4th"
-      },
-      date: {
-        type: Date,
-      },
-      prizePool: {
-        type: Number,
-      },
-    }],
+    ],
     embeddings: {
       performance: {
         type: [Number],

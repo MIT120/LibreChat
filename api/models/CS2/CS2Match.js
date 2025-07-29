@@ -32,7 +32,7 @@ const updateMatchByHltvId = async (hltvId, updateData) => {
   return await CS2Match.findOneAndUpdate(
     { hltvId },
     { ...updateData, 'metadata.lastUpdated': new Date() },
-    { new: true, upsert: false }
+    { new: true, upsert: false },
   ).lean();
 };
 
@@ -44,21 +44,21 @@ const updateMatchByHltvId = async (hltvId, updateData) => {
  */
 const findMatchesByTeam = async (teamId, options = {}) => {
   const { limit = 20, status, dateFrom, dateTo } = options;
-  
+
   const query = {
-    'teams.team': teamId
+    'teams.team': teamId,
   };
-  
+
   if (status) {
     query.status = status;
   }
-  
+
   if (dateFrom || dateTo) {
     query.date = {};
     if (dateFrom) query.date.$gte = new Date(dateFrom);
     if (dateTo) query.date.$lte = new Date(dateTo);
   }
-  
+
   return await CS2Match.find(query)
     .populate('teams.team', 'name logo country ranking.current')
     .populate('tournament')
@@ -75,15 +75,15 @@ const findMatchesByTeam = async (teamId, options = {}) => {
  */
 const findMatchesByTournament = async (tournamentName, options = {}) => {
   const { limit = 50, status } = options;
-  
+
   const query = {
-    'tournament.name': { $regex: new RegExp(tournamentName, 'i') }
+    'tournament.name': { $regex: new RegExp(tournamentName, 'i') },
   };
-  
+
   if (status) {
     query.status = status;
   }
-  
+
   return await CS2Match.find(query)
     .populate('teams.team', 'name logo country ranking.current')
     .sort({ date: -1 })
@@ -98,7 +98,7 @@ const findMatchesByTournament = async (tournamentName, options = {}) => {
  */
 const findLiveMatches = async (options = {}) => {
   const { limit = 10 } = options;
-  
+
   return await CS2Match.find({ status: 'live' })
     .populate('teams.team', 'name logo country ranking.current')
     .populate('tournament')
@@ -114,13 +114,13 @@ const findLiveMatches = async (options = {}) => {
  */
 const findUpcomingMatches = async (options = {}) => {
   const { limit = 20, hoursAhead = 24 } = options;
-  
+
   const now = new Date();
-  const futureDate = new Date(now.getTime() + (hoursAhead * 60 * 60 * 1000));
-  
+  const futureDate = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
+
   return await CS2Match.find({
     status: 'upcoming',
-    date: { $gte: now, $lte: futureDate }
+    date: { $gte: now, $lte: futureDate },
   })
     .populate('teams.team', 'name logo country ranking.current')
     .populate('tournament')
@@ -136,13 +136,13 @@ const findUpcomingMatches = async (options = {}) => {
  */
 const findRecentMatches = async (options = {}) => {
   const { limit = 30, daysBack = 7 } = options;
-  
+
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-  
+
   return await CS2Match.find({
     status: 'finished',
-    date: { $gte: cutoffDate }
+    date: { $gte: cutoffDate },
   })
     .populate('teams.team', 'name logo country ranking.current')
     .populate('tournament')
@@ -162,14 +162,10 @@ const updateMatchStatus = async (hltvId, status, additionalData = {}) => {
   const updateData = {
     status,
     ...additionalData,
-    'metadata.lastUpdated': new Date()
+    'metadata.lastUpdated': new Date(),
   };
-  
-  return await CS2Match.findOneAndUpdate(
-    { hltvId },
-    { $set: updateData },
-    { new: true }
-  ).lean();
+
+  return await CS2Match.findOneAndUpdate({ hltvId }, { $set: updateData }, { new: true }).lean();
 };
 
 /**
@@ -181,13 +177,13 @@ const updateMatchStatus = async (hltvId, status, additionalData = {}) => {
 const updateMatchLiveData = async (hltvId, liveData) => {
   return await CS2Match.findOneAndUpdate(
     { hltvId },
-    { 
-      $set: { 
+    {
+      $set: {
         liveData,
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -200,11 +196,11 @@ const updateMatchLiveData = async (hltvId, liveData) => {
 const addMatchMapResult = async (hltvId, mapData) => {
   return await CS2Match.findOneAndUpdate(
     { hltvId },
-    { 
+    {
       $push: { maps: mapData },
-      $set: { 'metadata.lastUpdated': new Date() }
+      $set: { 'metadata.lastUpdated': new Date() },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -216,32 +212,28 @@ const addMatchMapResult = async (hltvId, mapData) => {
  */
 const updateMatchPredictions = async (hltvId, predictions) => {
   const updateData = {};
-  
+
   if (predictions.halfTime) {
-    Object.keys(predictions.halfTime).forEach(key => {
+    Object.keys(predictions.halfTime).forEach((key) => {
       updateData[`predictions.halfTime.${key}`] = predictions.halfTime[key];
     });
   }
-  
+
   if (predictions.mapWinner) {
-    Object.keys(predictions.mapWinner).forEach(key => {
+    Object.keys(predictions.mapWinner).forEach((key) => {
       updateData[`predictions.mapWinner.${key}`] = predictions.mapWinner[key];
     });
   }
-  
+
   if (predictions.seriesOutcome) {
-    Object.keys(predictions.seriesOutcome).forEach(key => {
+    Object.keys(predictions.seriesOutcome).forEach((key) => {
       updateData[`predictions.seriesOutcome.${key}`] = predictions.seriesOutcome[key];
     });
   }
-  
+
   updateData['metadata.lastUpdated'] = new Date();
-  
-  return await CS2Match.findOneAndUpdate(
-    { hltvId },
-    { $set: updateData },
-    { new: true }
-  ).lean();
+
+  return await CS2Match.findOneAndUpdate({ hltvId }, { $set: updateData }, { new: true }).lean();
 };
 
 /**
@@ -253,13 +245,13 @@ const updateMatchPredictions = async (hltvId, predictions) => {
 const updateMatchEmbeddings = async (hltvId, embeddings) => {
   return await CS2Match.findOneAndUpdate(
     { hltvId },
-    { 
-      $set: { 
+    {
+      $set: {
         embeddings,
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -270,24 +262,24 @@ const updateMatchEmbeddings = async (hltvId, embeddings) => {
  */
 const findMatchesForPrediction = async (criteria = {}) => {
   const { teamIds, mapName, tournamentTier, limit = 100 } = criteria;
-  
+
   const query = {
     status: 'finished',
-    'maps.0': { $exists: true } // Has at least one map
+    'maps.0': { $exists: true }, // Has at least one map
   };
-  
+
   if (teamIds && teamIds.length > 0) {
     query['teams.team'] = { $in: teamIds };
   }
-  
+
   if (mapName) {
     query['maps.name'] = mapName;
   }
-  
+
   if (tournamentTier) {
     query['tournament.tier'] = tournamentTier;
   }
-  
+
   return await CS2Match.find(query)
     .populate('teams.team', 'name ranking.current')
     .select('hltvId date tournament teams maps predictions')
@@ -304,36 +296,34 @@ const findMatchesForPrediction = async (criteria = {}) => {
  */
 const getTeamMatchStats = async (teamId, options = {}) => {
   const { daysBack = 90, mapName } = options;
-  
+
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-  
+
   const query = {
     'teams.team': teamId,
     status: 'finished',
-    date: { $gte: cutoffDate }
+    date: { $gte: cutoffDate },
   };
-  
+
   if (mapName) {
     query['maps.name'] = mapName;
   }
-  
-  const matches = await CS2Match.find(query)
-    .select('teams maps date')
-    .lean();
-  
+
+  const matches = await CS2Match.find(query).select('teams maps date').lean();
+
   let wins = 0;
   let losses = 0;
   let totalRounds = 0;
   let roundsWon = 0;
-  
-  matches.forEach(match => {
-    const teamData = match.teams.find(t => t.team.toString() === teamId);
+
+  matches.forEach((match) => {
+    const teamData = match.teams.find((t) => t.team.toString() === teamId);
     if (teamData) {
       if (teamData.isWinner) wins++;
       else losses++;
-      
-      match.maps.forEach(map => {
+
+      match.maps.forEach((map) => {
         if (map.winner && map.winner.toString() === teamId) {
           roundsWon += Math.max(map.score.team1, map.score.team2);
           totalRounds += map.score.team1 + map.score.team2;
@@ -344,7 +334,7 @@ const getTeamMatchStats = async (teamId, options = {}) => {
       });
     }
   });
-  
+
   return {
     totalMatches: matches.length,
     wins,
@@ -352,7 +342,7 @@ const getTeamMatchStats = async (teamId, options = {}) => {
     winRate: matches.length > 0 ? wins / matches.length : 0,
     roundsWon,
     totalRounds,
-    roundWinRate: totalRounds > 0 ? roundsWon / totalRounds : 0
+    roundWinRate: totalRounds > 0 ? roundsWon / totalRounds : 0,
   };
 };
 
@@ -365,14 +355,14 @@ const getTeamMatchStats = async (teamId, options = {}) => {
  */
 const findHeadToHeadMatches = async (team1Id, team2Id, options = {}) => {
   const { limit = 10, daysBack = 365 } = options;
-  
+
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-  
+
   return await CS2Match.find({
     'teams.team': { $all: [team1Id, team2Id] },
     status: 'finished',
-    date: { $gte: cutoffDate }
+    date: { $gte: cutoffDate },
   })
     .populate('teams.team', 'name logo')
     .populate('tournament', 'name tier')
@@ -390,41 +380,43 @@ const findHeadToHeadMatches = async (team1Id, team2Id, options = {}) => {
 const searchMatches = async (searchCriteria, options = {}) => {
   const { limit = 20, sortBy = 'date', sortOrder = -1 } = options;
   const { teamName, tournamentName, status, dateFrom, dateTo } = searchCriteria;
-  
+
   const query = {};
-  
+
   if (status) {
     query.status = status;
   }
-  
+
   if (dateFrom || dateTo) {
     query.date = {};
     if (dateFrom) query.date.$gte = new Date(dateFrom);
     if (dateTo) query.date.$lte = new Date(dateTo);
   }
-  
+
   if (tournamentName) {
     query['tournament.name'] = { $regex: new RegExp(tournamentName, 'i') };
   }
-  
+
   let matchQuery = CS2Match.find(query);
-  
+
   if (teamName) {
     // First find teams matching the name
     const { CS2Team } = require('~/db/models');
     const teams = await CS2Team.find({
-      name: { $regex: new RegExp(teamName, 'i') }
-    }).select('_id').lean();
-    
+      name: { $regex: new RegExp(teamName, 'i') },
+    })
+      .select('_id')
+      .lean();
+
     if (teams.length > 0) {
-      const teamIds = teams.map(t => t._id);
+      const teamIds = teams.map((t) => t._id);
       query['teams.team'] = { $in: teamIds };
     } else {
       // No teams found, return empty result
       return [];
     }
   }
-  
+
   return await matchQuery
     .populate('teams.team', 'name logo country')
     .populate('tournament')

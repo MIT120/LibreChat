@@ -1,0 +1,30 @@
+# CS2 MCP Server Configuration Example
+# Add this to your librechat.yaml file under mcpServers section
+
+mcpServers:
+  cs2-hltv:
+    type: stdio
+    command: node
+    args:
+      - api/server/services/CS2/mcp-server.js
+    timeout: 60000  # 1 minute timeout
+    iconPath: /path/to/cs2-icon.svg
+    serverInstructions: |
+      This server provides access to Counter-Strike 2 match data from HLTV.
+      Use it to get match information, team statistics, and predictions.
+      
+      Available tools:
+      - get_match_data: Retrieve match information by ID, team, or criteria
+      - get_team_stats: Get team statistics and recent form
+      - predict_match_outcome: Generate match predictions with probabilities
+    
+    # Optional: Custom user variables for authentication
+    # customUserVars:
+    #   api_key:
+    #     title: "HLTV API Key"
+    #     description: "Your HLTV API key for enhanced access"
+    
+    # Environment variables for the server
+    env:
+      NODE_ENV: production
+      # Add any required environment variables here

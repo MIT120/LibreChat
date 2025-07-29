@@ -8,6 +8,12 @@ const cs2MatchSchema = new Schema<ICS2Match>(
       required: true,
       unique: true,
       index: true,
+      validate: {
+        validator: function (v: string) {
+          return /^\d+$/.test(v);
+        },
+        message: 'HLTV ID must be a numeric string',
+      },
     },
     date: {
       type: Date,
@@ -30,127 +36,141 @@ const cs2MatchSchema = new Schema<ICS2Match>(
         type: String,
       },
     },
-    teams: [{
-      team: {
-        type: Schema.Types.ObjectId,
-        ref: 'CS2Team',
-        required: true,
-      },
-      score: {
-        type: Number,
-        default: 0,
-      },
-      side: {
-        type: String,
-        enum: ['CT', 'T'],
-      },
-      isWinner: {
-        type: Boolean,
-        default: false,
-      },
-    }],
-    maps: [{
-      name: {
-        type: String,
-        required: true,
-      },
-      pickBy: {
-        type: Schema.Types.ObjectId,
-        ref: 'CS2Team',
-      },
-      winner: {
-        type: Schema.Types.ObjectId,
-        ref: 'CS2Team',
-      },
-      score: {
-        team1: {
-          type: Number,
-          default: 0,
-        },
-        team2: {
-          type: Number,
-          default: 0,
-        },
-      },
-      rounds: [{
-        number: {
-          type: Number,
+    teams: [
+      {
+        team: {
+          type: Schema.Types.ObjectId,
+          ref: 'CS2Team',
           required: true,
         },
-        winner: {
+        score: {
+          type: Number,
+          default: 0,
+        },
+        side: {
           type: String,
           enum: ['CT', 'T'],
         },
-        reason: {
+        isWinner: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
+    maps: [
+      {
+        name: {
           type: String,
-          enum: ['elimination', 'time', 'bomb_defused', 'bomb_exploded'],
+          required: true,
         },
-        ctScore: {
-          type: Number,
-          default: 0,
-        },
-        tScore: {
-          type: Number,
-          default: 0,
-        },
-        players: [{
-          player: {
-            type: Schema.Types.ObjectId,
-            ref: 'CS2Player',
-          },
-          kills: {
-            type: Number,
-            default: 0,
-          },
-          deaths: {
-            type: Number,
-            default: 0,
-          },
-          assists: {
-            type: Number,
-            default: 0,
-          },
-          damage: {
-            type: Number,
-            default: 0,
-          },
-          side: {
-            type: String,
-            enum: ['CT', 'T'],
-          },
-        }],
-      }],
-      playerStats: [{
-        player: {
+        pickBy: {
           type: Schema.Types.ObjectId,
-          ref: 'CS2Player',
+          ref: 'CS2Team',
         },
-        kills: {
-          type: Number,
-          default: 0,
+        winner: {
+          type: Schema.Types.ObjectId,
+          ref: 'CS2Team',
         },
-        deaths: {
-          type: Number,
-          default: 0,
+        score: {
+          team1: {
+            type: Number,
+            default: 0,
+            min: 0,
+            max: 30,
+          },
+          team2: {
+            type: Number,
+            default: 0,
+            min: 0,
+            max: 30,
+          },
         },
-        assists: {
-          type: Number,
-          default: 0,
-        },
-        adr: {
-          type: Number,
-          default: 0,
-        },
-        rating: {
-          type: Number,
-          default: 0,
-        },
-        kast: {
-          type: Number,
-          default: 0,
-        },
-      }],
-    }],
+        rounds: [
+          {
+            number: {
+              type: Number,
+              required: true,
+            },
+            winner: {
+              type: String,
+              enum: ['CT', 'T'],
+            },
+            reason: {
+              type: String,
+              enum: ['elimination', 'time', 'bomb_defused', 'bomb_exploded'],
+            },
+            ctScore: {
+              type: Number,
+              default: 0,
+            },
+            tScore: {
+              type: Number,
+              default: 0,
+            },
+            players: [
+              {
+                player: {
+                  type: Schema.Types.ObjectId,
+                  ref: 'CS2Player',
+                },
+                kills: {
+                  type: Number,
+                  default: 0,
+                },
+                deaths: {
+                  type: Number,
+                  default: 0,
+                },
+                assists: {
+                  type: Number,
+                  default: 0,
+                },
+                damage: {
+                  type: Number,
+                  default: 0,
+                },
+                side: {
+                  type: String,
+                  enum: ['CT', 'T'],
+                },
+              },
+            ],
+          },
+        ],
+        playerStats: [
+          {
+            player: {
+              type: Schema.Types.ObjectId,
+              ref: 'CS2Player',
+            },
+            kills: {
+              type: Number,
+              default: 0,
+            },
+            deaths: {
+              type: Number,
+              default: 0,
+            },
+            assists: {
+              type: Number,
+              default: 0,
+            },
+            adr: {
+              type: Number,
+              default: 0,
+            },
+            rating: {
+              type: Number,
+              default: 0,
+            },
+            kast: {
+              type: Number,
+              default: 0,
+            },
+          },
+        ],
+      },
+    ],
     status: {
       type: String,
       enum: ['upcoming', 'live', 'finished'],
@@ -211,17 +231,19 @@ const cs2MatchSchema = new Schema<ICS2Match>(
           type: Schema.Types.ObjectId,
           ref: 'CS2Team',
         },
-        factors: [{
-          name: {
-            type: String,
+        factors: [
+          {
+            name: {
+              type: String,
+            },
+            weight: {
+              type: Number,
+            },
+            value: {
+              type: Schema.Types.Mixed,
+            },
           },
-          weight: {
-            type: Number,
-          },
-          value: {
-            type: Schema.Types.Mixed,
-          },
-        }],
+        ],
       },
       mapWinner: {
         predicted: {
@@ -241,17 +263,19 @@ const cs2MatchSchema = new Schema<ICS2Match>(
           type: Schema.Types.ObjectId,
           ref: 'CS2Team',
         },
-        factors: [{
-          name: {
-            type: String,
+        factors: [
+          {
+            name: {
+              type: String,
+            },
+            weight: {
+              type: Number,
+            },
+            value: {
+              type: Schema.Types.Mixed,
+            },
           },
-          weight: {
-            type: Number,
-          },
-          value: {
-            type: Schema.Types.Mixed,
-          },
-        }],
+        ],
       },
       seriesOutcome: {
         predicted: {
@@ -279,17 +303,19 @@ const cs2MatchSchema = new Schema<ICS2Match>(
           type: Schema.Types.ObjectId,
           ref: 'CS2Team',
         },
-        factors: [{
-          name: {
-            type: String,
+        factors: [
+          {
+            name: {
+              type: String,
+            },
+            weight: {
+              type: Number,
+            },
+            value: {
+              type: Schema.Types.Mixed,
+            },
           },
-          weight: {
-            type: Number,
-          },
-          value: {
-            type: Schema.Types.Mixed,
-          },
-        }],
+        ],
       },
     },
     embeddings: {

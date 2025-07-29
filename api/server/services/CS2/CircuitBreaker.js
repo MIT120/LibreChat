@@ -1,6 +1,6 @@
 /**
  * Circuit Breaker for HLTV Scraper
- * 
+ *
  * Implements circuit breaker pattern to handle extended outages
  * and prevent cascading failures.
  */
@@ -12,13 +12,13 @@ class CircuitBreaker {
     this.failureThreshold = options.failureThreshold || 5;
     this.recoveryTimeout = options.recoveryTimeout || 60000; // 1 minute
     this.monitorTimeout = options.monitorTimeout || 30000; // 30 seconds
-    
+
     // Circuit states: CLOSED, OPEN, HALF_OPEN
     this.state = 'CLOSED';
     this.failureCount = 0;
     this.lastFailureTime = null;
     this.nextAttemptTime = null;
-    
+
     // Statistics
     this.totalRequests = 0;
     this.totalFailures = 0;
@@ -43,8 +43,8 @@ class CircuitBreaker {
           {
             state: this.state,
             failureCount: this.failureCount,
-            nextAttemptTime: this.nextAttemptTime
-          }
+            nextAttemptTime: this.nextAttemptTime,
+          },
         );
       } else {
         // Transition to HALF_OPEN for testing
@@ -68,7 +68,7 @@ class CircuitBreaker {
   onSuccess() {
     this.totalSuccesses++;
     this.failureCount = 0;
-    
+
     if (this.state === 'HALF_OPEN') {
       this.state = 'CLOSED';
     }
@@ -145,7 +145,7 @@ class CircuitBreaker {
    */
   getStats() {
     const now = Date.now();
-    
+
     return {
       state: this.state,
       failureCount: this.failureCount,
@@ -156,9 +156,9 @@ class CircuitBreaker {
       totalRequests: this.totalRequests,
       totalFailures: this.totalFailures,
       totalSuccesses: this.totalSuccesses,
-      successRate: this.totalRequests > 0 ? (this.totalSuccesses / this.totalRequests) : 0,
-      failureRate: this.totalRequests > 0 ? (this.totalFailures / this.totalRequests) : 0,
-      allowsRequests: this.allowsRequests()
+      successRate: this.totalRequests > 0 ? this.totalSuccesses / this.totalRequests : 0,
+      failureRate: this.totalRequests > 0 ? this.totalFailures / this.totalRequests : 0,
+      allowsRequests: this.allowsRequests(),
     };
   }
 
@@ -170,15 +170,15 @@ class CircuitBreaker {
     if (this.state === 'CLOSED' && this.failureCount === 0) {
       return 'healthy';
     }
-    
+
     if (this.state === 'CLOSED' && this.failureCount > 0) {
       return 'degraded';
     }
-    
+
     if (this.state === 'HALF_OPEN') {
       return 'recovering';
     }
-    
+
     return 'unhealthy';
   }
 }

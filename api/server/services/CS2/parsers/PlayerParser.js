@@ -1,43 +1,19 @@
 /**
  * Player Parser for HLTV Player Pages
- * 
+ *
  * Handles parsing of player data from HLTV player pages
  * with fallback mechanisms for structure changes.
  */
 
 const { HLTVParsingError } = require('../errors');
 const { sanitizeTeamName } = require('../utils');
+const { PLAYER_SELECTORS } = require('../config/selectors');
 
 class PlayerParser {
-  constructor() {
+  constructor(customSelectors = {}) {
     this.selectors = {
-      // Primary selectors (current HLTV structure)
-      primary: {
-        playerName: '.playerNickname, .player-name',
-        realName: '.playerRealname, .real-name',
-        age: '.playerAge, .age',
-        country: '.playerCountry, .country',
-        team: '.team-info .team-name, .current-team',
-        stats: '.stats-row, .player-stat',
-        statLabel: '.stats-row-label, .stat-name',
-        statValue: '.stats-row-value, .stat-value',
-        playerImage: '.playerPicture, .player-image',
-        achievements: '.achievement, .trophy'
-      },
-      
-      // Fallback selectors (alternative structures)
-      fallback: {
-        playerName: '.player-title, .name, h1',
-        realName: '.full-name, .player-real-name',
-        age: '.player-age, .birth-date',
-        country: '.flag, .nationality',
-        team: '.team, .team-name, .current-team-name',
-        stats: '.statistic, .stat-item, '.performance',
-        statLabel: '.label, .name, '.stat-title',
-        statValue: '.value, '.number, '.stat-number',
-        playerImage: '.photo, '.picture, 'img[alt*="player"]',
-        achievements: '.award, '.title, '.honor'
-      }
+      primary: { ...PLAYER_SELECTORS.primary, ...customSelectors.primary },
+      fallback: { ...PLAYER_SELECTORS.fallback, ...customSelectors.fallback },
     };
   }
 
@@ -50,19 +26,19 @@ class PlayerParser {
     try {
       // Try primary selectors first
       let playerData = this.parseWithSelectors(document, this.selectors.primary);
-      
+
       // If incomplete data, try fallback selectors
       if (!playerData.name || Object.keys(playerData.stats).length === 0) {
         const fallbackData = this.parseWithSelectors(document, this.selectors.fallback);
         playerData = this.mergePlayerData(playerData, fallbackData);
       }
-      
+
       return playerData;
     } catch (error) {
       throw new HLTVParsingError(
         `Failed to parse player stats: ${error.message}`,
         window.location?.href || 'unknown',
-        { originalError: error.message }
+        { originalError: error.message },
       );
     }
   }
@@ -83,7 +59,7 @@ class PlayerParser {
       image: '',
       stats: {},
       achievements: [],
-      careerStats: {}
+      careerStats: {},
     };
 
     // Parse player name
@@ -107,7 +83,8 @@ class PlayerParser {
     // Parse country
     const countryElement = document.querySelector(selectors.country);
     if (countryElement) {
-      result.country = countryElement.title || countryElement.alt || countryElement.textContent?.trim() || '';
+      result.country =
+        countryElement.title || countryElement.alt || countryElement.textContent?.trim() || '';
     }
 
     // Parse current team
@@ -141,19 +118,19 @@ class PlayerParser {
    */
   parseAge(element) {
     const text = element.textContent?.trim() || '';
-    
+
     // Try different age formats
     const patterns = [
-      /(\d+)\s*years?\s*old/i,  // "25 years old"
-      /age:?\s*(\d+)/i,         // "Age: 25"
-      /(\d+)/                   // Just the number
+      /(\d+)\s*years?\s*old/i, // "25 years old"
+      /age:?\s*(\d+)/i, // "Age: 25"
+      /(\d+)/, // Just the number
     ];
 
     for (const pattern of patterns) {
       const match = text.match(pattern);
       if (match) {
         const age = parseInt(match[1]);
-        return (age > 0 && age < 100) ? age : null;
+        return age > 0 && age < 100 ? age : null;
       }
     }
 
@@ -168,18 +145,18 @@ class PlayerParser {
    */
   parseStatistics(document, selectors) {
     const stats = {};
-    
+
     // Parse individual stat rows
     const statElements = document.querySelectorAll(selectors.stats);
-    
-    Array.from(statElements).forEach(statEl => {
+
+    Array.from(statElements).forEach((statEl) => {
       try {
         const labelElement = statEl.querySelector(selectors.statLabel) || statEl;
         const valueElement = statEl.querySelector(selectors.statValue) || statEl;
-        
+
         const label = labelElement.textContent?.trim().toLowerCase();
         const value = valueElement.textContent?.trim();
-        
+
         if (label && value && label !== value) {
           // Standardize common stat names
           const standardizedLabel = this.standardizeStatLabel(label);
@@ -206,21 +183,21 @@ class PlayerParser {
       'k/d ratio': 'kdRatio',
       'k/d': 'kdRatio',
       'kd ratio': 'kdRatio',
-      'adr': 'adr',
+      adr: 'adr',
       'average damage per round': 'adr',
-      'rating': 'rating',
+      rating: 'rating',
       'rating 2.0': 'rating2',
       'hltv rating': 'rating',
       'headshot %': 'headshotPercentage',
       'hs%': 'headshotPercentage',
-      'headshots': 'headshotPercentage',
+      headshots: 'headshotPercentage',
       'maps played': 'mapsPlayed',
       'rounds played': 'roundsPlayed',
-      'kills': 'kills',
-      'deaths': 'deaths',
-      'assists': 'assists',
-      'kast': 'kast',
-      'impact': 'impact'
+      kills: 'kills',
+      deaths: 'deaths',
+      assists: 'assists',
+      kast: 'kast',
+      impact: 'impact',
     };
 
     return labelMap[label] || label.replace(/\s+/g, '').replace(/[^\w]/g, '');
@@ -255,18 +232,14 @@ class PlayerParser {
    */
   parseAdditionalStats(document, stats) {
     // Parse from overview sections
-    const overviewSelectors = [
-      '.overview-stat',
-      '.player-overview .stat',
-      '.summary-stat'
-    ];
+    const overviewSelectors = ['.overview-stat', '.player-overview .stat', '.summary-stat'];
 
     for (const selector of overviewSelectors) {
       const elements = document.querySelectorAll(selector);
-      Array.from(elements).forEach(el => {
+      Array.from(elements).forEach((el) => {
         const label = el.querySelector('.label, .name')?.textContent?.trim().toLowerCase();
         const value = el.querySelector('.value, .number')?.textContent?.trim();
-        
+
         if (label && value) {
           const standardizedLabel = this.standardizeStatLabel(label);
           stats[standardizedLabel] = this.parseStatValue(value);
@@ -284,8 +257,8 @@ class PlayerParser {
   parseAchievements(document, selectors) {
     const achievements = [];
     const achievementElements = document.querySelectorAll(selectors.achievements);
-    
-    Array.from(achievementElements).forEach(achEl => {
+
+    Array.from(achievementElements).forEach((achEl) => {
       try {
         const title = achEl.querySelector('.title, .name, .achievement-name')?.textContent?.trim();
         const date = achEl.querySelector('.date, .year')?.textContent?.trim();
@@ -297,7 +270,7 @@ class PlayerParser {
             title: title,
             date: date || '',
             tournament: tournament || '',
-            placement: placement || ''
+            placement: placement || '',
           });
         }
       } catch (error) {
@@ -315,30 +288,25 @@ class PlayerParser {
    */
   parseCareerStats(document) {
     const careerStats = {};
-    
+
     // Look for career/total statistics sections
-    const careerSelectors = [
-      '.career-stats',
-      '.total-stats',
-      '.all-time-stats',
-      '.lifetime-stats'
-    ];
+    const careerSelectors = ['.career-stats', '.total-stats', '.all-time-stats', '.lifetime-stats'];
 
     for (const selector of careerSelectors) {
       const careerSection = document.querySelector(selector);
       if (careerSection) {
         const statElements = careerSection.querySelectorAll('.stat, .statistic');
-        
-        Array.from(statElements).forEach(statEl => {
+
+        Array.from(statElements).forEach((statEl) => {
           const label = statEl.querySelector('.label, .name')?.textContent?.trim().toLowerCase();
           const value = statEl.querySelector('.value, .number')?.textContent?.trim();
-          
+
           if (label && value) {
             const standardizedLabel = this.standardizeStatLabel(label);
             careerStats[standardizedLabel] = this.parseStatValue(value);
           }
         });
-        
+
         break; // Use first found section
       }
     }
@@ -362,7 +330,7 @@ class PlayerParser {
       image: primary.image || fallback.image,
       stats: { ...fallback.stats, ...primary.stats },
       achievements: primary.achievements.length > 0 ? primary.achievements : fallback.achievements,
-      careerStats: { ...fallback.careerStats, ...primary.careerStats }
+      careerStats: { ...fallback.careerStats, ...primary.careerStats },
     };
   }
 
@@ -382,7 +350,10 @@ class PlayerParser {
     }
 
     // Age should be null or a reasonable number
-    if (playerData.age !== null && (typeof playerData.age !== 'number' || playerData.age < 16 || playerData.age > 50)) {
+    if (
+      playerData.age !== null &&
+      (typeof playerData.age !== 'number' || playerData.age < 16 || playerData.age > 50)
+    ) {
       return false;
     }
 

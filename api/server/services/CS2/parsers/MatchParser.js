@@ -1,6 +1,6 @@
 /**
  * Match Parser for HLTV Match Pages
- * 
+ *
  * Handles parsing of match data from various HLTV page formats
  * with fallback mechanisms for structure changes.
  */
@@ -19,9 +19,9 @@ class MatchParser {
         matchTime: '.matchTime, .time',
         matchEvent: '.matchEvent, .event',
         matchScore: '.matchMeta, .result-score',
-        liveIndicator: '.live'
+        liveIndicator: '.live',
       },
-      
+
       // Fallback selectors (alternative structures)
       fallback: {
         matchElements: '.match, .match-item, .upcoming-match',
@@ -30,8 +30,8 @@ class MatchParser {
         matchTime: '.time, .match-time, .date',
         matchEvent: '.event, .tournament, .match-event',
         matchScore: '.score, .result, .match-score',
-        liveIndicator: '.live, .status-live'
-      }
+        liveIndicator: '.live, .status-live',
+      },
     };
   }
 
@@ -45,18 +45,18 @@ class MatchParser {
     try {
       // Try primary selectors first
       let matches = this.parseWithSelectors(document, this.selectors.primary, limit);
-      
+
       // If no matches found, try fallback selectors
       if (matches.length === 0) {
         matches = this.parseWithSelectors(document, this.selectors.fallback, limit);
       }
-      
+
       return matches;
     } catch (error) {
       throw new HLTVParsingError(
         `Failed to parse match list: ${error.message}`,
         window.location?.href || 'unknown',
-        { originalError: error.message }
+        { originalError: error.message },
       );
     }
   }
@@ -74,7 +74,7 @@ class MatchParser {
 
     for (let i = 0; i < Math.min(matchElements.length, limit); i++) {
       const element = matchElements[i];
-      
+
       try {
         const match = this.parseMatchElement(element, selectors);
         if (match && match.hltvId) {
@@ -109,9 +109,9 @@ class MatchParser {
     // Extract team names
     const teamElements = element.querySelectorAll(selectors.teamName);
     const teams = Array.from(teamElements)
-      .map(team => team.textContent?.trim())
-      .filter(name => name)
-      .map(name => sanitizeTeamName(name));
+      .map((team) => team.textContent?.trim())
+      .filter((name) => name)
+      .map((name) => sanitizeTeamName(name));
 
     // Extract date/time
     const timeElement = element.querySelector(selectors.matchTime);
@@ -123,9 +123,7 @@ class MatchParser {
 
     // Extract score if available (for results)
     const scoreElements = element.querySelectorAll(selectors.matchScore);
-    const scores = Array.from(scoreElements).map(score => 
-      score.textContent.trim()
-    );
+    const scores = Array.from(scoreElements).map((score) => score.textContent.trim());
 
     // Determine match status
     let status = 'upcoming';
@@ -141,7 +139,7 @@ class MatchParser {
       dateStr,
       tournament,
       scores,
-      status
+      status,
     };
   }
 
@@ -157,21 +155,21 @@ class MatchParser {
         maps: [],
         tournament: {},
         status: 'upcoming',
-        players: []
+        players: [],
       };
 
       // Parse teams with multiple selector strategies
       result.teams = this.parseTeams(document);
-      
+
       // Parse maps
       result.maps = this.parseMaps(document);
-      
+
       // Parse tournament info
       result.tournament = this.parseTournament(document);
-      
+
       // Parse players
       result.players = this.parsePlayers(document);
-      
+
       // Determine status
       result.status = this.parseMatchStatus(document);
 
@@ -180,7 +178,7 @@ class MatchParser {
       throw new HLTVParsingError(
         `Failed to parse match details: ${error.message}`,
         window.location?.href || 'unknown',
-        { originalError: error.message }
+        { originalError: error.message },
       );
     }
   }
@@ -191,26 +189,23 @@ class MatchParser {
    * @returns {Array} Team objects
    */
   parseTeams(document) {
-    const teamSelectors = [
-      '.team',
-      '.match-team',
-      '.team-box',
-      '.teamName'
-    ];
+    const teamSelectors = ['.team', '.match-team', '.team-box', '.teamName'];
 
     for (const selector of teamSelectors) {
       const teamElements = document.querySelectorAll(selector);
       if (teamElements.length > 0) {
-        return Array.from(teamElements).map(team => {
-          const nameElement = team.querySelector('.teamName, .team-name, .name') || team;
-          const logoElement = team.querySelector('.logo, .team-logo, img');
-          
-          return {
-            name: sanitizeTeamName(nameElement.textContent?.trim() || ''),
-            logo: logoElement?.src || '',
-            players: []
-          };
-        }).filter(team => team.name);
+        return Array.from(teamElements)
+          .map((team) => {
+            const nameElement = team.querySelector('.teamName, .team-name, .name') || team;
+            const logoElement = team.querySelector('.logo, .team-logo, img');
+
+            return {
+              name: sanitizeTeamName(nameElement.textContent?.trim() || ''),
+              logo: logoElement?.src || '',
+              players: [],
+            };
+          })
+          .filter((team) => team.name);
       }
     }
 
@@ -223,27 +218,26 @@ class MatchParser {
    * @returns {Array} Map objects
    */
   parseMaps(document) {
-    const mapSelectors = [
-      '.mapholder',
-      '.map',
-      '.match-map',
-      '.map-holder'
-    ];
+    const mapSelectors = ['.mapholder', '.map', '.match-map', '.map-holder'];
 
     for (const selector of mapSelectors) {
       const mapElements = document.querySelectorAll(selector);
       if (mapElements.length > 0) {
-        return Array.from(mapElements).map(mapEl => {
-          const mapNameElement = mapEl.querySelector('.mapname, .map-name, .name');
-          const scoreElements = mapEl.querySelectorAll('.results-team-score, .score, .team-score');
-          
-          return {
-            name: standardizeMapName(mapNameElement?.textContent?.trim() || ''),
-            scores: Array.from(scoreElements).map(score => 
-              parseInt(score.textContent.trim()) || 0
-            )
-          };
-        }).filter(map => map.name);
+        return Array.from(mapElements)
+          .map((mapEl) => {
+            const mapNameElement = mapEl.querySelector('.mapname, .map-name, .name');
+            const scoreElements = mapEl.querySelectorAll(
+              '.results-team-score, .score, .team-score',
+            );
+
+            return {
+              name: standardizeMapName(mapNameElement?.textContent?.trim() || ''),
+              scores: Array.from(scoreElements).map(
+                (score) => parseInt(score.textContent.trim()) || 0,
+              ),
+            };
+          })
+          .filter((map) => map.name);
       }
     }
 
@@ -256,12 +250,7 @@ class MatchParser {
    * @returns {Object} Tournament object
    */
   parseTournament(document) {
-    const eventSelectors = [
-      '.event',
-      '.tournament',
-      '.match-event',
-      '.event-name'
-    ];
+    const eventSelectors = ['.event', '.tournament', '.match-event', '.event-name'];
 
     for (const selector of eventSelectors) {
       const eventElement = document.querySelector(selector);
@@ -269,7 +258,7 @@ class MatchParser {
         return {
           name: eventElement.textContent?.trim() || '',
           tier: this.extractTournamentTier(eventElement),
-          prizePool: this.extractPrizePool(document)
+          prizePool: this.extractPrizePool(document),
         };
       }
     }
@@ -283,27 +272,22 @@ class MatchParser {
    * @returns {Array} Player objects
    */
   parsePlayers(document) {
-    const playerSelectors = [
-      '.player',
-      '.lineup .player',
-      '.team-player',
-      '.player-name'
-    ];
+    const playerSelectors = ['.player', '.lineup .player', '.team-player', '.player-name'];
 
     const players = [];
-    
+
     for (const selector of playerSelectors) {
       const playerElements = document.querySelectorAll(selector);
       if (playerElements.length > 0) {
-        Array.from(playerElements).forEach(player => {
+        Array.from(playerElements).forEach((player) => {
           const nameElement = player.querySelector('.player-nick, .name') || player;
           const flagElement = player.querySelector('.flag, .country');
-          
+
           const playerData = {
             name: nameElement.textContent?.trim() || '',
-            country: flagElement?.title || flagElement?.alt || ''
+            country: flagElement?.title || flagElement?.alt || '',
           };
-          
+
           if (playerData.name) {
             players.push(playerData);
           }
@@ -324,11 +308,11 @@ class MatchParser {
     if (document.querySelector('.live, .status-live')) {
       return 'live';
     }
-    
+
     if (document.querySelector('.results, .finished, .match-finished')) {
       return 'finished';
     }
-    
+
     return 'upcoming';
   }
 
@@ -339,12 +323,12 @@ class MatchParser {
    */
   extractTournamentTier(element) {
     const text = element.textContent?.toLowerCase() || '';
-    
+
     if (text.includes('major')) return 'S';
     if (text.includes('premier')) return 'A';
     if (text.includes('championship')) return 'A';
     if (text.includes('masters')) return 'B';
-    
+
     return 'C'; // Default tier
   }
 
@@ -354,11 +338,7 @@ class MatchParser {
    * @returns {number|null} Prize pool amount
    */
   extractPrizePool(document) {
-    const prizeSelectors = [
-      '.prize-pool',
-      '.prizepool',
-      '.tournament-prize'
-    ];
+    const prizeSelectors = ['.prize-pool', '.prizepool', '.tournament-prize'];
 
     for (const selector of prizeSelectors) {
       const prizeElement = document.querySelector(selector);

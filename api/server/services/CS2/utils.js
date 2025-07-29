@@ -2,14 +2,14 @@
  * Utility functions for HLTV CS2 Scraper
  */
 
-const { logger } = require('~/config');
+const logger = require('../../../../utils/logger');
 
 /**
  * Sleep for a specified number of milliseconds
  * @param {number} ms - Milliseconds to sleep
  * @returns {Promise<void>}
  */
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Exponential backoff with jitter
@@ -35,23 +35,23 @@ const exponentialBackoff = (attempt, baseDelay = 1000, maxDelay = 60000, jitterF
  */
 const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000, shouldRetry = () => true) => {
   let lastError;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error;
-      
+
       if (attempt === maxRetries || !shouldRetry(error)) {
         throw error;
       }
-      
+
       const delay = exponentialBackoff(attempt, baseDelay);
       logger.warn(`Attempt ${attempt + 1} failed, retrying in ${delay}ms:`, error.message);
       await sleep(delay);
     }
   }
-  
+
   throw lastError;
 };
 
@@ -61,8 +61,14 @@ const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000, shouldRetr
  * @returns {string} Sanitized team name
  */
 const sanitizeTeamName = (teamName) => {
-  if (!teamName) return '';
-  return teamName.trim().replace(/\s+/g, ' ');
+  if (!teamName || typeof teamName !== 'string') return '';
+
+  // Remove potentially dangerous characters and normalize whitespace
+  return teamName
+    .trim()
+    .replace(/[<>"'&]/g, '') // Remove HTML/script injection chars
+    .replace(/\s+/g, ' ')
+    .substring(0, 100); // Limit length
 };
 
 /**
@@ -102,21 +108,21 @@ const parsePlayerId = (url) => {
  */
 const standardizeMapName = (mapName) => {
   if (!mapName) return '';
-  
+
   const mapMappings = {
-    'de_dust2': 'Dust2',
-    'de_mirage': 'Mirage',
-    'de_inferno': 'Inferno',
-    'de_cache': 'Cache',
-    'de_overpass': 'Overpass',
-    'de_train': 'Train',
-    'de_cobblestone': 'Cobblestone',
-    'de_nuke': 'Nuke',
-    'de_vertigo': 'Vertigo',
-    'de_ancient': 'Ancient',
-    'de_anubis': 'Anubis',
+    de_dust2: 'Dust2',
+    de_mirage: 'Mirage',
+    de_inferno: 'Inferno',
+    de_cache: 'Cache',
+    de_overpass: 'Overpass',
+    de_train: 'Train',
+    de_cobblestone: 'Cobblestone',
+    de_nuke: 'Nuke',
+    de_vertigo: 'Vertigo',
+    de_ancient: 'Ancient',
+    de_anubis: 'Anubis',
   };
-  
+
   const normalized = mapName.toLowerCase().trim();
   return mapMappings[normalized] || mapName;
 };
@@ -128,7 +134,7 @@ const standardizeMapName = (mapName) => {
  */
 const calculateWinRate = (matches) => {
   if (!matches || matches.length === 0) return 0;
-  const wins = matches.filter(result => result === 1).length;
+  const wins = matches.filter((result) => result === 1).length;
   return wins / matches.length;
 };
 
@@ -140,16 +146,16 @@ const calculateWinRate = (matches) => {
  */
 const calculateMomentum = (recentResults, weightDecay = 0.8) => {
   if (!recentResults || recentResults.length === 0) return 0.5;
-  
+
   let weightedSum = 0;
   let totalWeight = 0;
-  
+
   for (let i = 0; i < recentResults.length; i++) {
     const weight = Math.pow(weightDecay, i);
     weightedSum += recentResults[i] * weight;
     totalWeight += weight;
   }
-  
+
   return totalWeight > 0 ? weightedSum / totalWeight : 0.5;
 };
 
@@ -160,9 +166,9 @@ const calculateMomentum = (recentResults, weightDecay = 0.8) => {
  */
 const validateMatchData = (matchData) => {
   if (!matchData || typeof matchData !== 'object') return false;
-  
+
   const requiredFields = ['hltvId', 'date', 'teams'];
-  return requiredFields.every(field => matchData.hasOwnProperty(field));
+  return requiredFields.every((field) => Object.prototype.hasOwnProperty.call(matchData, field));
 };
 
 /**

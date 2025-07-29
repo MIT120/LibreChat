@@ -1,6 +1,6 @@
 /**
  * Data Validator for HLTV Scraped Data
- * 
+ *
  * Provides schema validation for scraped data before database storage
  * with comprehensive validation rules and error reporting.
  */
@@ -12,7 +12,7 @@ class DataValidator {
     this.schemas = {
       match: this.getMatchSchema(),
       team: this.getTeamSchema(),
-      player: this.getPlayerSchema()
+      player: this.getPlayerSchema(),
     };
   }
 
@@ -56,19 +56,19 @@ class DataValidator {
 
     try {
       this.validateObject(data, schema, '', errors, warnings);
-      
+
       return {
         isValid: errors.length === 0,
         errors,
         warnings,
-        data: this.sanitizeData(data, schema)
+        data: this.sanitizeData(data, schema),
       };
     } catch (error) {
       return {
         isValid: false,
         errors: [`Validation failed for ${type}: ${error.message}`],
         warnings,
-        data: null
+        data: null,
       };
     }
   }
@@ -113,8 +113,8 @@ class DataValidator {
       if (schema.additionalProperties === false && schema.properties) {
         const allowedKeys = Object.keys(schema.properties);
         const dataKeys = Object.keys(data);
-        const unexpectedKeys = dataKeys.filter(key => !allowedKeys.includes(key));
-        
+        const unexpectedKeys = dataKeys.filter((key) => !allowedKeys.includes(key));
+
         if (unexpectedKeys.length > 0) {
           warnings.push(`Unexpected properties found: ${unexpectedKeys.join(', ')}`);
         }
@@ -130,7 +130,9 @@ class DataValidator {
       }
 
       if (schema.maxItems && data.length > schema.maxItems) {
-        warnings.push(`${path} has ${data.length} items, maximum recommended is ${schema.maxItems}`);
+        warnings.push(
+          `${path} has ${data.length} items, maximum recommended is ${schema.maxItems}`,
+        );
       }
 
       // Validate array items
@@ -165,15 +167,17 @@ class DataValidator {
       if (schema.minLength && data.length < schema.minLength) {
         errors.push(`${path} must be at least ${schema.minLength} characters long`);
       }
-      
+
       if (schema.maxLength && data.length > schema.maxLength) {
-        warnings.push(`${path} is ${data.length} characters, recommended maximum is ${schema.maxLength}`);
+        warnings.push(
+          `${path} is ${data.length} characters, recommended maximum is ${schema.maxLength}`,
+        );
       }
-      
+
       if (schema.pattern && !new RegExp(schema.pattern).test(data)) {
         errors.push(`${path} does not match required pattern`);
       }
-      
+
       if (schema.enum && !schema.enum.includes(data)) {
         errors.push(`${path} must be one of: ${schema.enum.join(', ')}`);
       }
@@ -184,11 +188,11 @@ class DataValidator {
       if (schema.minimum !== undefined && data < schema.minimum) {
         errors.push(`${path} must be at least ${schema.minimum}`);
       }
-      
+
       if (schema.maximum !== undefined && data > schema.maximum) {
         warnings.push(`${path} is ${data}, recommended maximum is ${schema.maximum}`);
       }
-      
+
       if (schema.integer && !Number.isInteger(data)) {
         errors.push(`${path} must be an integer`);
       }
@@ -220,8 +224,8 @@ class DataValidator {
           } else if (propSchema.type === 'object') {
             sanitized[key] = this.sanitizeData(data[key], propSchema);
           } else if (propSchema.type === 'array' && Array.isArray(data[key])) {
-            sanitized[key] = data[key].map(item => 
-              propSchema.items ? this.sanitizeData(item, propSchema.items) : item
+            sanitized[key] = data[key].map((item) =>
+              propSchema.items ? this.sanitizeData(item, propSchema.items) : item,
             );
           } else {
             sanitized[key] = data[key];
@@ -248,7 +252,7 @@ class DataValidator {
           type: 'string',
           required: true,
           pattern: '^\\d+$',
-          minLength: 1
+          minLength: 1,
         },
         teams: {
           type: 'array',
@@ -258,30 +262,30 @@ class DataValidator {
           items: {
             type: 'string',
             minLength: 1,
-            maxLength: 50
-          }
+            maxLength: 50,
+          },
         },
         date: {
           type: 'object',
-          required: false
+          required: false,
         },
         tournament: {
           type: 'string',
           required: false,
           maxLength: 100,
-          default: ''
+          default: '',
         },
         status: {
           type: 'string',
           required: true,
-          enum: ['upcoming', 'live', 'finished']
+          enum: ['upcoming', 'live', 'finished'],
         },
         scores: {
           type: 'array',
           required: false,
           items: {
-            type: 'string'
-          }
+            type: 'string',
+          },
         },
         maps: {
           type: 'array',
@@ -292,21 +296,21 @@ class DataValidator {
               name: {
                 type: 'string',
                 required: true,
-                minLength: 1
+                minLength: 1,
               },
               scores: {
                 type: 'array',
                 items: {
                   type: 'number',
                   minimum: 0,
-                  maximum: 30
-                }
-              }
-            }
-          }
-        }
+                  maximum: 30,
+                },
+              },
+            },
+          },
+        },
       },
-      additionalProperties: false
+      additionalProperties: false,
     };
   }
 
@@ -322,20 +326,20 @@ class DataValidator {
         hltvId: {
           type: 'string',
           required: false,
-          pattern: '^\\d+$'
+          pattern: '^\\d+$',
         },
         name: {
           type: 'string',
           required: true,
           minLength: 1,
-          maxLength: 50
+          maxLength: 50,
         },
         ranking: {
           type: 'number',
           required: false,
           minimum: 1,
           maximum: 100,
-          integer: true
+          integer: true,
         },
         players: {
           type: 'array',
@@ -348,25 +352,25 @@ class DataValidator {
                 type: 'string',
                 required: true,
                 minLength: 1,
-                maxLength: 30
+                maxLength: 30,
               },
               country: {
                 type: 'string',
                 required: false,
-                maxLength: 50
+                maxLength: 50,
               },
               role: {
                 type: 'string',
                 required: false,
-                enum: ['IGL', 'AWPer', 'Entry', 'Support', 'Lurker', 'Rifler']
-              }
-            }
-          }
+                enum: ['IGL', 'AWPer', 'Entry', 'Support', 'Lurker', 'Rifler'],
+              },
+            },
+          },
         },
         logo: {
           type: 'string',
           required: false,
-          maxLength: 500
+          maxLength: 500,
         },
         recentMatches: {
           type: 'array',
@@ -377,21 +381,21 @@ class DataValidator {
             properties: {
               opponent: {
                 type: 'string',
-                required: true
+                required: true,
               },
               result: {
                 type: 'string',
-                required: false
+                required: false,
               },
               date: {
                 type: 'string',
-                required: false
-              }
-            }
-          }
-        }
+                required: false,
+              },
+            },
+          },
+        },
       },
-      additionalProperties: true
+      additionalProperties: true,
     };
   }
 
@@ -407,45 +411,45 @@ class DataValidator {
         hltvId: {
           type: 'string',
           required: false,
-          pattern: '^\\d+$'
+          pattern: '^\\d+$',
         },
         name: {
           type: 'string',
           required: true,
           minLength: 1,
-          maxLength: 30
+          maxLength: 30,
         },
         realName: {
           type: 'string',
           required: false,
-          maxLength: 100
+          maxLength: 100,
         },
         age: {
           type: 'number',
           required: false,
           minimum: 16,
           maximum: 50,
-          integer: true
+          integer: true,
         },
         country: {
           type: 'string',
           required: false,
-          maxLength: 50
+          maxLength: 50,
         },
         team: {
           type: 'string',
           required: false,
-          maxLength: 50
+          maxLength: 50,
         },
         image: {
           type: 'string',
           required: false,
-          maxLength: 500
+          maxLength: 500,
         },
         stats: {
           type: 'object',
           required: false,
-          additionalProperties: true
+          additionalProperties: true,
         },
         achievements: {
           type: 'array',
@@ -456,21 +460,21 @@ class DataValidator {
             properties: {
               title: {
                 type: 'string',
-                required: true
+                required: true,
               },
               date: {
                 type: 'string',
-                required: false
+                required: false,
               },
               tournament: {
                 type: 'string',
-                required: false
-              }
-            }
-          }
-        }
+                required: false,
+              },
+            },
+          },
+        },
       },
-      additionalProperties: true
+      additionalProperties: true,
     };
   }
 
@@ -482,12 +486,12 @@ class DataValidator {
    */
   validateAndThrow(data, type) {
     const result = this.validate(data, this.schemas[type], type);
-    
+
     if (!result.isValid) {
       throw new HLTVParsingError(
         `Invalid ${type} data: ${result.errors.join(', ')}`,
         'validation',
-        { errors: result.errors, warnings: result.warnings }
+        { errors: result.errors, warnings: result.warnings },
       );
     }
 

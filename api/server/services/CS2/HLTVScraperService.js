@@ -38,12 +38,12 @@ class HLTVScraperService {
     this.isInitialized = false;
     this.requestCount = 0;
     this.lastRequestTime = 0;
-    
+
     // Initialize rate limiting and retry components
     this.rateLimiter = new RateLimiter(options.rateLimiter);
     this.circuitBreaker = new CircuitBreaker(options.circuitBreaker);
     this.retryHandler = new RetryHandler(options.retryHandler);
-    
+
     // Initialize parsers and validators
     this.matchParser = new MatchParser();
     this.teamParser = new TeamParser();
@@ -152,7 +152,10 @@ class HLTVScraperService {
           if (!response.ok()) {
             const status = response.status();
             if (status === 429) {
-              const rateLimitError = new HLTVRateLimitError('Rate limit exceeded', response.headers()['retry-after']);
+              const rateLimitError = new HLTVRateLimitError(
+                'Rate limit exceeded',
+                response.headers()['retry-after'],
+              );
               this.rateLimiter.recordFailure(rateLimitError);
               throw rateLimitError;
             }
@@ -161,7 +164,7 @@ class HLTVScraperService {
 
           return response;
         },
-        { context: `Navigation to ${url}` }
+        { context: `Navigation to ${url}` },
       );
     });
   }
@@ -190,27 +193,33 @@ class HLTVScraperService {
 
     await this.navigateToUrl(url);
 
-    return this.retryHandler.executeWithRetry(
-      async () => {
-        const matches = await this.page.evaluate((limit, MatchParser) => {
-          // Create parser instance in browser context
-          const parser = new MatchParser();
-          return parser.parseMatchList(document, limit);
-        }, limit, MatchParser.toString());
+    return this.retryHandler
+      .executeWithRetry(
+        async () => {
+          const matches = await this.page.evaluate(
+            (limit, MatchParser) => {
+              // Create parser instance in browser context
+              const parser = new MatchParser();
+              return parser.parseMatchList(document, limit);
+            },
+            limit,
+            MatchParser.toString(),
+          );
 
-        // Validate and normalize matches
-        return matches.map((match) => {
-          const normalizedMatch = this.normalizeMatchData(match);
-          return this.dataValidator.validateAndThrow(normalizedMatch, 'match');
+          // Validate and normalize matches
+          return matches.map((match) => {
+            const normalizedMatch = this.normalizeMatchData(match);
+            return this.dataValidator.validateAndThrow(normalizedMatch, 'match');
+          });
+        },
+        { context: `Scraping matches from ${url}` },
+      )
+      .catch((error) => {
+        throw new HLTVParsingError(`Failed to parse matches from ${url}: ${error.message}`, url, {
+          status,
+          originalError: error.message,
         });
-      },
-      { context: `Scraping matches from ${url}` }
-    ).catch(error => {
-      throw new HLTVParsingError(`Failed to parse matches from ${url}: ${error.message}`, url, {
-        status,
-        originalError: error.message,
       });
-    });
   }
 
   /**
