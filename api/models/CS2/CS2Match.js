@@ -1,4 +1,4 @@
-const { CS2Match } = require('~/db/models');
+const { CS2Match } = require('../../db/models');
 
 /**
  * Create a new CS2 match record
@@ -401,7 +401,7 @@ const searchMatches = async (searchCriteria, options = {}) => {
 
   if (teamName) {
     // First find teams matching the name
-    const { CS2Team } = require('~/db/models');
+    const { CS2Team } = require('../../db/models');
     const teams = await CS2Team.find({
       name: { $regex: new RegExp(teamName, 'i') },
     })

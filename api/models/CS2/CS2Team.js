@@ -1,4 +1,4 @@
-const { CS2Team } = require('~/db/models');
+const { CS2Team } = require('../../db/models');
 
 /**
  * Create a new CS2 team record
@@ -26,8 +26,8 @@ const findTeamByHltvId = async (hltvId) => {
  * @returns {Promise<Object|null>} The team document or null if not found
  */
 const findTeamByName = async (name) => {
-  return await CS2Team.findOne({ 
-    name: { $regex: new RegExp(name, 'i') }
+  return await CS2Team.findOne({
+    name: { $regex: new RegExp(name, 'i') },
   })
     .populate('players.player', 'nickname country photo statistics.overall.rating')
     .lean();
@@ -43,7 +43,7 @@ const updateTeamByHltvId = async (hltvId, updateData) => {
   return await CS2Team.findOneAndUpdate(
     { hltvId },
     { ...updateData, 'metadata.lastUpdated': new Date() },
-    { new: true, upsert: false }
+    { new: true, upsert: false },
   ).lean();
 };
 
@@ -54,12 +54,12 @@ const updateTeamByHltvId = async (hltvId, updateData) => {
  */
 const findTopTeams = async (options = {}) => {
   const { limit = 30, activeOnly = true } = options;
-  
+
   const query = {};
   if (activeOnly) {
     query['metadata.isActive'] = true;
   }
-  
+
   return await CS2Team.find(query)
     .populate('players.player', 'nickname country statistics.overall.rating')
     .sort({ 'ranking.current': 1 })
@@ -75,12 +75,12 @@ const findTopTeams = async (options = {}) => {
  */
 const findTeamsByCountry = async (country, options = {}) => {
   const { limit = 20, activeOnly = true } = options;
-  
+
   const query = { country };
   if (activeOnly) {
     query['metadata.isActive'] = true;
   }
-  
+
   return await CS2Team.find(query)
     .populate('players.player', 'nickname country statistics.overall.rating')
     .sort({ 'ranking.current': 1 })
@@ -97,16 +97,16 @@ const findTeamsByCountry = async (country, options = {}) => {
 const updateTeamRanking = async (hltvId, rankingData) => {
   return await CS2Team.findOneAndUpdate(
     { hltvId },
-    { 
-      $set: { 
+    {
+      $set: {
         ranking: {
           ...rankingData,
-          lastUpdated: new Date()
+          lastUpdated: new Date(),
         },
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -120,16 +120,16 @@ const updateTeamRecentForm = async (hltvId, formData) => {
   // Add new form entry and keep only last 10 matches
   return await CS2Team.findOneAndUpdate(
     { hltvId },
-    { 
-      $push: { 
+    {
+      $push: {
         recentForm: {
           $each: [formData],
-          $slice: -10 // Keep only last 10 matches
-        }
+          $slice: -10, // Keep only last 10 matches
+        },
       },
-      $set: { 'metadata.lastUpdated': new Date() }
+      $set: { 'metadata.lastUpdated': new Date() },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -144,27 +144,27 @@ const updateTeamMapStats = async (hltvId, mapName, mapStats) => {
   // First try to update existing map stats
   const updated = await CS2Team.findOneAndUpdate(
     { hltvId, 'mapStats.mapName': mapName },
-    { 
-      $set: { 
+    {
+      $set: {
         'mapStats.$': { mapName, ...mapStats },
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
-  
+
   // If no existing map stats, add new entry
   if (!updated) {
     return await CS2Team.findOneAndUpdate(
       { hltvId },
-      { 
+      {
         $push: { mapStats: { mapName, ...mapStats } },
-        $set: { 'metadata.lastUpdated': new Date() }
+        $set: { 'metadata.lastUpdated': new Date() },
       },
-      { new: true }
+      { new: true },
     ).lean();
   }
-  
+
   return updated;
 };
 
@@ -177,11 +177,11 @@ const updateTeamMapStats = async (hltvId, mapName, mapStats) => {
 const addPlayerToTeam = async (hltvId, playerData) => {
   return await CS2Team.findOneAndUpdate(
     { hltvId },
-    { 
+    {
       $push: { players: playerData },
-      $set: { 'metadata.lastUpdated': new Date() }
+      $set: { 'metadata.lastUpdated': new Date() },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -194,11 +194,11 @@ const addPlayerToTeam = async (hltvId, playerData) => {
 const removePlayerFromTeam = async (hltvId, playerId) => {
   return await CS2Team.findOneAndUpdate(
     { hltvId },
-    { 
+    {
       $pull: { players: { player: playerId } },
-      $set: { 'metadata.lastUpdated': new Date() }
+      $set: { 'metadata.lastUpdated': new Date() },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -211,13 +211,13 @@ const removePlayerFromTeam = async (hltvId, playerId) => {
 const updateTeamEmbeddings = async (hltvId, embeddings) => {
   return await CS2Team.findOneAndUpdate(
     { hltvId },
-    { 
-      $set: { 
+    {
+      $set: {
         embeddings,
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -229,15 +229,15 @@ const updateTeamEmbeddings = async (hltvId, embeddings) => {
  */
 const searchTeams = async (searchTerm, options = {}) => {
   const { limit = 10, activeOnly = true } = options;
-  
+
   const query = {
-    name: { $regex: new RegExp(searchTerm, 'i') }
+    name: { $regex: new RegExp(searchTerm, 'i') },
   };
-  
+
   if (activeOnly) {
     query['metadata.isActive'] = true;
   }
-  
+
   return await CS2Team.find(query)
     .select('name logo country ranking.current')
     .sort({ 'ranking.current': 1 })

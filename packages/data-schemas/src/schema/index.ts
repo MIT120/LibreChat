@@ -22,3 +22,6 @@ export { default as toolCallSchema } from './toolCall';
 export { default as transactionSchema } from './transaction';
 export { default as userSchema } from './user';
 export { default as memorySchema } from './memory';
+export { default as cs2MatchSchema } from './cs2Match';
+export { default as cs2TeamSchema } from './cs2Team';
+export { default as cs2PlayerSchema } from './cs2Player';
