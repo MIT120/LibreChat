@@ -13,7 +13,7 @@ beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
-  
+
   models = createModels(mongoose);
 });
 
@@ -73,13 +73,13 @@ describe('CS2 Schema Validation', () => {
 
     const match = await models.CS2Match.create(validMatch);
     expect(match).toBeDefined();
-    expect(match.hltvId).toBe('test123');
+    expect(match.hltvId).toBe('123456');
     expect(match.status).toBe('upcoming');
   });
 
   test('CS2Team should create with valid data', async () => {
     const validTeam = {
-      hltvId: 'team123',
+      hltvId: '456789',
       name: 'Test Team',
       players: [],
       recentForm: [],
@@ -104,13 +104,13 @@ describe('CS2 Schema Validation', () => {
 
     const team = await models.CS2Team.create(validTeam);
     expect(team).toBeDefined();
-    expect(team.hltvId).toBe('team123');
+    expect(team.hltvId).toBe('456789');
     expect(team.name).toBe('Test Team');
   });
 
   test('CS2Player should create with valid data', async () => {
     const validPlayer = {
-      hltvId: 'player123',
+      hltvId: '654321',
       nickname: 'TestPlayer',
       statistics: {
         overall: {
@@ -151,13 +151,13 @@ describe('CS2 Schema Validation', () => {
 
     const player = await models.CS2Player.create(validPlayer);
     expect(player).toBeDefined();
-    expect(player.hltvId).toBe('player123');
+    expect(player.hltvId).toBe('654321');
     expect(player.nickname).toBe('TestPlayer');
   });
 
   test('CS2Match should enforce unique hltvId constraint', async () => {
     const matchData = {
-      hltvId: 'unique123',
+      hltvId: '789012',
       date: new Date(),
       tournament: { name: 'Unique Tournament' },
       teams: [],
@@ -177,13 +177,16 @@ describe('CS2 Schema Validation', () => {
     };
 
     await models.CS2Match.create(matchData);
-    
+
     // Try to create another match with same hltvId
     await expect(models.CS2Match.create(matchData)).rejects.toThrow();
   });
 
-  test('CS2Match should have proper indexes', () => {
-    const indexes = models.CS2Match.collection.getIndexes();
-    expect(indexes).toBeDefined();
+  test('CS2Match should have proper schema structure', () => {
+    const schema = models.CS2Match.schema;
+    expect(schema).toBeDefined();
+    expect(schema.paths.hltvId).toBeDefined();
+    expect(schema.paths.date).toBeDefined();
+    expect(schema.paths.status).toBeDefined();
   });
 });

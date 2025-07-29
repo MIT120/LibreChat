@@ -7,12 +7,10 @@ const cs2PlayerSchema = new Schema<ICS2Player>(
       type: String,
       required: true,
       unique: true,
-      index: true,
     },
     nickname: {
       type: String,
       required: true,
-      index: true,
     },
     realName: {
       type: String,

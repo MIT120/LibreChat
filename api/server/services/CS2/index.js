@@ -29,6 +29,11 @@ const HLTVScraperService = safeRequire('./HLTVScraperService');
 const CS2VectorService = safeRequire('./CS2VectorService');
 const CS2MCPServer = safeRequire('./CS2MCPServer');
 const CS2PredictionEngine = safeRequire('./CS2PredictionEngine');
+const PredictionTracker = safeRequire('./PredictionTracker');
+const ModelPerformanceMonitor = safeRequire('./ModelPerformanceMonitor');
+const ScrapingScheduler = safeRequire('./ScrapingScheduler');
+const DataMaintenanceService = safeRequire('./DataMaintenanceService');
+const MaintenanceScheduler = safeRequire('./MaintenanceScheduler');
 
 // Existing utilities and configuration
 const config = require('./config');
@@ -41,6 +46,11 @@ const utils = require('./utils');
  * @property {CS2VectorService} CS2VectorService - Service for vector embeddings and similarity search
  * @property {CS2MCPServer} CS2MCPServer - MCP server for agent communication
  * @property {CS2PredictionEngine} CS2PredictionEngine - Engine for match outcome predictions
+ * @property {PredictionTracker} PredictionTracker - Service for tracking and evaluating prediction accuracy
+ * @property {ModelPerformanceMonitor} ModelPerformanceMonitor - Service for monitoring model performance and triggering alerts
+ * @property {ScrapingScheduler} ScrapingScheduler - Service for automated HLTV data collection scheduling
+ * @property {DataMaintenanceService} DataMaintenanceService - Service for data cleanup and maintenance operations
+ * @property {MaintenanceScheduler} MaintenanceScheduler - Service for scheduling automated maintenance tasks
  * @property {Object} config - Configuration settings for CS2 services
  * @property {Object} errors - Custom error classes for CS2 operations
  * @property {Object} utils - Utility functions for CS2 data processing
@@ -52,6 +62,11 @@ module.exports = {
   CS2VectorService,
   CS2MCPServer,
   CS2PredictionEngine,
+  PredictionTracker,
+  ModelPerformanceMonitor,
+  ScrapingScheduler,
+  DataMaintenanceService,
+  MaintenanceScheduler,
 
   // Utilities and configuration
   config,

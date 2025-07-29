@@ -14,7 +14,8 @@
     "create-user": "node ./create-user.js",
     "invite-user": "node ./invite-user.js",
     "ban-user": "node ./ban-user.js",
-    "delete-user": "node ./delete-user.js"
+    "delete-user": "node ./delete-user.js",
+    "cs2-maintenance": "node ./server/services/CS2/maintenance-cli.js"
   },
   "repository": {
     "type": "git",
@@ -119,7 +120,8 @@
     "winston": "^3.11.0",
     "winston-daily-rotate-file": "^5.0.0",
     "youtube-transcript": "^1.2.1",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "commander": "^12.1.0"
   },
   "devDependencies": {
     "cross-env": "^10.0.0",

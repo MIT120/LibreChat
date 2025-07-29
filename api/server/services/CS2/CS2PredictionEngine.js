@@ -1,5 +1,6 @@
 const { CS2Match, CS2Team } = require('~/db/models');
 const logger = require('~/utils/logger');
+const PredictionTracker = require('./PredictionTracker');
 
 /**
  * CS2 Prediction Engine
@@ -8,6 +9,7 @@ const logger = require('~/utils/logger');
 class CS2PredictionEngine {
   constructor() {
     this.logger = logger.child({ service: 'CS2PredictionEngine' });
+    this.predictionTracker = new PredictionTracker();
   }
 
   /**
@@ -48,7 +50,7 @@ class CS2PredictionEngine {
       const prediction = this._calculateHalfTimePrediction(factors);
 
       // Store prediction in database
-      await this._storePrediction(matchId, 'halfTime', prediction);
+      await this.predictionTracker.storePrediction(matchId, 'halfTime', prediction);
 
       this.logger.info(`Half-time prediction completed for match ${matchId}`, {
         winner: prediction.winner,
@@ -445,7 +447,7 @@ class CS2PredictionEngine {
       const prediction = this._calculateMapWinnerPrediction(factors, team1, team2);
 
       // Store prediction in database
-      await this._storePrediction(matchId, 'mapWinner', prediction);
+      await this.predictionTracker.storePrediction(matchId, 'mapWinner', prediction);
 
       this.logger.info(`Map winner prediction completed for match ${matchId}`, {
         map: map.name,
@@ -847,7 +849,7 @@ class CS2PredictionEngine {
       );
 
       // Store prediction in database
-      await this._storeSeriesPrediction(matchId, prediction);
+      await this.predictionTracker.storePrediction(matchId, 'seriesOutcome', prediction);
 
       this.logger.info(`Series outcome prediction completed for match ${matchId}`, {
         outcome: prediction.outcome,
@@ -1382,36 +1384,7 @@ class CS2PredictionEngine {
     return outcomes;
   }
 
-  /**
-   * Store series prediction in database
-   * @private
-   */
-  async _storeSeriesPrediction(matchId, prediction) {
-    const updateData = {
-      'predictions.seriesOutcome.predicted': true,
-      'predictions.seriesOutcome.outcome': prediction.outcome,
-      'predictions.seriesOutcome.winner': prediction.winner,
-      'predictions.seriesOutcome.confidence': prediction.confidence,
-      'predictions.seriesOutcome.factors': prediction.factors,
-    };
 
-    await CS2Match.findOneAndUpdate({ hltvId: matchId }, { $set: updateData }, { new: true });
-  }
-
-  /**
-   * Store prediction in database
-   * @private
-   */
-  async _storePrediction(matchId, predictionType, prediction) {
-    const updateData = {
-      [`predictions.${predictionType}.predicted`]: true,
-      [`predictions.${predictionType}.winner`]: prediction.winner,
-      [`predictions.${predictionType}.confidence`]: prediction.confidence,
-      [`predictions.${predictionType}.factors`]: prediction.factors,
-    };
-
-    await CS2Match.findOneAndUpdate({ hltvId: matchId }, { $set: updateData }, { new: true });
-  }
 }
 
 module.exports = CS2PredictionEngine;

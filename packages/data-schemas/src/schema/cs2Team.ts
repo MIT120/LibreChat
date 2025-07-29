@@ -7,12 +7,10 @@ const cs2TeamSchema = new Schema<ICS2Team>(
       type: String,
       required: true,
       unique: true,
-      index: true,
     },
     name: {
       type: String,
       required: true,
-      index: true,
     },
     logo: {
       type: String,
@@ -23,7 +21,6 @@ const cs2TeamSchema = new Schema<ICS2Team>(
     ranking: {
       current: {
         type: Number,
-        index: true,
       },
       peak: {
         type: Number,

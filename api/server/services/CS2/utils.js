@@ -2,7 +2,7 @@
  * Utility functions for HLTV CS2 Scraper
  */
 
-const logger = require('../../../../utils/logger');
+const logger = require('~/config/winston');
 
 /**
  * Sleep for a specified number of milliseconds

@@ -7,7 +7,6 @@ const cs2MatchSchema = new Schema<ICS2Match>(
       type: String,
       required: true,
       unique: true,
-      index: true,
       validate: {
         validator: function (v: string) {
           return /^\d+$/.test(v);
@@ -18,7 +17,6 @@ const cs2MatchSchema = new Schema<ICS2Match>(
     date: {
       type: Date,
       required: true,
-      index: true,
     },
     tournament: {
       name: {
@@ -175,7 +173,6 @@ const cs2MatchSchema = new Schema<ICS2Match>(
       type: String,
       enum: ['upcoming', 'live', 'finished'],
       default: 'upcoming',
-      index: true,
     },
     format: {
       type: String,

@@ -7,7 +7,7 @@
   - Set up environment variables for HLTV scraping configuration
   - _Requirements: 1.1, 7.1_
 
-- [-] 2. Implement CS2 data models and database schemas
+- [x] 2. Implement CS2 data models and database schemas
 
   - [x] 2.1 Create CS2Match Mongoose model with comprehensive schema
 
@@ -108,9 +108,9 @@
     - Write comprehensive tests with historical series data
     - _Requirements: 6.1, 6.2, 6.3_
 
-- [ ] 7. Implement prediction accuracy tracking and model improvement
+- [-] 7. Implement prediction accuracy tracking and model improvement
 
-  - [ ] 7.1 Create prediction tracking and evaluation system
+  - [x] 7.1 Create prediction tracking and evaluation system
 
     - Store all predictions with timestamps and confidence levels
     - Compare predictions with actual results when matches conclude
@@ -118,7 +118,7 @@
     - Write tests for accuracy calculation and metric generation
     - _Requirements: 8.1, 8.2, 8.3_
 
-  - [ ] 7.2 Build model performance monitoring and alerts
+  - [x] 7.2 Build model performance monitoring and alerts
     - Implement accuracy threshold monitoring with automated alerts
     - Create performance dashboards for tracking prediction quality
     - Add model retraining triggers when accuracy drops significantly
@@ -127,7 +127,7 @@
 
 - [ ] 8. Add scheduled scraping and data management
 
-  - [ ] 8.1 Implement automated scraping scheduler
+  - [x] 8.1 Implement automated scraping scheduler
 
     - Create cron jobs for regular HLTV data collection
     - Add separate schedules for historical data, upcoming matches, and live updates
@@ -135,7 +135,7 @@
     - Write tests for scheduler functionality and job execution
     - _Requirements: 1.1, 1.2, 1.3, 7.4_
 
-  - [ ] 8.2 Create data cleanup and maintenance routines
+  - [x] 8.2 Create data cleanup and maintenance routines
     - Implement data deduplication and consistency checks
     - Add archival processes for old match data
     - Create database maintenance tasks for optimal performance

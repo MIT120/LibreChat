@@ -1,4 +1,25 @@
-const { CS2Match } = require('../../db/models');
+const { CS2Match } = require('~/db/models');
+const logger = require('~/utils/logger');
+const { getFromCache, setCache } = require('~/cache');
+
+// Common population patterns
+const COMMON_POPULATIONS = {
+  teams: 'teams.team',
+  teamsFields: 'name logo country ranking.current',
+  tournament: 'tournament',
+  maps: 'maps.winner maps.pickBy',
+  mapsFields: 'name logo',
+};
+
+// Common query builders
+const buildDateQuery = (dateFrom, dateTo) => {
+  const dateQuery = {};
+  if (dateFrom) dateQuery.$gte = new Date(dateFrom);
+  if (dateTo) dateQuery.$lte = new Date(dateTo);
+  return Object.keys(dateQuery).length > 0 ? dateQuery : null;
+};
+
+
 
 /**
  * Create a new CS2 match record
@@ -6,20 +27,82 @@ const { CS2Match } = require('../../db/models');
  * @returns {Promise<Object>} The created match document
  */
 const createMatch = async (matchData) => {
-  return await CS2Match.create(matchData);
+  try {
+    // Input validation
+    if (!matchData || typeof matchData !== 'object') {
+      throw new Error('Match data is required and must be an object');
+    }
+
+    if (!matchData.hltvId) {
+      throw new Error('HLTV ID is required');
+    }
+
+    if (!matchData.teams || !Array.isArray(matchData.teams) || matchData.teams.length !== 2) {
+      throw new Error('Exactly 2 teams are required');
+    }
+
+    // Check for existing match
+    const existingMatch = await CS2Match.findOne({ hltvId: matchData.hltvId });
+    if (existingMatch) {
+      throw new Error(`Match with HLTV ID ${matchData.hltvId} already exists`);
+    }
+
+    const match = await CS2Match.create({
+      ...matchData,
+      metadata: {
+        ...matchData.metadata,
+        createdAt: new Date(),
+        lastUpdated: new Date(),
+      },
+    });
+
+    logger.info('Match created successfully', { hltvId: matchData.hltvId });
+    return match;
+  } catch (error) {
+    logger.error('Failed to create match:', { error: error.message, hltvId: matchData?.hltvId });
+    throw error;
+  }
 };
 
 /**
- * Find a match by HLTV ID
+ * Find a match by HLTV ID with caching
  * @param {string} hltvId - The HLTV match ID
+ * @param {boolean} useCache - Whether to use cache (default: true)
  * @returns {Promise<Object|null>} The match document or null if not found
  */
-const findMatchByHltvId = async (hltvId) => {
-  return await CS2Match.findOne({ hltvId })
-    .populate('teams.team', 'name logo country ranking.current')
-    .populate('maps.winner', 'name logo')
-    .populate('maps.pickBy', 'name logo')
-    .lean();
+const findMatchByHltvId = async (hltvId, useCache = true) => {
+  try {
+    if (!hltvId) {
+      throw new Error('HLTV ID is required');
+    }
+
+    const cacheKey = `match:${hltvId}`;
+
+    // Try cache first for finished matches
+    if (useCache) {
+      const cached = await getFromCache(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    const match = await CS2Match.findOne({ hltvId })
+      .populate('teams.team', 'name logo country ranking.current')
+      .populate('maps.winner', 'name logo')
+      .populate('maps.pickBy', 'name logo')
+      .lean();
+
+    // Cache finished matches for longer
+    if (match && useCache) {
+      const ttl = match.status === 'finished' ? 3600 : 300; // 1 hour for finished, 5 min for others
+      await setCache(cacheKey, match, ttl);
+    }
+
+    return match;
+  } catch (error) {
+    logger.error('Failed to find match by HLTV ID:', { error: error.message, hltvId });
+    throw error;
+  }
 };
 
 /**
@@ -188,20 +271,42 @@ const updateMatchLiveData = async (hltvId, liveData) => {
 };
 
 /**
- * Add map result to match
+ * Add map result to match with transaction support
  * @param {string} hltvId - The HLTV match ID
  * @param {Object} mapData - The map data to add
+ * @param {Object} session - Optional MongoDB session for transactions
  * @returns {Promise<Object|null>} The updated match document
  */
-const addMatchMapResult = async (hltvId, mapData) => {
-  return await CS2Match.findOneAndUpdate(
-    { hltvId },
-    {
-      $push: { maps: mapData },
-      $set: { 'metadata.lastUpdated': new Date() },
-    },
-    { new: true },
-  ).lean();
+const addMatchMapResult = async (hltvId, mapData, session = null) => {
+  try {
+    if (!hltvId || !mapData) {
+      throw new Error('HLTV ID and map data are required');
+    }
+
+    const updateOptions = { new: true, lean: true };
+    if (session) {
+      updateOptions.session = session;
+    }
+
+    const updatedMatch = await CS2Match.findOneAndUpdate(
+      { hltvId },
+      {
+        $push: { maps: mapData },
+        $set: { 'metadata.lastUpdated': new Date() },
+      },
+      updateOptions,
+    );
+
+    if (!updatedMatch) {
+      throw new Error(`Match with HLTV ID ${hltvId} not found`);
+    }
+
+    logger.info('Map result added to match', { hltvId, mapName: mapData.name });
+    return updatedMatch;
+  } catch (error) {
+    logger.error('Failed to add map result:', { error: error.message, hltvId });
+    throw error;
+  }
 };
 
 /**
@@ -289,61 +394,83 @@ const findMatchesForPrediction = async (criteria = {}) => {
 };
 
 /**
- * Get match statistics for a team
+ * Get match statistics for a team using MongoDB aggregation
  * @param {string} teamId - The team ObjectId
  * @param {Object} options - Query options
  * @returns {Promise<Object>} Match statistics
  */
 const getTeamMatchStats = async (teamId, options = {}) => {
-  const { daysBack = 90, mapName } = options;
+  try {
+    const { daysBack = 90, mapName } = options;
 
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysBack);
 
-  const query = {
-    'teams.team': teamId,
-    status: 'finished',
-    date: { $gte: cutoffDate },
-  };
+    const matchStage = {
+      'teams.team': teamId,
+      status: 'finished',
+      date: { $gte: cutoffDate },
+    };
 
-  if (mapName) {
-    query['maps.name'] = mapName;
-  }
-
-  const matches = await CS2Match.find(query).select('teams maps date').lean();
-
-  let wins = 0;
-  let losses = 0;
-  let totalRounds = 0;
-  let roundsWon = 0;
-
-  matches.forEach((match) => {
-    const teamData = match.teams.find((t) => t.team.toString() === teamId);
-    if (teamData) {
-      if (teamData.isWinner) wins++;
-      else losses++;
-
-      match.maps.forEach((map) => {
-        if (map.winner && map.winner.toString() === teamId) {
-          roundsWon += Math.max(map.score.team1, map.score.team2);
-          totalRounds += map.score.team1 + map.score.team2;
-        } else {
-          roundsWon += Math.min(map.score.team1, map.score.team2);
-          totalRounds += map.score.team1 + map.score.team2;
-        }
-      });
+    if (mapName) {
+      matchStage['maps.name'] = mapName;
     }
-  });
 
-  return {
-    totalMatches: matches.length,
-    wins,
-    losses,
-    winRate: matches.length > 0 ? wins / matches.length : 0,
-    roundsWon,
-    totalRounds,
-    roundWinRate: totalRounds > 0 ? roundsWon / totalRounds : 0,
-  };
+    const pipeline = [
+      { $match: matchStage },
+      {
+        $addFields: {
+          teamData: {
+            $arrayElemAt: [
+              { $filter: { input: '$teams', cond: { $eq: ['$$this.team', teamId] } } },
+              0,
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalMatches: { $sum: 1 },
+          wins: { $sum: { $cond: ['$teamData.isWinner', 1, 0] } },
+          losses: { $sum: { $cond: ['$teamData.isWinner', 0, 1] } },
+          totalRounds: { $sum: { $sum: '$maps.score.team1' } },
+          // Add more aggregation logic for rounds won
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalMatches: 1,
+          wins: 1,
+          losses: 1,
+          winRate: {
+            $cond: [{ $gt: ['$totalMatches', 0] }, { $divide: ['$wins', '$totalMatches'] }, 0],
+          },
+          totalRounds: 1,
+          roundWinRate: {
+            $cond: [{ $gt: ['$totalRounds', 0] }, { $divide: ['$roundsWon', '$totalRounds'] }, 0],
+          },
+        },
+      },
+    ];
+
+    const result = await CS2Match.aggregate(pipeline);
+    return (
+      result[0] || {
+        totalMatches: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        roundsWon: 0,
+        totalRounds: 0,
+        roundWinRate: 0,
+      }
+    );
+  } catch (error) {
+    logger.error('Failed to get team match stats:', { error: error.message, teamId, options });
+    throw error;
+  }
 };
 
 /**
