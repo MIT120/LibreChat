@@ -1,7 +1,5 @@
 const logger = require('~/utils/logger');
-const CS2Match = require('~/models/CS2/CS2Match');
-const CS2Team = require('~/models/CS2/CS2Team');
-const CS2Player = require('~/models/CS2/CS2Player');
+const { CS2Match, CS2Team, CS2Player } = require('~/db/models');
 
 /**
  * Enhanced MCP tool handlers with validation, security, and error handling
@@ -336,6 +334,5 @@ class TeamStatisticsCalculator {
  * Simple prediction engine
  * Can be extended with more sophisticated algorithms
  */
-
 
 module.exports = MCPToolHandlers;

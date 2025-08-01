@@ -7,8 +7,28 @@
  */
 
 const path = require('path');
+
+// Set up module aliases to match the main application
+const moduleAlias = require('module-alias');
+const apiRoot = path.resolve(__dirname, '../../..');
+moduleAlias.addAlias('~', apiRoot);
+
+// Set up environment for Docker if not already set
+if (!process.env.MONGO_URI) {
+  // Default to Docker MongoDB service when MONGO_URI is not set
+  process.env.MONGO_URI = 'mongodb://mongodb:27017/LibreChat';
+  console.log('[CS2MCPServer] Using Docker MongoDB connection');
+}
+
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+}
+
 const { connectDb } = require('~/db/connect');
 const CS2MCPServer = require('./CS2MCPServer');
+
+// Ensure we're running from the correct working directory
+process.chdir(path.resolve(__dirname, '../../../..'));
 
 async function main() {
   try {

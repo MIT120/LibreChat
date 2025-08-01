@@ -11,26 +11,29 @@ const { sanitizeTeamName, standardizeMapName } = require('../utils');
 class MatchParser {
   constructor() {
     this.selectors = {
-      // Primary selectors (current HLTV structure)
+      // Primary selectors (updated for current HLTV structure)
       primary: {
-        matchElements: '.upcomingMatch, .result-con, .liveMatch',
-        matchLink: 'a[href*="/matches/"]',
-        teamName: '.teamName, .team-name',
-        matchTime: '.matchTime, .time',
-        matchEvent: '.matchEvent, .event',
-        matchScore: '.matchMeta, .result-score',
-        liveIndicator: '.live',
+        matchElements: '.upcomingMatch, .result-con, .liveMatch, .upcoming-match, .result, .match',
+        matchLink: 'a[href*="/matches/"], a[href*="matches"]',
+        teamName:
+          '.teamName, .team-name, .team, .team1-gradient, .team2-gradient, .team div, .team span, .team-logo + span, .team-logo + div',
+        matchTime: '.matchTime, .time, .match-time, .date, .startTime',
+        matchEvent: '.matchEvent, .event, .tournament, .event-name, .match-event',
+        matchScore: '.matchMeta, .result-score, .score, .result, .maps, .bo',
+        liveIndicator: '.live, .status-live, .liveMatch',
       },
 
-      // Fallback selectors (alternative structures)
+      // Fallback selectors (broader compatibility)
       fallback: {
-        matchElements: '.match, .match-item, .upcoming-match',
-        matchLink: 'a[href*="matches"]',
-        teamName: '.team .name, .team-title, .teamname',
-        matchTime: '.time, .match-time, .date',
-        matchEvent: '.event, .tournament, .match-event',
-        matchScore: '.score, .result, .match-score',
-        liveIndicator: '.live, .status-live',
+        matchElements:
+          '.match, .match-item, .upcoming-match, .result, .game, .fixture, div[class*="match"], div[class*="result"]',
+        matchLink: 'a[href*="matches"], a[href*="/matches/"], a[href*="match"]',
+        teamName:
+          '.team .name, .team-title, .teamname, .team, .team-name, .team1, .team2, .opponent, .competitor, div[class*="team"] span, div[class*="team"] div',
+        matchTime: '.time, .match-time, .date, .timestamp, .when, .start-time, .scheduled',
+        matchEvent: '.event, .tournament, .match-event, .competition, .league, .series',
+        matchScore: '.score, .result, .match-score, .final-score, .maps-score, .bo, .series-score',
+        liveIndicator: '.live, .status-live, .in-progress, .ongoing, .active',
       },
     };
   }
@@ -106,12 +109,40 @@ class MatchParser {
       return null;
     }
 
-    // Extract team names
+    // Extract team names with multiple fallback strategies
+    let teams = [];
+
+    // Strategy 1: Use the configured selectors
     const teamElements = element.querySelectorAll(selectors.teamName);
-    const teams = Array.from(teamElements)
+    teams = Array.from(teamElements)
       .map((team) => team.textContent?.trim())
-      .filter((name) => name)
+      .filter((name) => name && name.length > 1)
       .map((name) => sanitizeTeamName(name));
+
+    // Strategy 2: If no teams found, try to extract from match link text
+    if (teams.length < 2) {
+      const linkElement = element.querySelector(selectors.matchLink);
+      const linkText = linkElement?.textContent?.trim() || '';
+      const vsMatch = linkText.match(/(.+?)\s+vs\s+(.+)/i);
+      if (vsMatch) {
+        teams = [sanitizeTeamName(vsMatch[1].trim()), sanitizeTeamName(vsMatch[2].trim())];
+      }
+    }
+
+    // Strategy 3: Look for any elements that might contain team names
+    if (teams.length < 2) {
+      const possibleTeamElements = element.querySelectorAll('span, div, .team, [class*="team"]');
+      const possibleTeams = Array.from(possibleTeamElements)
+        .map((el) => el.textContent?.trim())
+        .filter((text) => text && text.length > 1 && text.length < 30)
+        .filter((text) => /^[A-Za-z0-9\s\-.]+$/.test(text)) // Only valid team name characters
+        .map((name) => sanitizeTeamName(name))
+        .slice(0, 2); // Take first 2 potential team names
+
+      if (possibleTeams.length >= 2) {
+        teams = possibleTeams;
+      }
+    }
 
     // Extract date/time
     const timeElement = element.querySelector(selectors.matchTime);

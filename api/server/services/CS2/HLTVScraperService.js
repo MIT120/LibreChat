@@ -61,7 +61,8 @@ class HLTVScraperService {
     }
 
     try {
-      this.browser = await puppeteer.launch({
+      // Use system Chromium in Docker, or default Puppeteer Chrome locally
+      const launchOptions = {
         headless: this.config.headless,
         args: [
           '--no-sandbox',
@@ -72,7 +73,14 @@ class HLTVScraperService {
           '--no-zygote',
           '--disable-gpu',
         ],
-      });
+      };
+
+      // Use system Chromium if running in Docker or environment variable is set
+      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      }
+
+      this.browser = await puppeteer.launch(launchOptions);
 
       this.page = await this.browser.newPage();
 
@@ -196,15 +204,14 @@ class HLTVScraperService {
     return this.retryHandler
       .executeWithRetry(
         async () => {
-          const matches = await this.page.evaluate(
-            (limit, MatchParser) => {
-              // Create parser instance in browser context
-              const parser = new MatchParser();
-              return parser.parseMatchList(document, limit);
-            },
-            limit,
-            MatchParser.toString(),
-          );
+          // Get page content and parse it outside browser context
+          const pageContent = await this.page.content();
+          const { JSDOM } = require('jsdom');
+          const dom = new JSDOM(pageContent);
+          const document = dom.window.document;
+
+          // Parse matches using the MatchParser
+          const matches = this.matchParser.parseMatchList(document, limit);
 
           // Validate and normalize matches
           return matches.map((match) => {

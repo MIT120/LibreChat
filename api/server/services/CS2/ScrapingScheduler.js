@@ -211,7 +211,10 @@ class ScrapingScheduler extends EventEmitter {
    */
   async scrapeLiveMatches() {
     try {
-      const liveMatches = await this.scraperService.scrapeLiveMatches();
+      const liveMatches = await this.scraperService.scrapeMatches({
+        status: 'live',
+        limit: 20,
+      });
 
       for (const matchData of liveMatches) {
         await this.updateOrCreateMatch(matchData, 'live');
@@ -234,7 +237,10 @@ class ScrapingScheduler extends EventEmitter {
    */
   async scrapeUpcomingMatches() {
     try {
-      const upcomingMatches = await this.scraperService.scrapeUpcomingMatches();
+      const upcomingMatches = await this.scraperService.scrapeMatches({
+        status: 'upcoming',
+        limit: 100,
+      });
 
       for (const matchData of upcomingMatches) {
         await this.updateOrCreateMatch(matchData, 'upcoming');
@@ -257,7 +263,10 @@ class ScrapingScheduler extends EventEmitter {
    */
   async scrapeRecentMatches() {
     try {
-      const recentMatches = await this.scraperService.scrapeRecentMatches();
+      const recentMatches = await this.scraperService.scrapeMatches({
+        status: 'results',
+        limit: 50,
+      });
 
       for (const matchData of recentMatches) {
         await this.updateOrCreateMatch(matchData, 'completed');

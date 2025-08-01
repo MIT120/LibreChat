@@ -25,6 +25,9 @@ services:
       - type: bind
         source: ./.env
         target: /app/.env
+      - type: bind
+        source: ./librechat.yaml
+        target: /app/librechat.yaml
       - ./images:/app/client/public/images
       - ./uploads:/app/uploads
       - ./logs:/app/api/logs
@@ -36,6 +39,23 @@ services:
     volumes:
       - ./data-node:/data/db
     command: mongod --noauth
+  cs2-scraper:
+    container_name: cs2-hltv-scraper
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    user: '${UID}:${GID}'
+    volumes:
+      - type: bind
+        source: ./.env
+        target: /app/.env
+      - ./logs:/app/api/logs
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongodb:27017/LibreChat
+      - CS2_SCRAPER_ENABLED=true
+    command: node api/server/services/CS2/start-scraper.js
   meilisearch:
     container_name: chat-meilisearch
     image: getmeili/meilisearch:v1.12.3

@@ -5,7 +5,7 @@ const {
   ListToolsRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
 const logger = require('~/utils/logger');
-const { MCPToolHandlers } = require('./MCPToolHandlers');
+const MCPToolHandlers = require('./MCPToolHandlers');
 const { MCPValidators, MCPValidationError } = require('./MCPValidators');
 
 /**
