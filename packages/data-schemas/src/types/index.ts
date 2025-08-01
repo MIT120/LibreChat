@@ -19,3 +19,6 @@ export * from './pluginAuth';
 export * from './memory';
 /* CS2 */
 export * from './cs2';
+/* Book Creation */
+export * from './book';
+export * from './chapter';

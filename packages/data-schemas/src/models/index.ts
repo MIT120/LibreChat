@@ -24,6 +24,8 @@ import { createMemoryModel } from './memory';
 import { createCS2MatchModel } from './cs2Match';
 import { createCS2TeamModel } from './cs2Team';
 import { createCS2PlayerModel } from './cs2Player';
+import { createBookModel } from './book';
+import { createChapterModel } from './chapter';
 
 /**
  * Creates all database models for all collections
@@ -56,5 +58,7 @@ export function createModels(mongoose: typeof import('mongoose')) {
     CS2Match: createCS2MatchModel(mongoose),
     CS2Team: createCS2TeamModel(mongoose),
     CS2Player: createCS2PlayerModel(mongoose),
+    Book: createBookModel(mongoose),
+    Chapter: createChapterModel(mongoose),
   };
 }

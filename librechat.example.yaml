@@ -15,19 +15,19 @@ interface:
   customWelcome: "Welcome to LibreChat! Enjoy your experience."
   # MCP Servers UI configuration
   mcpServers:
-    placeholder: 'MCP Servers'
+    placeholder: "MCP Servers"
   # Enable/disable file search as a chatarea selection (default: true)
   # Note: This setting does not disable the Agents File Search Capability.
   # To disable the Agents Capability, see the Agents Endpoint configuration instead.
   fileSearch: true
   # Privacy policy settings
   privacyPolicy:
-    externalUrl: 'https://librechat.ai/privacy-policy'
+    externalUrl: "https://librechat.ai/privacy-policy"
     openNewTab: true
 
   # Terms of service
   termsOfService:
-    externalUrl: 'https://librechat.ai/tos'
+    externalUrl: "https://librechat.ai/tos"
     openNewTab: true
     modalAcceptance: true
     modalTitle: "Terms of Service for LibreChat"
@@ -89,10 +89,10 @@ interface:
 
 # Example Registration Object Structure (optional)
 registration:
-  socialLogins: ['github', 'google', 'discord', 'openid', 'facebook', 'apple', 'saml']
+  socialLogins:
+    ["github", "google", "discord", "openid", "facebook", "apple", "saml"]
   # allowedDomains:
   # - "gmail.com"
-
 
 # Example Balance settings
 # balance:
@@ -137,33 +137,62 @@ actions:
     - "librechat.ai"
     - "google.com"
 
-# Example MCP Servers Object Structure
-# mcpServers:
-#   everything:
-#     # type: sse # type can optionally be omitted
-#     url: http://localhost:3001/sse
-#     timeout: 60000  # 1 minute timeout for this server, this is the default timeout for MCP servers.
-#   puppeteer:
-#     type: stdio
-#     command: npx
-#     args:
-#       - -y
-#       - "@modelcontextprotocol/server-puppeteer"
-#     timeout: 300000  # 5 minutes timeout for this server
-#   filesystem:
-#     # type: stdio
-#     command: npx
-#     args:
-#       - -y
-#       - "@modelcontextprotocol/server-filesystem"
-#       - /home/user/LibreChat/
-#     iconPath: /home/user/LibreChat/client/public/assets/logo.svg
-#   mcp-obsidian:
-#     command: npx
-#     args:
-#       - -y
-#       - "mcp-obsidian"
-#       - /path/to/obsidian/vault
+  # Example MCP Servers Object Structure
+  mcpServers:
+    #   everything:
+    #     # type: sse # type can optionally be omitted
+    #     url: http://localhost:3001/sse
+    #     timeout: 60000  # 1 minute timeout for this server, this is the default timeout for MCP servers.
+    puppeteer:
+      type: stdio
+      command: npx
+      args:
+        - -y
+        - "@modelcontextprotocol/server-puppeteer"
+      timeout: 300000 # 5 minutes timeout for this server
+    filesystem:
+      # type: stdio
+      command: npx
+      args:
+        - -y
+        - "@modelcontextprotocol/server-filesystem"
+        - /home/user/LibreChat/
+      iconPath: /home/user/LibreChat/client/public/assets/logo.svg
+    mcp-obsidian:
+      command: npx
+      args:
+        - -y
+        - "mcp-obsidian"
+        - /path/to/obsidian/vault
+    book-creation:
+      type: stdio
+      command: node
+      args:
+        - "api/app/clients/mcp/book-creation-server/index.js"
+      env:
+        MONGODB_URI: "${MONGODB_URI}"
+        AI_MODEL_DEFAULT: "gpt-4"
+        MAX_CONCURRENT_GENERATIONS: "3"
+      timeout: 300000 # 5 minutes timeout for book generation operations
+      disabled: false
+      chatMenu: true
+      customUserVars:
+        preferred_genre:
+          type: string
+          description: "Your preferred book genre"
+          default: "non-fiction"
+          enum: ["fiction", "non-fiction", "technical", "educational"]
+        default_chapter_count:
+          type: number
+          description: "Default number of chapters"
+          default: 10
+          min: 3
+          max: 50
+        writing_style:
+          type: string
+          description: "Preferred writing style"
+          default: "casual"
+          enum: ["formal", "casual", "academic", "creative"]
 
 # Definition of custom endpoints
 endpoints:
@@ -191,34 +220,34 @@ endpoints:
   #   capabilities: ["execute_code", "file_search", "actions", "tools"]
   custom:
     # Groq Example
-    - name: 'groq'
-      apiKey: '${GROQ_API_KEY}'
-      baseURL: 'https://api.groq.com/openai/v1/'
+    - name: "groq"
+      apiKey: "${GROQ_API_KEY}"
+      baseURL: "https://api.groq.com/openai/v1/"
       models:
         default:
           [
-            'llama3-70b-8192',
-            'llama3-8b-8192',
-            'llama2-70b-4096',
-            'mixtral-8x7b-32768',
-            'gemma-7b-it',
+            "llama3-70b-8192",
+            "llama3-8b-8192",
+            "llama2-70b-4096",
+            "mixtral-8x7b-32768",
+            "gemma-7b-it",
           ]
         fetch: false
       titleConvo: true
-      titleModel: 'mixtral-8x7b-32768'
-      modelDisplayLabel: 'groq'
+      titleModel: "mixtral-8x7b-32768"
+      modelDisplayLabel: "groq"
 
     # Mistral AI Example
-    - name: 'Mistral' # Unique name for the endpoint
+    - name: "Mistral" # Unique name for the endpoint
       # For `apiKey` and `baseURL`, you can use environment variables that you define.
       # recommended environment variables:
-      apiKey: '${MISTRAL_API_KEY}'
-      baseURL: 'https://api.mistral.ai/v1'
+      apiKey: "${MISTRAL_API_KEY}"
+      baseURL: "https://api.mistral.ai/v1"
 
       # Models configuration
       models:
         # List of default models to use. At least one value is required.
-        default: ['mistral-tiny', 'mistral-small', 'mistral-medium']
+        default: ["mistral-tiny", "mistral-small", "mistral-medium"]
         # Fetch option: Set to true to fetch models from API.
         fetch: true # Defaults to false.
 
@@ -231,7 +260,7 @@ endpoints:
       # titleMethod: "completion"  # Defaults to "completion" if omitted.
 
       # Title Model: Specify the model to use for titles.
-      titleModel: 'mistral-tiny' # Defaults to "gpt-3.5-turbo" if omitted.
+      titleModel: "mistral-tiny" # Defaults to "gpt-3.5-turbo" if omitted.
 
       # Summarize setting: Set to true to enable summarization.
       # summarize: false
@@ -243,7 +272,7 @@ endpoints:
       # forcePrompt: false
 
       # The label displayed for the AI model in messages.
-      modelDisplayLabel: 'Mistral' # Default is "AI" when not set.
+      modelDisplayLabel: "Mistral" # Default is "AI" when not set.
 
       # Add additional parameters to the request. Default params will be overwritten.
       # addParams:
@@ -251,39 +280,39 @@ endpoints:
 
       # Drop Default params parameters from the request. See default params in guide linked below.
       # NOTE: For Mistral, it is necessary to drop the following parameters or you will encounter a 422 Error:
-      dropParams: ['stop', 'user', 'frequency_penalty', 'presence_penalty']
+      dropParams: ["stop", "user", "frequency_penalty", "presence_penalty"]
 
     # OpenRouter Example
-    - name: 'OpenRouter'
+    - name: "OpenRouter"
       # For `apiKey` and `baseURL`, you can use environment variables that you define.
       # recommended environment variables:
-      apiKey: '${OPENROUTER_KEY}'
-      baseURL: 'https://openrouter.ai/api/v1'
+      apiKey: "${OPENROUTER_KEY}"
+      baseURL: "https://openrouter.ai/api/v1"
       models:
-        default: ['meta-llama/llama-3-70b-instruct']
+        default: ["meta-llama/llama-3-70b-instruct"]
         fetch: true
       titleConvo: true
-      titleModel: 'meta-llama/llama-3-70b-instruct'
+      titleModel: "meta-llama/llama-3-70b-instruct"
       # Recommended: Drop the stop parameter from the request as Openrouter models use a variety of stop tokens.
-      dropParams: ['stop']
-      modelDisplayLabel: 'OpenRouter'
+      dropParams: ["stop"]
+      modelDisplayLabel: "OpenRouter"
 
     # Portkey AI Example
     - name: "Portkey"
       apiKey: "dummy"
-      baseURL: 'https://api.portkey.ai/v1'
+      baseURL: "https://api.portkey.ai/v1"
       headers:
-          x-portkey-api-key: '${PORTKEY_API_KEY}'
-          x-portkey-virtual-key: '${PORTKEY_OPENAI_VIRTUAL_KEY}'
+        x-portkey-api-key: "${PORTKEY_API_KEY}"
+        x-portkey-virtual-key: "${PORTKEY_OPENAI_VIRTUAL_KEY}"
       models:
-          default: ['gpt-4o-mini', 'gpt-4o', 'chatgpt-4o-latest']
-          fetch: true
+        default: ["gpt-4o-mini", "gpt-4o", "chatgpt-4o-latest"]
+        fetch: true
       titleConvo: true
-      titleModel: 'current_model'
+      titleModel: "current_model"
       summarize: false
-      summaryModel: 'current_model'
+      summaryModel: "current_model"
       forcePrompt: false
-      modelDisplayLabel: 'Portkey'
+      modelDisplayLabel: "Portkey"
       iconURL: https://images.crunchbase.com/image/upload/c_pad,f_auto,q_auto:eco,dpr_1/rjqy7ghvjoiu4cd1xjbf
 # fileConfig:
 #   endpoints:
