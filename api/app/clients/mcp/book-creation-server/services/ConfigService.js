@@ -1,6 +1,6 @@
 /**
  * Configuration Service for Book Creation MCP Server
- * 
+ *
  * Manages book creation settings, validation, and configuration schemas.
  * Handles user preferences, default values, and configuration validation.
  */
@@ -22,13 +22,13 @@ class ConfigService {
         averageChapterLength: 2000, // words
         includeIntroduction: true,
         includeConclusion: true,
-        includeBibliography: false
+        includeBibliography: false,
       },
       style: {
         writingStyle: 'casual',
         tone: 'friendly',
         perspective: 'third-person',
-        targetAudience: 'general'
+        targetAudience: 'general',
       },
       formatting: {
         font: 'Arial',
@@ -38,16 +38,16 @@ class ConfigService {
           top: 1,
           bottom: 1,
           left: 1,
-          right: 1
-        }
+          right: 1,
+        },
       },
       generation: {
         aiModel: 'gpt-4',
         temperature: 0.7,
         maxTokensPerChapter: 4000,
         includeOutlineInContext: true,
-        summaryLength: 'brief'
-      }
+        summaryLength: 'brief',
+      },
     };
   }
 
@@ -62,25 +62,25 @@ class ConfigService {
         averageChapterLength: { type: 'number', min: 500, max: 10000, required: false },
         includeIntroduction: { type: 'boolean', required: false },
         includeConclusion: { type: 'boolean', required: false },
-        includeBibliography: { type: 'boolean', required: false }
+        includeBibliography: { type: 'boolean', required: false },
       },
       style: {
-        writingStyle: { 
-          type: 'string', 
-          enum: ['formal', 'casual', 'academic', 'creative'], 
-          required: true 
+        writingStyle: {
+          type: 'string',
+          enum: ['formal', 'casual', 'academic', 'creative'],
+          required: true,
         },
-        tone: { 
-          type: 'string', 
-          enum: ['professional', 'friendly', 'authoritative', 'conversational'], 
-          required: false 
+        tone: {
+          type: 'string',
+          enum: ['professional', 'friendly', 'authoritative', 'conversational'],
+          required: false,
         },
-        perspective: { 
-          type: 'string', 
-          enum: ['first-person', 'second-person', 'third-person'], 
-          required: false 
+        perspective: {
+          type: 'string',
+          enum: ['first-person', 'second-person', 'third-person'],
+          required: false,
         },
-        targetAudience: { type: 'string', required: true }
+        targetAudience: { type: 'string', required: true },
       },
       formatting: {
         font: { type: 'string', required: false },
@@ -92,18 +92,18 @@ class ConfigService {
             top: { type: 'number', min: 0.5, max: 3, required: false },
             bottom: { type: 'number', min: 0.5, max: 3, required: false },
             left: { type: 'number', min: 0.5, max: 3, required: false },
-            right: { type: 'number', min: 0.5, max: 3, required: false }
+            right: { type: 'number', min: 0.5, max: 3, required: false },
           },
-          required: false
-        }
+          required: false,
+        },
       },
       generation: {
         aiModel: { type: 'string', required: false },
         temperature: { type: 'number', min: 0, max: 2, required: false },
         maxTokensPerChapter: { type: 'number', min: 1000, max: 8000, required: false },
         includeOutlineInContext: { type: 'boolean', required: false },
-        summaryLength: { type: 'string', enum: ['brief', 'detailed'], required: false }
-      }
+        summaryLength: { type: 'string', enum: ['brief', 'detailed'], required: false },
+      },
     };
   }
 
@@ -119,7 +119,7 @@ class ConfigService {
     if (!config || typeof config !== 'object') {
       return {
         isValid: false,
-        errors: ['Configuration must be an object']
+        errors: ['Configuration must be an object'],
       };
     }
 
@@ -213,7 +213,7 @@ class ConfigService {
     const result = { ...target };
 
     for (const key in source) {
-      if (source.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
         if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
           result[key] = this.deepMerge(target[key] || {}, source[key]);
         } else {
@@ -231,17 +231,26 @@ class ConfigService {
    * @returns {Object} Result with config and validation info
    */
   prepareConfiguration(userConfig = {}) {
+    // Debug logging
+    console.log('[ConfigService] Debug - userConfig:', JSON.stringify(userConfig, null, 2));
+    console.log(
+      '[ConfigService] Debug - defaultConfig:',
+      JSON.stringify(this.defaultConfig, null, 2),
+    );
+
     // Merge with defaults
     const mergedConfig = this.mergeWithDefaults(userConfig);
+    console.log('[ConfigService] Debug - mergedConfig:', JSON.stringify(mergedConfig, null, 2));
 
     // Validate the merged configuration
     const validation = this.validateConfiguration(mergedConfig);
+    console.log('[ConfigService] Debug - validation result:', JSON.stringify(validation, null, 2));
 
     return {
       config: mergedConfig,
       validation: validation,
       isValid: validation.isValid,
-      errors: validation.errors
+      errors: validation.errors,
     };
   }
 
@@ -261,7 +270,7 @@ class ConfigService {
         if (params.config) {
           const configValidation = this.validateConfiguration(params.config);
           if (!configValidation.isValid) {
-            errors.push(...configValidation.errors.map(error => `config.${error}`));
+            errors.push(...configValidation.errors.map((error) => `config.${error}`));
           }
         }
         break;
@@ -270,8 +279,11 @@ class ConfigService {
       case 'regenerate_chapter':
         // Validate that chapter-specific settings are valid
         if (params.chapterSettings) {
-          if (params.chapterSettings.wordCountTarget && 
-              (params.chapterSettings.wordCountTarget < 500 || params.chapterSettings.wordCountTarget > 10000)) {
+          if (
+            params.chapterSettings.wordCountTarget &&
+            (params.chapterSettings.wordCountTarget < 500 ||
+              params.chapterSettings.wordCountTarget > 10000)
+          ) {
             errors.push('chapterSettings.wordCountTarget must be between 500 and 10000');
           }
         }
@@ -290,7 +302,7 @@ class ConfigService {
 
     return {
       isValid: errors.length === 0,
-      errors: errors
+      errors: errors,
     };
   }
 
@@ -308,8 +320,8 @@ class ConfigService {
           ...baseConfig,
           validation: {
             strictMode: true,
-            requireAllFields: false
-          }
+            requireAllFields: false,
+          },
         };
 
       case 'approve_chapter':
@@ -318,8 +330,8 @@ class ConfigService {
           chapterSettings: {
             wordCountTarget: baseConfig.content.averageChapterLength,
             allowRegeneration: true,
-            maxRegenerationAttempts: 3
-          }
+            maxRegenerationAttempts: 3,
+          },
         };
 
       case 'export_book':
@@ -328,8 +340,8 @@ class ConfigService {
           exportSettings: {
             includeMetadata: true,
             includeTableOfContents: true,
-            includePageNumbers: true
-          }
+            includePageNumbers: true,
+          },
         };
 
       default:
@@ -371,13 +383,17 @@ class ConfigService {
         case '3.4': // Settings validation against allowed ranges
           const baseValidation = this.validateConfiguration(config);
           if (!baseValidation.isValid) {
-            errors.push(`Requirement 3.4: Configuration validation failed - ${baseValidation.errors.join(', ')}`);
+            errors.push(
+              `Requirement 3.4: Configuration validation failed - ${baseValidation.errors.join(', ')}`,
+            );
           }
           break;
 
         case '3.5': // Settings application throughout generation
           if (!config.generation || !config.generation.includeOutlineInContext) {
-            warnings.push('Requirement 3.5: Consider enabling outline context for consistent generation');
+            warnings.push(
+              'Requirement 3.5: Consider enabling outline context for consistent generation',
+            );
           }
           break;
       }
@@ -386,7 +402,7 @@ class ConfigService {
     return {
       isValid: errors.length === 0,
       errors: errors,
-      warnings: warnings
+      warnings: warnings,
     };
   }
 
@@ -407,31 +423,31 @@ class ConfigService {
               minimum: 3,
               maximum: 50,
               default: 10,
-              description: 'Number of chapters in the book'
+              description: 'Number of chapters in the book',
             },
             averageChapterLength: {
               type: 'number',
               minimum: 500,
               maximum: 10000,
               default: 2000,
-              description: 'Target word count per chapter'
+              description: 'Target word count per chapter',
             },
             includeIntroduction: {
               type: 'boolean',
               default: true,
-              description: 'Include an introduction chapter'
+              description: 'Include an introduction chapter',
             },
             includeConclusion: {
               type: 'boolean',
               default: true,
-              description: 'Include a conclusion chapter'
+              description: 'Include a conclusion chapter',
             },
             includeBibliography: {
               type: 'boolean',
               default: false,
-              description: 'Include a bibliography section'
-            }
-          }
+              description: 'Include a bibliography section',
+            },
+          },
         },
         style: {
           type: 'object',
@@ -441,26 +457,26 @@ class ConfigService {
               type: 'string',
               enum: ['formal', 'casual', 'academic', 'creative'],
               default: 'casual',
-              description: 'Overall writing style'
+              description: 'Overall writing style',
             },
             tone: {
               type: 'string',
               enum: ['professional', 'friendly', 'authoritative', 'conversational'],
               default: 'friendly',
-              description: 'Tone of the writing'
+              description: 'Tone of the writing',
             },
             perspective: {
               type: 'string',
               enum: ['first-person', 'second-person', 'third-person'],
               default: 'third-person',
-              description: 'Narrative perspective'
+              description: 'Narrative perspective',
             },
             targetAudience: {
               type: 'string',
               default: 'general',
-              description: 'Target audience for the book'
-            }
-          }
+              description: 'Target audience for the book',
+            },
+          },
         },
         formatting: {
           type: 'object',
@@ -469,22 +485,22 @@ class ConfigService {
             font: {
               type: 'string',
               default: 'Arial',
-              description: 'Font family'
+              description: 'Font family',
             },
             fontSize: {
               type: 'number',
               minimum: 8,
               maximum: 24,
               default: 12,
-              description: 'Font size in points'
+              description: 'Font size in points',
             },
             lineSpacing: {
               type: 'number',
               enum: [1, 1.15, 1.5, 2],
               default: 1.5,
-              description: 'Line spacing multiplier'
-            }
-          }
+              description: 'Line spacing multiplier',
+            },
+          },
         },
         generation: {
           type: 'object',
@@ -493,31 +509,31 @@ class ConfigService {
             aiModel: {
               type: 'string',
               default: 'gpt-4',
-              description: 'AI model to use for generation'
+              description: 'AI model to use for generation',
             },
             temperature: {
               type: 'number',
               minimum: 0,
               maximum: 2,
               default: 0.7,
-              description: 'AI generation temperature'
+              description: 'AI generation temperature',
             },
             maxTokensPerChapter: {
               type: 'number',
               minimum: 1000,
               maximum: 8000,
               default: 4000,
-              description: 'Maximum tokens per chapter'
+              description: 'Maximum tokens per chapter',
             },
             summaryLength: {
               type: 'string',
               enum: ['brief', 'detailed'],
               default: 'brief',
-              description: 'Length of chapter summaries'
-            }
-          }
-        }
-      }
+              description: 'Length of chapter summaries',
+            },
+          },
+        },
+      },
     };
   }
 }

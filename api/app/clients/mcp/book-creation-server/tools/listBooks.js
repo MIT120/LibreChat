@@ -114,7 +114,9 @@ const listBooksTool = {
       };
 
       // Create book service instance
-      const bookService = new BookService();
+      const bookService = new BookService({
+        models: context.serverModels || context.models,
+      });
 
       // Get books list with statistics
       const booksResult = await bookService.listBooks(userId, queryOptions);
@@ -147,9 +149,9 @@ const listBooksTool = {
           baseBookData.details = {
             outline: book.outline
               ? {
-                  chapters: book.outline.chapters,
-                  approvedAt: book.outline.approvedAt,
-                }
+                chapters: book.outline.chapters,
+                approvedAt: book.outline.approvedAt,
+              }
               : null,
             configuration: {
               chapterCount: book.config?.content?.chapterCount,
@@ -202,9 +204,8 @@ const listBooksTool = {
           filters: appliedFilters,
           recommendations: this.generateRecommendations(formattedBooks, summary),
         },
-        message: `Found ${formattedBooks.length} book${formattedBooks.length !== 1 ? 's' : ''} ${
-          sanitizedParams.status ? `with status "${sanitizedParams.status}"` : ''
-        }${sanitizedParams.genre ? ` in genre "${sanitizedParams.genre}"` : ''}.`,
+        message: `Found ${formattedBooks.length} book${formattedBooks.length !== 1 ? 's' : ''} ${sanitizedParams.status ? `with status "${sanitizedParams.status}"` : ''
+          }${sanitizedParams.genre ? ` in genre "${sanitizedParams.genre}"` : ''}.`,
       };
     } catch (error) {
       // Handle different types of errors

@@ -74,7 +74,9 @@ const approveOutlineTool = {
       const sanitizedParams = validationResult.params;
 
       // Create service instances
-      const bookService = new BookService();
+      const bookService = new BookService({
+        models: context.serverModels || context.models,
+      });
       const chapterService = new ChapterService();
 
       // Approve the outline and transition book status
@@ -84,10 +86,10 @@ const approveOutlineTool = {
       let firstChapterResult = null;
       try {
         firstChapterResult = await chapterService.generateChapter(
+          userId,
           sanitizedParams.bookId,
           1, // First chapter
           {
-            userId,
             feedback: sanitizedParams.feedback,
             isFirstChapter: true,
           },
@@ -119,12 +121,12 @@ const approveOutlineTool = {
           },
           firstChapter: firstChapterResult
             ? {
-                chapterId: firstChapterResult.chapterId,
-                title: firstChapterResult.title,
-                status: firstChapterResult.status,
-                wordCount: firstChapterResult.wordCount,
-                preview: firstChapterResult.content.substring(0, 200) + '...',
-              }
+              chapterId: firstChapterResult.chapterId,
+              title: firstChapterResult.title,
+              status: firstChapterResult.status,
+              wordCount: firstChapterResult.wordCount,
+              preview: firstChapterResult.content.substring(0, 200) + '...',
+            }
             : null,
           nextSteps: {
             action: firstChapterResult ? 'approve_chapter' : 'generate_chapter',
@@ -137,11 +139,10 @@ const approveOutlineTool = {
               : 'Outline approved! You can now start generating chapters. The first chapter is ready to be generated.',
           },
         },
-        message: `Outline approved successfully! Book status changed to "${updatedBook.status}". ${
-          firstChapterResult
+        message: `Outline approved successfully! Book status changed to "${updatedBook.status}". ${firstChapterResult
             ? `First chapter "${firstChapterResult.title}" has been generated and is awaiting your approval.`
             : 'You can now begin chapter generation.'
-        }`,
+          }`,
       };
     } catch (error) {
       // Handle different types of errors

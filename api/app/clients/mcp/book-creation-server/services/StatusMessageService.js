@@ -147,6 +147,80 @@ class StatusMessageService {
         actionText: 'Export Book',
       },
 
+      // Page-by-page generation workflow messages
+      page_generation_started: {
+        type: 'info',
+        icon: '📄',
+        title: 'Page-by-Page Generation Started',
+        message: `Started generating Chapter ${data.chapterNumber}: "${data.chapterTitle}"`,
+        details: `Estimated ${data.totalEstimatedPages} pages | First page (${data.firstPageWordCount} words) ready for review`,
+        showProgress: false,
+        requiresAction: true,
+        actionText: 'Review First Page',
+      },
+
+      page_approved: {
+        type: 'success',
+        icon: '✅',
+        title: 'Page Approved',
+        message: `Page ${data.pageNumber} approved`,
+        details: data.hasNextPage 
+          ? `Progress: ${data.approvedPages}/${data.totalPages} pages | Next page generated`
+          : data.isChapterComplete
+            ? `Chapter complete! All ${data.totalPages} pages approved`
+            : `Progress: ${data.approvedPages}/${data.totalPages} pages`,
+        showProgress: data.totalPages > 0,
+        progress: data.totalPages > 0 ? Math.round((data.approvedPages / data.totalPages) * 100) : 0,
+        requiresAction: !data.isChapterComplete,
+        actionText: data.isChapterComplete ? 'Review Chapter' : 'Review Next Page',
+      },
+
+      page_rejected: {
+        type: 'warning',
+        icon: '❌',
+        title: 'Page Needs Revision',
+        message: `Page ${data.pageNumber} requires changes`,
+        details: data.feedback ? `Feedback: ${data.feedback}` : 'Please provide feedback for regeneration',
+        showProgress: false,
+        requiresAction: true,
+        actionText: 'Regenerate Page',
+      },
+
+      page_regenerated: {
+        type: 'info',
+        icon: '🔄',
+        title: 'Page Regenerated',
+        message: `Page ${data.pageNumber} has been regenerated`,
+        details: `${data.wordCount} words | Attempt ${data.regenerationCount}${data.feedbackIncorporated ? ' | Feedback incorporated' : ''}`,
+        showProgress: false,
+        requiresAction: true,
+        actionText: 'Review Regenerated Page',
+      },
+
+      chapter_assembled: {
+        type: 'success',
+        icon: '📖',
+        title: 'Chapter Assembled',
+        message: 'All pages approved - chapter assembled successfully',
+        details: `${data.pageCount} pages | ${data.wordCount} words | Ready for chapter-level review`,
+        showProgress: false,
+        requiresAction: true,
+        actionText: 'Review Complete Chapter',
+      },
+
+      page_status_overview: {
+        type: 'info',
+        icon: '📊',
+        title: 'Chapter Page Status',
+        message: `Chapter ${data.chapterNumber}: "${data.chapterTitle}"`,
+        details: data.isComplete 
+          ? `✅ Complete: ${data.approvedPages}/${data.totalPages} pages approved`
+          : `📝 In Progress: ${data.approvedPages} approved, ${data.pendingPages} pending${data.rejectedPages > 0 ? `, ${data.rejectedPages} rejected` : ''}`,
+        showProgress: data.totalPages > 0,
+        progress: data.totalPages > 0 ? Math.round((data.approvedPages / data.totalPages) * 100) : 0,
+        requiresAction: !data.isComplete,
+      },
+
       error_occurred: {
         type: 'error',
         icon: '⚠️',

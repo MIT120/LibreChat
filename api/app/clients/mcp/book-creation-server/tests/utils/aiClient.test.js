@@ -36,7 +36,7 @@ describe('AIClient', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Set up environment variables for testing
     process.env.OPENAI_API_KEY = 'test-openai-key';
     process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
@@ -61,7 +61,7 @@ describe('AIClient', () => {
     it('should initialize with custom options', () => {
       const customClient = new AIClient({
         defaultProvider: 'anthropic',
-        retryConfig: { maxRetries: 5, baseDelay: 2000 }
+        retryConfig: { maxRetries: 5, baseDelay: 2000 },
       });
 
       expect(customClient.defaultProvider).toBe('anthropic');
@@ -88,13 +88,13 @@ describe('AIClient', () => {
             number: 1,
             title: 'Chapter 1',
             description: 'First chapter description',
-            keyTopics: ['topic1', 'topic2']
-          }
-        ]
+            keyTopics: ['topic1', 'topic2'],
+          },
+        ],
       });
 
       mockOpenAICreate.mockResolvedValue({
-        choices: [{ message: { content: mockResponse } }]
+        choices: [{ message: { content: mockResponse } }],
       });
 
       const result = await aiClient.generateBookOutline('Test Theme');
@@ -107,9 +107,9 @@ describe('AIClient', () => {
           model: 'gpt-4',
           messages: expect.arrayContaining([
             expect.objectContaining({ role: 'system' }),
-            expect.objectContaining({ role: 'user' })
-          ])
-        })
+            expect.objectContaining({ role: 'user' }),
+          ]),
+        }),
       );
     });
 
@@ -117,18 +117,18 @@ describe('AIClient', () => {
       const mockResponse = JSON.stringify({
         title: 'Custom Book',
         description: 'Custom description',
-        chapters: []
+        chapters: [],
       });
 
       mockOpenAICreate.mockResolvedValue({
-        choices: [{ message: { content: mockResponse } }]
+        choices: [{ message: { content: mockResponse } }],
       });
 
       const config = {
         genre: 'fiction',
         chapterCount: 15,
         targetAudience: 'young adults',
-        writingStyle: 'creative'
+        writingStyle: 'creative',
       };
 
       const result = await aiClient.generateBookOutline('Fantasy Theme', config);
@@ -143,7 +143,7 @@ Chapter 2: Getting Started
 Chapter 3: Advanced Topics`;
 
       mockOpenAICreate.mockResolvedValue({
-        choices: [{ message: { content: mockResponse } }]
+        choices: [{ message: { content: mockResponse } }],
       });
 
       const result = await aiClient.generateBookOutline('Test Theme');
@@ -156,29 +156,32 @@ Chapter 3: Advanced Topics`;
     it('should throw error on AI provider failure', async () => {
       mockOpenAICreate.mockRejectedValue(new Error('API Error'));
 
-      await expect(aiClient.generateBookOutline('Test Theme')).rejects.toThrow('Failed to generate book outline');
+      await expect(aiClient.generateBookOutline('Test Theme')).rejects.toThrow(
+        'Failed to generate book outline',
+      );
     });
   });
 
   describe('generateChapter', () => {
     it('should generate chapter content', async () => {
-      const mockResponse = 'This is the generated chapter content with detailed information about the topic.';
+      const mockResponse =
+        'This is the generated chapter content with detailed information about the topic.';
 
       mockOpenAICreate.mockResolvedValue({
-        choices: [{ message: { content: mockResponse } }]
+        choices: [{ message: { content: mockResponse } }],
       });
 
       const chapterInfo = {
         title: 'Test Chapter',
         description: 'A test chapter',
         chapterNumber: 1,
-        totalChapters: 10
+        totalChapters: 10,
       };
 
       const context = {
         bookTheme: 'Test Theme',
         genre: 'non-fiction',
-        previousSummaries: ['Previous chapter summary']
+        previousSummaries: ['Previous chapter summary'],
       };
 
       const result = await aiClient.generateChapter(chapterInfo, context);
@@ -194,14 +197,14 @@ Chapter 3: Advanced Topics`;
       const mockResponse = 'Chapter content without previous context.';
 
       mockOpenAICreate.mockResolvedValue({
-        choices: [{ message: { content: mockResponse } }]
+        choices: [{ message: { content: mockResponse } }],
       });
 
       const chapterInfo = {
         title: 'First Chapter',
         description: 'The first chapter',
         chapterNumber: 1,
-        totalChapters: 5
+        totalChapters: 5,
       };
 
       const result = await aiClient.generateChapter(chapterInfo);
@@ -217,10 +220,12 @@ Chapter 3: Advanced Topics`;
         title: 'Test Chapter',
         description: 'A test chapter',
         chapterNumber: 1,
-        totalChapters: 10
+        totalChapters: 10,
       };
 
-      await expect(aiClient.generateChapter(chapterInfo)).rejects.toThrow('Failed to generate chapter');
+      await expect(aiClient.generateChapter(chapterInfo)).rejects.toThrow(
+        'Failed to generate chapter',
+      );
     });
   });
 
@@ -229,7 +234,7 @@ Chapter 3: Advanced Topics`;
       const mockResponse = 'This is a brief summary of the chapter content.';
 
       mockOpenAICreate.mockResolvedValue({
-        choices: [{ message: { content: mockResponse } }]
+        choices: [{ message: { content: mockResponse } }],
       });
 
       const chapterContent = 'Long chapter content that needs to be summarized...';
@@ -241,20 +246,23 @@ Chapter 3: Advanced Topics`;
       expect(mockOpenAICreate).toHaveBeenCalledWith(
         expect.objectContaining({
           max_tokens: 300,
-          temperature: 0.5
-        })
+          temperature: 0.5,
+        }),
       );
     });
 
     it('should generate detailed chapter summary', async () => {
-      const mockResponse = 'This is a detailed summary with more comprehensive information about the chapter.';
+      const mockResponse =
+        'This is a detailed summary with more comprehensive information about the chapter.';
 
       mockOpenAICreate.mockResolvedValue({
-        choices: [{ message: { content: mockResponse } }]
+        choices: [{ message: { content: mockResponse } }],
       });
 
       const chapterContent = 'Long chapter content...';
-      const result = await aiClient.generateChapterSummary(chapterContent, { summaryLength: 'detailed' });
+      const result = await aiClient.generateChapterSummary(chapterContent, {
+        summaryLength: 'detailed',
+      });
 
       expect(result.summary).toBe(mockResponse);
       expect(result.length).toBe('detailed');
@@ -263,7 +271,9 @@ Chapter 3: Advanced Topics`;
     it('should throw error on summary generation failure', async () => {
       mockOpenAICreate.mockRejectedValue(new Error('Summary failed'));
 
-      await expect(aiClient.generateChapterSummary('content')).rejects.toThrow('Failed to generate chapter summary');
+      await expect(aiClient.generateChapterSummary('content')).rejects.toThrow(
+        'Failed to generate chapter summary',
+      );
     });
   });
 
@@ -272,7 +282,7 @@ Chapter 3: Advanced Topics`;
       const mockResponse = 'Anthropic generated content';
 
       mockAnthropicCreate.mockResolvedValue({
-        content: [{ text: mockResponse }]
+        content: [{ text: mockResponse }],
       });
 
       const result = await aiClient.generateContent('test prompt', { provider: 'anthropic' });
@@ -280,9 +290,9 @@ Chapter 3: Advanced Topics`;
       expect(result).toBe(mockResponse);
       expect(mockAnthropicCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-3-sonnet-20240229',
-          messages: [{ role: 'user', content: 'test prompt' }]
-        })
+          model: 'claude-3-5-sonnet-20241022',
+          messages: [{ role: 'user', content: 'test prompt' }],
+        }),
       );
     });
 
@@ -291,8 +301,8 @@ Chapter 3: Advanced Topics`;
 
       const mockResult = {
         response: {
-          text: jest.fn().mockReturnValue(mockResponse)
-        }
+          text: jest.fn().mockReturnValue(mockResponse),
+        },
       };
 
       mockGoogleGenerate.mockResolvedValue(mockResult);
@@ -304,7 +314,7 @@ Chapter 3: Advanced Topics`;
 
     it('should throw error for unsupported provider', async () => {
       await expect(
-        aiClient.generateContent('test prompt', { provider: 'unsupported' })
+        aiClient.generateContent('test prompt', { provider: 'unsupported' }),
       ).rejects.toThrow('Provider unsupported is not available');
     });
   });
@@ -315,7 +325,7 @@ Chapter 3: Advanced Topics`;
         .mockRejectedValueOnce(new Error('Rate limit exceeded'))
         .mockRejectedValueOnce(new Error('Temporary failure'))
         .mockResolvedValueOnce({
-          choices: [{ message: { content: 'Success after retries' } }]
+          choices: [{ message: { content: 'Success after retries' } }],
         });
 
       // Mock sleep to speed up tests
@@ -372,14 +382,22 @@ Chapter 3: Advanced Topics`;
     });
 
     it('should throw error when setting unavailable provider as default', () => {
-      expect(() => aiClient.setDefaultProvider('nonexistent')).toThrow('Provider nonexistent is not available');
+      expect(() => aiClient.setDefaultProvider('nonexistent')).toThrow(
+        'Provider nonexistent is not available',
+      );
     });
   });
 
   describe('prompt building', () => {
     it('should build outline prompt correctly', () => {
-      const prompt = aiClient.buildOutlinePrompt('AI Technology', 'technical', 12, 'developers', 'formal');
-      
+      const prompt = aiClient.buildOutlinePrompt(
+        'AI Technology',
+        'technical',
+        12,
+        'developers',
+        'formal',
+      );
+
       expect(prompt).toContain('AI Technology');
       expect(prompt).toContain('technical');
       expect(prompt).toContain('12');
@@ -399,9 +417,9 @@ Chapter 3: Advanced Topics`;
         'formal',
         'developers',
         ['Previous summary'],
-        2000
+        2000,
       );
-      
+
       expect(prompt).toContain('Introduction');
       expect(prompt).toContain('Chapter 1 of 10');
       expect(prompt).toContain('AI Technology');
@@ -411,7 +429,7 @@ Chapter 3: Advanced Topics`;
 
     it('should build summary prompt correctly', () => {
       const prompt = aiClient.buildSummaryPrompt('Chapter content here', 200);
-      
+
       expect(prompt).toContain('200 words');
       expect(prompt).toContain('Chapter content here');
       expect(prompt).toContain('main points');

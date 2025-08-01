@@ -12,7 +12,7 @@ services:
     depends_on:
       - mongodb
     restart: always
-    user: '${UID}:${GID}'
+    # user: '${UID}:${GID}' # Commented out to avoid permission issues with MCP servers
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     environment:
@@ -25,6 +25,9 @@ services:
       - type: bind
         source: ./.env
         target: /app/.env
+      - type: bind
+        source: ./librechat.yaml
+        target: /app/librechat.yaml
       - ./images:/app/client/public/images
       - ./uploads:/app/uploads
       - ./logs:/app/api/logs
@@ -32,7 +35,7 @@ services:
     container_name: chat-mongodb
     image: mongo
     restart: always
-    user: '${UID}:${GID}'
+    # user: '${UID}:${GID}' # Commented out to avoid permission issues
     volumes:
       - ./data-node:/data/db
     command: mongod --noauth
@@ -40,7 +43,7 @@ services:
     container_name: chat-meilisearch
     image: getmeili/meilisearch:v1.12.3
     restart: always
-    user: '${UID}:${GID}'
+    # user: '${UID}:${GID}' # Commented out to avoid permission issues
     environment:
       - MEILI_HOST=http://meilisearch:7700
       - MEILI_NO_ANALYTICS=true

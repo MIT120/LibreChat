@@ -187,7 +187,9 @@ const createBookTool = {
       };
 
       // Create book service instance
-      const bookService = new BookService();
+      const bookService = new BookService({
+        models: context.serverModels || context.models,
+      });
 
       // Generate status message for book creation start
       const startMessage = StatusMessageService.generateWorkflowStageMessage(
@@ -238,11 +240,9 @@ const createBookTool = {
             })),
           },
           configuration: {
-            chapterCount: bookProject.config.content.chapterCount,
-            writingStyle: bookProject.config.style.writingStyle,
-            tone: bookProject.config.style.tone,
-            targetAudience: bookProject.config.style.targetAudience,
-            averageChapterLength: bookProject.config.content.averageChapterLength,
+            chapterCount: bookProject.config.chapterCount,
+            writingStyle: bookProject.config.writingStyle,
+            targetAudience: bookProject.config.targetAudience,
           },
           progress: {
             status: bookProject.status,
@@ -252,14 +252,8 @@ const createBookTool = {
           },
           metadata: {
             createdAt: bookProject.createdAt,
-            estimatedWordCount:
-              bookProject.config.content.chapterCount *
-              bookProject.config.content.averageChapterLength,
-            estimatedReadingTime: Math.round(
-              (bookProject.config.content.chapterCount *
-                bookProject.config.content.averageChapterLength) /
-                200,
-            ), // Assuming 200 words per minute
+            estimatedWordCount: bookProject.config.chapterCount * 2000, // Default 2000 words per chapter
+            estimatedReadingTime: Math.round((bookProject.config.chapterCount * 2000) / 200), // 200 words per minute
           },
           nextSteps: {
             action: 'approve_outline',

@@ -57,6 +57,20 @@ class AIClient {
     // Rate limiting tracking
     this.rateLimitTracker = new Map();
 
+    // Provider model configuration
+    this.config = {
+      openai: {
+        model: process.env.AI_MODEL || process.env.OPENAI_MODEL || 'gpt-4',
+      },
+      anthropic: {
+        model: process.env.AI_MODEL || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+      },
+      google: {
+        model: process.env.AI_MODEL || process.env.GOOGLE_MODEL || 'gemini-pro',
+      },
+      ...options.modelConfig,
+    };
+
     // Fallback configuration
     this.fallbackConfig = {
       enableFallback: options.enableFallback !== false,
@@ -258,6 +272,73 @@ class AIClient {
   }
 
   /**
+   * Generate page content for page-by-page chapter creation
+   * @param {Object} pageInfo - Page information
+   * @param {Object} context - Generation context
+   * @returns {Promise<Object>} Generated page data
+   */
+  async generatePageContent(pageInfo, context = {}) {
+    const { chapterTitle, chapterDescription, pageNumber, pageType, estimatedTotalPages } =
+      pageInfo;
+
+    const {
+      bookTheme,
+      genre = 'non-fiction',
+      writingStyle = 'casual',
+      targetAudience = 'general audience',
+      previousPageSummaries = [],
+      chapterContext = '',
+      targetWordCount = 600,
+      specificRequirements = '',
+      provider = this.defaultProvider,
+    } = context;
+
+    const prompt = this.buildPagePrompt(
+      chapterTitle,
+      chapterDescription,
+      pageNumber,
+      pageType,
+      estimatedTotalPages,
+      bookTheme,
+      genre,
+      writingStyle,
+      targetAudience,
+      previousPageSummaries,
+      chapterContext,
+      targetWordCount,
+      specificRequirements,
+    );
+
+    const operation = async (selectedProvider) => {
+      const response = await this.generateContent(prompt, {
+        provider: selectedProvider,
+        maxTokens: Math.min(2000, Math.ceil(targetWordCount * 1.5)), // Allow some buffer
+        temperature: 0.8,
+        timeout: this.timeouts.chapter,
+        systemMessage: `You are an expert book writer creating page-by-page content. Focus on creating engaging, well-paced content that flows naturally and maintains reader interest. This is page ${pageNumber} of approximately ${estimatedTotalPages} pages in the chapter.`,
+      });
+
+      return {
+        content: response,
+        wordCount: this.estimateWordCount(response),
+        pageNumber,
+        pageType,
+      };
+    };
+
+    try {
+      return await this.executeWithFallback(operation, provider, 'generatePageContent');
+    } catch (error) {
+      throw new AIError(`Failed to generate page content: ${error.message}`, provider, {
+        operation: 'generatePageContent',
+        pageNumber,
+        pageType,
+        originalError: error.message,
+      });
+    }
+  }
+
+  /**
    * Generate chapter summary for context in future chapters with content truncation
    */
   async generateChapterSummary(chapterContent, options = {}) {
@@ -409,7 +490,7 @@ class AIClient {
    */
   async generateWithAnthropic(prompt, systemMessage, maxTokens, temperature) {
     const response = await this.providers.anthropic.messages.create({
-      model: 'claude-3-sonnet-20240229',
+      model: this.config.anthropic.model || 'claude-3-5-sonnet-20241022',
       max_tokens: maxTokens,
       temperature: temperature,
       system: systemMessage,
@@ -512,6 +593,108 @@ Instructions:
 6. Write in ${writingStyle} style appropriate for ${targetAudience}
 
 Please write the complete chapter content:`;
+  }
+
+  /**
+   * Build prompt for page content generation
+   */
+  buildPagePrompt(
+    chapterTitle,
+    chapterDescription,
+    pageNumber,
+    pageType,
+    estimatedTotalPages,
+    bookTheme,
+    genre,
+    writingStyle,
+    targetAudience,
+    previousPageSummaries,
+    chapterContext,
+    targetWordCount,
+    specificRequirements,
+  ) {
+    let contextSection = '';
+    if (previousPageSummaries.length > 0) {
+      contextSection = `\nPrevious pages in this chapter:\n${previousPageSummaries.join('\n')}\n`;
+    }
+
+    let chapterContextSection = '';
+    if (chapterContext && chapterContext.length > 0) {
+      chapterContextSection = `\nChapter Context: ${chapterContext}\n`;
+    }
+
+    let requirementsSection = '';
+    if (specificRequirements && specificRequirements.length > 0) {
+      requirementsSection = `\nSpecific Requirements:\n${specificRequirements}\n`;
+    }
+
+    // Determine page-specific instructions based on page type
+    let pageInstructions = '';
+    switch (pageType) {
+      case 'opening':
+        pageInstructions = `
+- Start the chapter with an engaging hook or compelling introduction
+- Establish the main theme or topic for this chapter
+- Create interest and momentum for the following pages
+- Set the tone and context for what's to come`;
+        break;
+      case 'development':
+        pageInstructions = `
+- Develop the main content and ideas of the chapter
+- Build upon previous pages with logical progression
+- Provide detailed information, examples, or narrative development
+- Maintain engagement while advancing the chapter's goals`;
+        break;
+      case 'transition':
+        pageInstructions = `
+- Create a smooth transition between different aspects of the chapter
+- Connect previous ideas to what's coming next
+- Maintain narrative flow while shifting focus or perspective
+- Bridge different concepts or sections within the chapter`;
+        break;
+      case 'climax':
+        pageInstructions = `
+- Present the most important or impactful content of the chapter
+- Deliver key insights, revelations, or critical information
+- Create maximum engagement and reader interest
+- Build towards the chapter's main conclusion or resolution`;
+        break;
+      case 'conclusion':
+        pageInstructions = `
+- Wrap up the chapter's main points and themes
+- Provide closure while setting up future chapters
+- Summarize key takeaways or insights
+- End with a smooth transition or compelling next step`;
+        break;
+      default:
+        pageInstructions = `
+- Continue developing the chapter content with engaging material
+- Maintain consistency with the overall chapter flow
+- Provide valuable information appropriate for the target audience`;
+    }
+
+    return `Write page ${pageNumber} of approximately ${estimatedTotalPages} pages for the chapter "${chapterTitle}" in a ${genre} book about "${bookTheme}".
+
+Chapter Details:
+- Title: ${chapterTitle}
+- Description: ${chapterDescription}
+- Page type: ${pageType}
+- Target word count for this page: ${targetWordCount} words
+- Writing style: ${writingStyle}
+- Target audience: ${targetAudience}
+${contextSection}${chapterContextSection}${requirementsSection}
+Page-specific instructions:${pageInstructions}
+
+General writing guidelines:
+1. Write engaging, well-paced content that flows naturally from previous pages
+2. Include relevant examples, anecdotes, or case studies where appropriate
+3. Maintain consistency with the book's theme and writing style
+4. Use clear structure with appropriate formatting (headings, lists, etc.)
+5. Ensure this page contributes meaningfully to the overall chapter
+6. Write in ${writingStyle} style appropriate for ${targetAudience}
+7. Keep the content focused and purposeful for this specific page
+
+Please write the content for page ${pageNumber}:`;
   }
 
   /**

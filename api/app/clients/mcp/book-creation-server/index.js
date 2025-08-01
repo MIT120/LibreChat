@@ -9,7 +9,12 @@
 
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
-const { CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
+const {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ErrorCode,
+  McpError,
+} = require('@modelcontextprotocol/sdk/types.js');
 
 // Import tools
 const { getAllTools } = require('./tools/index.js');
@@ -40,7 +45,7 @@ class BookCreationMCPServer {
    */
   setupHandlers() {
     // Set up list_tools handler
-    this.server.setRequestHandler('tools/list', async () => {
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       const tools = getAllTools();
       return {
         tools: tools.map((tool) => ({
@@ -52,7 +57,7 @@ class BookCreationMCPServer {
     });
 
     // Set up call_tool handler
-    this.server.setRequestHandler('tools/call', async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name: toolName, arguments: toolArgs } = request.params;
 
       const tool = getAllTools().find((t) => t.name === toolName);
@@ -61,12 +66,14 @@ class BookCreationMCPServer {
       }
 
       try {
-        // Execute the tool with context
+        // Execute the tool with context including models and services
         const context = {
           userId: request.meta?.userId || 'anonymous',
           user: request.meta?.user || { id: 'anonymous' },
           models: this.models,
           dbManager: this.dbManager,
+          // Provide models for service instantiation
+          serverModels: this.models,
         };
 
         const result = await tool.execute(toolArgs, context);

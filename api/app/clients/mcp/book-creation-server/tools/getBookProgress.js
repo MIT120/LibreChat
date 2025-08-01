@@ -1,44 +1,49 @@
 /**
  * Get Book Progress MCP Tool
- * 
+ *
  * Implements the get_book_progress MCP tool for detailed progress information.
  * Provides comprehensive progress tracking, analytics, and next steps guidance.
  */
 
 const BookService = require('../services/BookService');
 const ChapterService = require('../services/ChapterService');
-const { validateGetBookProgressParams, sanitizeAndValidate, formatValidationErrors } = require('../utils/validators');
+const {
+  validateGetBookProgressParams,
+  sanitizeAndValidate,
+  formatValidationErrors,
+} = require('../utils/validators');
 
 /**
  * MCP Tool Definition for get_book_progress
  */
 const getBookProgressTool = {
   name: 'get_book_progress',
-  description: 'Get detailed progress information for a specific book project. Includes completion metrics, chapter status, timeline, and next steps.',
+  description:
+    'Get detailed progress information for a specific book project. Includes completion metrics, chapter status, timeline, and next steps.',
   inputSchema: {
     type: 'object',
     properties: {
       bookId: {
         type: 'string',
-        description: 'The unique identifier of the book project'
+        description: 'The unique identifier of the book project',
       },
       includeChapterDetails: {
         type: 'boolean',
         default: false,
-        description: 'Include detailed information about each chapter'
+        description: 'Include detailed information about each chapter',
       },
       includeTimeline: {
         type: 'boolean',
         default: true,
-        description: 'Include timeline of book creation milestones'
+        description: 'Include timeline of book creation milestones',
       },
       includeAnalytics: {
         type: 'boolean',
         default: true,
-        description: 'Include progress analytics and insights'
-      }
+        description: 'Include progress analytics and insights',
+      },
     },
-    required: ['bookId']
+    required: ['bookId'],
   },
 
   /**
@@ -56,8 +61,8 @@ const getBookProgressTool = {
           success: false,
           error: {
             code: 'UNAUTHORIZED',
-            message: 'User authentication required to get book progress'
-          }
+            message: 'User authentication required to get book progress',
+          },
         };
       }
 
@@ -68,19 +73,24 @@ const getBookProgressTool = {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
-            message: formatValidationErrors(validationResult.errors, 'Get book progress parameters'),
+            message: formatValidationErrors(
+              validationResult.errors,
+              'Get book progress parameters',
+            ),
             details: {
               errors: validationResult.errors,
-              receivedParams: Object.keys(params)
-            }
-          }
+              receivedParams: Object.keys(params),
+            },
+          },
         };
       }
 
       const sanitizedParams = validationResult.params;
 
       // Create service instances
-      const bookService = new BookService();
+      const bookService = new BookService({
+        models: context.serverModels || context.models,
+      });
       const chapterService = new ChapterService();
 
       // Get detailed book progress
@@ -90,38 +100,46 @@ const getBookProgressTool = {
       let chapterDetails = null;
       if (sanitizedParams.includeChapterDetails) {
         try {
-          chapterDetails = await chapterService.getChaptersByBook(sanitizedParams.bookId, userId);
+          chapterDetails = await chapterService.listChapters(userId, sanitizedParams.bookId);
         } catch (chapterError) {
-          console.warn('[GetBookProgressTool] Could not fetch chapter details:', chapterError.message);
+          console.warn(
+            '[GetBookProgressTool] Could not fetch chapter details:',
+            chapterError.message,
+          );
           // Continue without chapter details
         }
       }
 
       // Calculate advanced analytics
-      const analytics = sanitizedParams.includeAnalytics ? 
-        this.calculateProgressAnalytics(progressData, chapterDetails) : null;
+      const analytics = sanitizedParams.includeAnalytics
+        ? this.calculateProgressAnalytics(progressData, chapterDetails)
+        : null;
 
       // Generate timeline if requested
-      const timeline = sanitizedParams.includeTimeline ? 
-        this.generateProgressTimeline(progressData, chapterDetails) : null;
+      const timeline = sanitizedParams.includeTimeline
+        ? this.generateProgressTimeline(progressData, chapterDetails)
+        : null;
 
       // Determine next steps and recommendations
       const nextSteps = this.generateNextSteps(progressData, chapterDetails);
 
       // Format chapter details for response
-      const formattedChapterDetails = chapterDetails ? chapterDetails.map(chapter => ({
-        chapterId: chapter.chapterId,
-        chapterNumber: chapter.chapterNumber,
-        title: chapter.title,
-        status: chapter.status,
-        wordCount: chapter.wordCount,
-        createdAt: chapter.createdAt,
-        updatedAt: chapter.updatedAt,
-        approvedAt: chapter.approvedAt,
-        summary: chapter.summary ? chapter.summary.substring(0, 150) + '...' : null,
-        hasContent: !!chapter.content,
-        contentPreview: chapter.content ? chapter.content.substring(0, 100) + '...' : null
-      })) : null;
+      const formattedChapterDetails =
+        chapterDetails && Array.isArray(chapterDetails)
+          ? chapterDetails.map((chapter) => ({
+            chapterId: chapter.chapterId,
+            chapterNumber: chapter.chapterNumber,
+            title: chapter.title,
+            status: chapter.status,
+            wordCount: chapter.wordCount,
+            createdAt: chapter.createdAt,
+            updatedAt: chapter.updatedAt,
+            approvedAt: chapter.approvedAt,
+            summary: chapter.summary ? chapter.summary.substring(0, 150) + '...' : null,
+            hasContent: !!chapter.content,
+            contentPreview: chapter.content ? chapter.content.substring(0, 100) + '...' : null,
+          }))
+          : null;
 
       // Prepare comprehensive response
       return {
@@ -131,37 +149,38 @@ const getBookProgressTool = {
             bookId: progressData.bookId,
             title: progressData.title,
             status: progressData.status,
-            lastUpdated: progressData.lastUpdated
+            lastUpdated: progressData.lastUpdated,
           },
           progress: {
             overall: {
               completionPercentage: progressData.progress.completionPercentage,
               currentPhase: progressData.progress.currentPhase,
               estimatedTimeRemaining: progressData.progress.estimatedTimeRemaining,
-              nextAction: progressData.progress.nextAction
+              nextAction: progressData.progress.nextAction,
             },
             chapters: {
               current: progressData.progress.currentChapter,
               completed: progressData.progress.completedChapters,
               total: progressData.progress.totalChapters,
-              remaining: progressData.progress.totalChapters - progressData.progress.completedChapters
+              remaining:
+                progressData.progress.totalChapters - progressData.progress.completedChapters,
             },
             content: {
               totalWordCount: progressData.metadata.wordCount,
               averageWordsPerChapter: progressData.metadata.averageWordsPerChapter,
               chaptersRemaining: progressData.metadata.chaptersRemaining,
-              estimatedFinalWordCount: progressData.metadata.averageWordsPerChapter * progressData.progress.totalChapters
-            }
+              estimatedFinalWordCount:
+                progressData.metadata.averageWordsPerChapter * progressData.progress.totalChapters,
+            },
           },
           chapterDetails: formattedChapterDetails,
           analytics: analytics,
           timeline: timeline,
           nextSteps: nextSteps,
-          insights: this.generateProgressInsights(progressData, analytics)
+          insights: this.generateProgressInsights(progressData, analytics),
         },
-        message: `Book "${progressData.title}" is ${progressData.progress.completionPercentage}% complete with ${progressData.progress.completedChapters} of ${progressData.progress.totalChapters} chapters finished.`
+        message: `Book "${progressData.title}" is ${progressData.progress.completionPercentage}% complete with ${progressData.progress.completedChapters} of ${progressData.progress.totalChapters} chapters finished.`,
       };
-
     } catch (error) {
       // Handle different types of errors
       if (error.name === 'BookServiceError') {
@@ -170,8 +189,8 @@ const getBookProgressTool = {
           error: {
             code: error.code,
             message: error.message,
-            details: error.details
-          }
+            details: error.details,
+          },
         };
       }
 
@@ -183,9 +202,9 @@ const getBookProgressTool = {
           code: 'INTERNAL_ERROR',
           message: 'An unexpected error occurred while getting book progress',
           details: {
-            error: error.message
-          }
-        }
+            error: error.message,
+          },
+        },
       };
     }
   },
@@ -201,38 +220,50 @@ const getBookProgressTool = {
       productivity: {},
       quality: {},
       timeline: {},
-      predictions: {}
+      predictions: {},
     };
 
     // Productivity metrics
-    if (chapterDetails && chapterDetails.length > 0) {
-      const approvedChapters = chapterDetails.filter(ch => ch.status === 'approved');
-      const totalDays = approvedChapters.length > 0 ? 
-        (Date.now() - new Date(approvedChapters[0].createdAt)) / (1000 * 60 * 60 * 24) : 0;
-      
+    if (chapterDetails && Array.isArray(chapterDetails) && chapterDetails.length > 0) {
+      const approvedChapters = chapterDetails.filter((ch) => ch.status === 'approved');
+      const totalDays =
+        approvedChapters.length > 0
+          ? (Date.now() - new Date(approvedChapters[0].createdAt)) / (1000 * 60 * 60 * 24)
+          : 0;
+
       analytics.productivity = {
         chaptersPerWeek: totalDays > 0 ? (approvedChapters.length / totalDays) * 7 : 0,
         averageChapterTime: totalDays > 0 ? totalDays / approvedChapters.length : 0,
         consistencyScore: this.calculateConsistencyScore(approvedChapters),
-        mostProductivePhase: this.identifyMostProductivePhase(approvedChapters)
+        mostProductivePhase: this.identifyMostProductivePhase(approvedChapters),
       };
 
       // Quality metrics
       analytics.quality = {
-        averageWordCount: approvedChapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) / approvedChapters.length || 0,
+        averageWordCount:
+          approvedChapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) /
+          approvedChapters.length || 0,
         wordCountConsistency: this.calculateWordCountConsistency(approvedChapters),
         revisionRate: this.calculateRevisionRate(chapterDetails),
-        qualityTrend: this.calculateQualityTrend(approvedChapters)
+        qualityTrend: this.calculateQualityTrend(approvedChapters),
       };
     }
 
     // Timeline predictions
-    const remainingChapters = progressData.progress.totalChapters - progressData.progress.completedChapters;
+    const remainingChapters =
+      progressData.progress.totalChapters - progressData.progress.completedChapters;
     if (analytics.productivity.averageChapterTime > 0) {
       analytics.predictions = {
-        estimatedCompletionDate: new Date(Date.now() + (remainingChapters * analytics.productivity.averageChapterTime * 24 * 60 * 60 * 1000)),
-        estimatedDaysRemaining: Math.ceil(remainingChapters * analytics.productivity.averageChapterTime),
-        confidenceLevel: this.calculatePredictionConfidence(analytics.productivity.consistencyScore)
+        estimatedCompletionDate: new Date(
+          Date.now() +
+          remainingChapters * analytics.productivity.averageChapterTime * 24 * 60 * 60 * 1000,
+        ),
+        estimatedDaysRemaining: Math.ceil(
+          remainingChapters * analytics.productivity.averageChapterTime,
+        ),
+        confidenceLevel: this.calculatePredictionConfidence(
+          analytics.productivity.consistencyScore,
+        ),
       };
     }
 
@@ -254,7 +285,7 @@ const getBookProgressTool = {
       event: 'book_created',
       title: 'Book Project Created',
       description: `Started working on "${progressData.title}"`,
-      milestone: true
+      milestone: true,
     });
 
     // Add outline approval if available
@@ -264,13 +295,13 @@ const getBookProgressTool = {
         event: 'outline_approved',
         title: 'Outline Approved',
         description: 'Book outline approved and chapter generation began',
-        milestone: true
+        milestone: true,
       });
     }
 
     // Add chapter events
-    if (chapterDetails) {
-      chapterDetails.forEach(chapter => {
+    if (chapterDetails && Array.isArray(chapterDetails)) {
+      chapterDetails.forEach((chapter) => {
         if (chapter.status === 'approved' && chapter.approvedAt) {
           timeline.push({
             date: chapter.approvedAt,
@@ -278,7 +309,7 @@ const getBookProgressTool = {
             title: `Chapter ${chapter.chapterNumber} Approved`,
             description: `"${chapter.title}" - ${chapter.wordCount} words`,
             chapterNumber: chapter.chapterNumber,
-            wordCount: chapter.wordCount
+            wordCount: chapter.wordCount,
           });
         }
       });
@@ -291,7 +322,7 @@ const getBookProgressTool = {
         event: 'book_completed',
         title: 'Book Completed',
         description: `Finished all ${progressData.progress.totalChapters} chapters`,
-        milestone: true
+        milestone: true,
       });
     }
 
@@ -309,7 +340,7 @@ const getBookProgressTool = {
     const nextSteps = {
       immediate: [],
       upcoming: [],
-      longTerm: []
+      longTerm: [],
     };
 
     switch (progressData.status) {
@@ -319,15 +350,17 @@ const getBookProgressTool = {
           title: 'Approve Book Outline',
           description: 'Review and approve the generated outline to begin chapter creation',
           priority: 'high',
-          estimatedTime: '5-10 minutes'
+          estimatedTime: '5-10 minutes',
         });
         break;
 
-      case 'in_progress':
+      case 'in_progress': {
         // Find pending chapters
-        const pendingChapters = chapterDetails ? 
-          chapterDetails.filter(ch => ch.status === 'pending') : [];
-        
+        let pendingChapters = [];
+        if (chapterDetails && Array.isArray(chapterDetails)) {
+          pendingChapters = chapterDetails.filter((ch) => ch.status === 'pending');
+        }
+
         if (pendingChapters.length > 0) {
           const nextChapter = pendingChapters[0];
           nextSteps.immediate.push({
@@ -336,7 +369,7 @@ const getBookProgressTool = {
             description: `"${nextChapter.title}" is ready for review and approval`,
             priority: 'high',
             chapterId: nextChapter.chapterId,
-            estimatedTime: '10-15 minutes'
+            estimatedTime: '10-15 minutes',
           });
         } else if (progressData.progress.currentChapter <= progressData.progress.totalChapters) {
           nextSteps.immediate.push({
@@ -345,19 +378,20 @@ const getBookProgressTool = {
             description: 'Generate the next chapter in the sequence',
             priority: 'high',
             chapterNumber: progressData.progress.currentChapter,
-            estimatedTime: '2-5 minutes'
+            estimatedTime: '2-5 minutes',
           });
         }
 
         // Upcoming chapters
-        const remainingChapters = progressData.progress.totalChapters - progressData.progress.completedChapters;
+        const remainingChapters =
+          progressData.progress.totalChapters - progressData.progress.completedChapters;
         if (remainingChapters > 1) {
           nextSteps.upcoming.push({
             action: 'continue_chapters',
             title: `Complete Remaining ${remainingChapters - 1} Chapters`,
             description: 'Continue the chapter generation and approval process',
             priority: 'medium',
-            estimatedTime: `${(remainingChapters - 1) * 15} minutes`
+            estimatedTime: `${(remainingChapters - 1) * 15} minutes`,
           });
         }
 
@@ -365,9 +399,10 @@ const getBookProgressTool = {
           action: 'prepare_export',
           title: 'Prepare for Export',
           description: 'Consider export format and final review process',
-          priority: 'low'
+          priority: 'low',
         });
         break;
+      }
 
       case 'completed':
         nextSteps.immediate.push({
@@ -375,14 +410,14 @@ const getBookProgressTool = {
           title: 'Export Completed Book',
           description: 'Download your completed book in your preferred format',
           priority: 'medium',
-          estimatedTime: '2-5 minutes'
+          estimatedTime: '2-5 minutes',
         });
 
         nextSteps.upcoming.push({
           action: 'share_or_publish',
           title: 'Share or Publish',
           description: 'Consider sharing your completed work or preparing for publication',
-          priority: 'low'
+          priority: 'low',
         });
         break;
     }
@@ -404,7 +439,7 @@ const getBookProgressTool = {
       insights.push({
         type: 'milestone',
         message: `Great progress! You're more than halfway done with your book.`,
-        positive: true
+        positive: true,
       });
     }
 
@@ -413,14 +448,14 @@ const getBookProgressTool = {
       insights.push({
         type: 'productivity',
         message: `Excellent pace! You're completing ${Math.round(analytics.productivity.chaptersPerWeek * 10) / 10} chapters per week.`,
-        positive: true
+        positive: true,
       });
     } else if (analytics?.productivity?.chaptersPerWeek < 0.5) {
       insights.push({
         type: 'productivity',
         message: 'Consider setting aside regular time for writing to maintain momentum.',
         positive: false,
-        suggestion: 'Try scheduling 30 minutes daily for book work'
+        suggestion: 'Try scheduling 30 minutes daily for book work',
       });
     }
 
@@ -429,7 +464,7 @@ const getBookProgressTool = {
       insights.push({
         type: 'quality',
         message: 'Your chapters have consistent length, which creates a good reading experience.',
-        positive: true
+        positive: true,
       });
     }
 
@@ -440,7 +475,7 @@ const getBookProgressTool = {
         insights.push({
           type: 'timeline',
           message: `You're in the final stretch! Estimated completion in ${days} days.`,
-          positive: true
+          positive: true,
         });
       }
     }
@@ -458,16 +493,18 @@ const getBookProgressTool = {
 
     const intervals = [];
     for (let i = 1; i < chapters.length; i++) {
-      const interval = new Date(chapters[i].approvedAt) - new Date(chapters[i-1].approvedAt);
+      const interval = new Date(chapters[i].approvedAt) - new Date(chapters[i - 1].approvedAt);
       intervals.push(interval);
     }
 
     const avgInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
-    const variance = intervals.reduce((sum, interval) => sum + Math.pow(interval - avgInterval, 2), 0) / intervals.length;
+    const variance =
+      intervals.reduce((sum, interval) => sum + Math.pow(interval - avgInterval, 2), 0) /
+      intervals.length;
     const stdDev = Math.sqrt(variance);
 
     // Lower standard deviation relative to mean indicates higher consistency
-    return Math.max(0, 1 - (stdDev / avgInterval));
+    return Math.max(0, 1 - stdDev / avgInterval);
   },
 
   /**
@@ -478,14 +515,15 @@ const getBookProgressTool = {
   calculateWordCountConsistency(chapters) {
     if (chapters.length < 2) return 1;
 
-    const wordCounts = chapters.map(ch => ch.wordCount || 0).filter(wc => wc > 0);
+    const wordCounts = chapters.map((ch) => ch.wordCount || 0).filter((wc) => wc > 0);
     if (wordCounts.length < 2) return 1;
 
     const avgWordCount = wordCounts.reduce((sum, wc) => sum + wc, 0) / wordCounts.length;
-    const variance = wordCounts.reduce((sum, wc) => sum + Math.pow(wc - avgWordCount, 2), 0) / wordCounts.length;
+    const variance =
+      wordCounts.reduce((sum, wc) => sum + Math.pow(wc - avgWordCount, 2), 0) / wordCounts.length;
     const stdDev = Math.sqrt(variance);
 
-    return Math.max(0, 1 - (stdDev / avgWordCount));
+    return Math.max(0, 1 - stdDev / avgWordCount);
   },
 
   /**
@@ -496,7 +534,7 @@ const getBookProgressTool = {
   calculateRevisionRate(chapters) {
     if (chapters.length === 0) return 0;
 
-    const revisedChapters = chapters.filter(ch => ch.version && ch.version > 1).length;
+    const revisedChapters = chapters.filter((ch) => ch.version && ch.version > 1).length;
     return revisedChapters / chapters.length;
   },
 
@@ -511,8 +549,10 @@ const getBookProgressTool = {
     const recentChapters = chapters.slice(-3);
     const earlierChapters = chapters.slice(0, 3);
 
-    const recentAvgWords = recentChapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) / recentChapters.length;
-    const earlierAvgWords = earlierChapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) / earlierChapters.length;
+    const recentAvgWords =
+      recentChapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) / recentChapters.length;
+    const earlierAvgWords =
+      earlierChapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) / earlierChapters.length;
 
     const difference = (recentAvgWords - earlierAvgWords) / earlierAvgWords;
 
@@ -537,19 +577,20 @@ const getBookProgressTool = {
     const phases = [
       { name: 'beginning', chapters: beginning },
       { name: 'middle', chapters: middle },
-      { name: 'end', chapters: end }
+      { name: 'end', chapters: end },
     ];
 
     // Calculate productivity based on time between chapters
     let mostProductive = phases[0];
     let bestScore = 0;
 
-    phases.forEach(phase => {
+    phases.forEach((phase) => {
       if (phase.chapters.length > 1) {
-        const totalTime = new Date(phase.chapters[phase.chapters.length - 1].approvedAt) - 
-                         new Date(phase.chapters[0].approvedAt);
+        const totalTime =
+          new Date(phase.chapters[phase.chapters.length - 1].approvedAt) -
+          new Date(phase.chapters[0].approvedAt);
         const score = phase.chapters.length / (totalTime / (1000 * 60 * 60 * 24)); // chapters per day
-        
+
         if (score > bestScore) {
           bestScore = score;
           mostProductive = phase;
@@ -569,7 +610,7 @@ const getBookProgressTool = {
     if (consistencyScore > 0.8) return 'high';
     if (consistencyScore > 0.5) return 'medium';
     return 'low';
-  }
+  },
 };
 
 module.exports = getBookProgressTool;

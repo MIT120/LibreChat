@@ -201,9 +201,12 @@ class BookModel {
           chapters: bookData.outline || [],
         },
         config: {
-          chapterCount: bookData.config?.chapterCount || 10,
-          writingStyle: bookData.config?.writingStyle || 'casual',
-          targetAudience: bookData.config?.targetAudience || '',
+          chapterCount:
+            bookData.config?.content?.chapterCount || bookData.config?.chapterCount || 10,
+          writingStyle:
+            bookData.config?.style?.writingStyle || bookData.config?.writingStyle || 'casual',
+          targetAudience:
+            bookData.config?.style?.targetAudience || bookData.config?.targetAudience || '',
           formatting: {
             font: bookData.config?.formatting?.font || 'Arial',
             fontSize: bookData.config?.formatting?.fontSize || 12,
@@ -213,7 +216,8 @@ class BookModel {
         progress: {
           currentChapter: 0,
           completedChapters: 0,
-          totalChapters: bookData.config?.chapterCount || 10,
+          totalChapters:
+            bookData.config?.content?.chapterCount || bookData.config?.chapterCount || 10,
         },
         metadata: {
           wordCount: 0,
@@ -346,6 +350,23 @@ class BookModel {
    */
   static async approveOutline(bookId, userId) {
     try {
+      console.log(
+        `[BookModel] DEBUG - Attempting to approve outline for bookId: ${bookId}, userId: ${userId}`,
+      );
+
+      // First, let's check if the book exists and what its current status is
+      const existingBook = await Book.findOne({ bookId, user: userId });
+      console.log(
+        `[BookModel] DEBUG - Found book:`,
+        existingBook
+          ? {
+            bookId: existingBook.bookId,
+            status: existingBook.status,
+            user: existingBook.user,
+          }
+          : 'NOT FOUND',
+      );
+
       const book = await Book.findOneAndUpdate(
         { bookId, user: userId, status: 'outline_pending' },
         {
@@ -355,8 +376,23 @@ class BookModel {
         { new: true, runValidators: true },
       );
 
+      console.log(
+        `[BookModel] DEBUG - Update result:`,
+        book
+          ? {
+            bookId: book.bookId,
+            status: book.status,
+            approvedAt: book.outline?.approvedAt,
+          }
+          : 'UPDATE FAILED - NO BOOK FOUND',
+      );
+
       if (book) {
         logger.info(`[BookModel] Approved outline for book: ${bookId}`);
+      } else {
+        logger.warn(
+          `[BookModel] Failed to approve outline - book not found or not in outline_pending status`,
+        );
       }
 
       return book ? book.toObject() : null;

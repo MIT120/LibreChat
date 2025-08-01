@@ -79,7 +79,9 @@ const approveChapterTool = {
       const sanitizedParams = validationResult.params;
 
       // Create service instances
-      const bookService = new BookService();
+      const bookService = new BookService({
+        models: context.serverModels || context.models,
+      });
       const chapterService = new ChapterService();
 
       // Approve the chapter and generate summary
@@ -136,10 +138,10 @@ const approveChapterTool = {
         // Generate next chapter
         try {
           nextChapterResult = await chapterService.generateChapter(
+            userId,
             sanitizedParams.bookId,
             approvalResult.nextChapterNumber,
             {
-              userId,
               previousSummaries: approvalResult.allSummaries,
               feedback: sanitizedParams.feedback,
             },

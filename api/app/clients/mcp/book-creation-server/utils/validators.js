@@ -175,7 +175,7 @@ function validateExportBookParams(params) {
   }
 
   // Validate format
-  const validFormats = ['markdown', 'html', 'pdf', 'docx', 'txt'];
+  const validFormats = ['markdown', 'html', 'txt', 'json', 'pdf'];
   if (params.format && !validFormats.includes(params.format)) {
     errors.push(`format must be one of: ${validFormats.join(', ')}`);
   }
@@ -568,6 +568,194 @@ function validateMultiple(validationMap, params) {
   });
 }
 
+/**
+ * Validate parameters for approve_page tool
+ * @param {Object} params - Parameters to validate
+ * @returns {Object} Validation result
+ */
+function validateApprovePageParams(params) {
+  const errors = [];
+  const warnings = [];
+
+  // Validate pageId (required)
+  if (!params.pageId) {
+    errors.push('pageId is required');
+  } else {
+    const pageIdResult = validateString(params.pageId, 1, 100);
+    if (!pageIdResult.isValid) {
+      errors.push(`pageId: ${pageIdResult.errors.join(', ')}`);
+    }
+  }
+
+  // Validate feedback (optional)
+  if (params.feedback !== undefined) {
+    const feedbackResult = validateString(params.feedback, 0, 1000);
+    if (!feedbackResult.isValid) {
+      errors.push(`feedback: ${feedbackResult.errors.join(', ')}`);
+    }
+  }
+
+  // Validate generateNext (optional)
+  if (params.generateNext !== undefined && typeof params.generateNext !== 'boolean') {
+    errors.push('generateNext must be a boolean');
+  }
+
+  // Validate estimatedPages (optional)
+  if (params.estimatedPages !== undefined) {
+    const pagesResult = validateNumber(params.estimatedPages, 1, 10);
+    if (!pagesResult.isValid) {
+      errors.push(`estimatedPages: ${pagesResult.errors.join(', ')}`);
+    }
+  }
+
+  return createValidationResult(errors.length === 0, errors, warnings);
+}
+
+/**
+ * Validate parameters for reject_page tool
+ * @param {Object} params - Parameters to validate
+ * @returns {Object} Validation result
+ */
+function validateRejectPageParams(params) {
+  const errors = [];
+  const warnings = [];
+
+  // Validate pageId (required)
+  if (!params.pageId) {
+    errors.push('pageId is required');
+  } else {
+    const pageIdResult = validateString(params.pageId, 1, 100);
+    if (!pageIdResult.isValid) {
+      errors.push(`pageId: ${pageIdResult.errors.join(', ')}`);
+    }
+  }
+
+  // Validate feedback (required)
+  if (!params.feedback) {
+    errors.push('feedback is required for page rejection');
+  } else {
+    const feedbackResult = validateString(params.feedback, 1, 1000);
+    if (!feedbackResult.isValid) {
+      errors.push(`feedback: ${feedbackResult.errors.join(', ')}`);
+    }
+  }
+
+  return createValidationResult(errors.length === 0, errors, warnings);
+}
+
+/**
+ * Validate parameters for regenerate_page tool
+ * @param {Object} params - Parameters to validate
+ * @returns {Object} Validation result
+ */
+function validateRegeneratePageParams(params) {
+  const errors = [];
+  const warnings = [];
+
+  // Validate pageId (required)
+  if (!params.pageId) {
+    errors.push('pageId is required');
+  } else {
+    const pageIdResult = validateString(params.pageId, 1, 100);
+    if (!pageIdResult.isValid) {
+      errors.push(`pageId: ${pageIdResult.errors.join(', ')}`);
+    }
+  }
+
+  // Validate feedback (optional)
+  if (params.feedback !== undefined) {
+    const feedbackResult = validateString(params.feedback, 0, 1000);
+    if (!feedbackResult.isValid) {
+      errors.push(`feedback: ${feedbackResult.errors.join(', ')}`);
+    }
+  }
+
+  // Validate estimatedPages (optional)
+  if (params.estimatedPages !== undefined) {
+    const pagesResult = validateNumber(params.estimatedPages, 1, 10);
+    if (!pagesResult.isValid) {
+      errors.push(`estimatedPages: ${pagesResult.errors.join(', ')}`);
+    }
+  }
+
+  return createValidationResult(errors.length === 0, errors, warnings);
+}
+
+/**
+ * Validate parameters for start_chapter_pages tool
+ * @param {Object} params - Parameters to validate
+ * @returns {Object} Validation result
+ */
+function validateStartChapterPagesParams(params) {
+  const errors = [];
+  const warnings = [];
+
+  // Validate bookId (required)
+  if (!params.bookId) {
+    errors.push('bookId is required');
+  } else {
+    const bookIdResult = validateString(params.bookId, 1, 100);
+    if (!bookIdResult.isValid) {
+      errors.push(`bookId: ${bookIdResult.errors.join(', ')}`);
+    }
+  }
+
+  // Validate chapterNumber (required)
+  if (!params.chapterNumber) {
+    errors.push('chapterNumber is required');
+  } else {
+    const chapterResult = validateNumber(params.chapterNumber, 1, 50);
+    if (!chapterResult.isValid) {
+      errors.push(`chapterNumber: ${chapterResult.errors.join(', ')}`);
+    }
+  }
+
+  // Validate estimatedPages (optional)
+  if (params.estimatedPages !== undefined) {
+    const pagesResult = validateNumber(params.estimatedPages, 1, 10);
+    if (!pagesResult.isValid) {
+      errors.push(`estimatedPages: ${pagesResult.errors.join(', ')}`);
+    }
+  }
+
+  // Validate specificRequirements (optional)
+  if (params.specificRequirements !== undefined) {
+    const reqResult = validateString(params.specificRequirements, 0, 1000);
+    if (!reqResult.isValid) {
+      errors.push(`specificRequirements: ${reqResult.errors.join(', ')}`);
+    }
+  }
+
+  return createValidationResult(errors.length === 0, errors, warnings);
+}
+
+/**
+ * Validate parameters for get_page_status tool
+ * @param {Object} params - Parameters to validate
+ * @returns {Object} Validation result
+ */
+function validateGetPageStatusParams(params) {
+  const errors = [];
+  const warnings = [];
+
+  // Validate chapterId (required)
+  if (!params.chapterId) {
+    errors.push('chapterId is required');
+  } else {
+    const chapterIdResult = validateString(params.chapterId, 1, 100);
+    if (!chapterIdResult.isValid) {
+      errors.push(`chapterId: ${chapterIdResult.errors.join(', ')}`);
+    }
+  }
+
+  // Validate includeContent (optional)
+  if (params.includeContent !== undefined && typeof params.includeContent !== 'boolean') {
+    errors.push('includeContent must be a boolean');
+  }
+
+  return createValidationResult(errors.length === 0, errors, warnings);
+}
+
 module.exports = {
   ValidationError,
   validateCreateBookParams,
@@ -581,6 +769,11 @@ module.exports = {
   validateGetBookProgressParams,
   validateDeleteBookParams,
   validateGetStatusUpdatesParams,
+  validateApprovePageParams,
+  validateRejectPageParams,
+  validateRegeneratePageParams,
+  validateStartChapterPagesParams,
+  validateGetPageStatusParams,
   validateString,
   validateNumber,
   validateEnum,

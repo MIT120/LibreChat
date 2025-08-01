@@ -1,6 +1,8 @@
 const { AIClient } = require('../utils/aiClient');
 const ConfigService = require('./ConfigService');
 const ProgressService = require('./ProgressService');
+const PageModel = require('../models/Page');
+const BookModel = require('../models/Book');
 
 // Use console for logging in MCP server context
 const logger = {
@@ -30,7 +32,7 @@ class BookService {
   constructor(options = {}) {
     this.aiClient = options.aiClient || new AIClient();
     this.configService = options.configService || new ConfigService();
-    this.exportFormats = ['markdown', 'html', 'txt', 'json'];
+    this.exportFormats = ['markdown', 'html', 'txt', 'json', 'pdf'];
 
     // Database models - will be injected by the MCP server
     this.models = options.models;
@@ -66,12 +68,13 @@ class BookService {
       const outlineData = await this.aiClient.generateBookOutline(bookData.theme, {
         genre: bookData.genre,
         chapterCount: configResult.config.content.chapterCount,
-        targetAudience: configResult.config.style.targetAudience,
-        writingStyle: configResult.config.style.writingStyle,
+        targetAudience:
+          configResult.config.style?.targetAudience || configResult.config.targetAudience,
+        writingStyle: configResult.config.style?.writingStyle || configResult.config.writingStyle,
       });
 
       // Create book project in database
-      const bookProject = await this.models.Book.create({
+      const bookProject = await BookModel.create({
         user: userId,
         title: bookData.title || outlineData.title,
         theme: bookData.theme,
@@ -139,25 +142,26 @@ class BookService {
     try {
       logger.info(`[BookService] Approving outline for book: ${bookId}`);
 
-      const book = await this.models.Book.findOne({ bookId, user: userId });
-      if (!book) {
+      // Use the Book model's approveOutline method to properly update status
+      const updatedBook = await BookModel.approveOutline(bookId, userId);
+      if (!updatedBook) {
         throw new BookServiceError('Book not found or outline already approved', 'BOOK_NOT_FOUND');
       }
 
       // Record outline approval milestone
       await ProgressService.recordOutlineApproved(bookId, userId, {
-        totalChapters: book.progress.totalChapters,
-        approvedAt: book.outline.approvedAt,
+        totalChapters: updatedBook.progress.totalChapters,
+        approvedAt: updatedBook.outline.approvedAt,
       });
 
       logger.info(`[BookService] Outline approved for book: ${bookId}`);
 
       return {
-        bookId: book.bookId,
-        status: book.status,
-        outline: book.outline,
-        progress: book.progress,
-        updatedAt: book.updatedAt,
+        bookId: updatedBook.bookId,
+        status: updatedBook.status,
+        outline: updatedBook.outline,
+        progress: updatedBook.progress,
+        updatedAt: updatedBook.updatedAt,
       };
     } catch (error) {
       logger.error('[BookService] Error approving outline:', error);
@@ -180,7 +184,7 @@ class BookService {
    */
   async getBookProgress(userId, bookId) {
     try {
-      const book = await this.models.Book.findOne({ bookId, user: userId });
+      const book = await BookModel.findByIdAndUser(bookId, userId);
       if (!book) {
         throw new BookServiceError('Book not found', 'BOOK_NOT_FOUND');
       }
@@ -240,11 +244,7 @@ class BookService {
     try {
       logger.info(`[BookService] Updating progress for book: ${bookId}`);
 
-      const updatedBook = await this.models.Book.findOneAndUpdate(
-        { bookId, user: userId },
-        { progress: progressData },
-        { new: true },
-      );
+      const updatedBook = await BookModel.updateProgress(bookId, userId, progressData);
       if (!updatedBook) {
         throw new BookServiceError('Book not found', 'BOOK_NOT_FOUND');
       }
@@ -293,13 +293,8 @@ class BookService {
     try {
       logger.info(`[BookService] Listing books for user: ${userId}`);
 
-      const books = await this.models.Book.find({ user: userId }).sort({ createdAt: -1 });
-      const totalBooks = await this.models.Book.countDocuments({ user: userId });
-      const completedBooks = await this.models.Book.countDocuments({
-        user: userId,
-        status: 'completed',
-      });
-      const statistics = { totalBooks, completedBooks };
+      const books = await BookModel.findByUser(userId);
+      const statistics = await BookModel.getStatistics(userId);
 
       const booksWithProgress = books.map((book) => {
         const progress = this.calculateProgressMetrics(book);
@@ -351,16 +346,12 @@ class BookService {
         });
       }
 
-      const book = await this.models.Book.findOne({ bookId, user: userId });
+      const book = await BookModel.findByIdAndUser(bookId, userId);
       if (!book) {
         throw new BookServiceError('Book not found', 'BOOK_NOT_FOUND');
       }
 
-      if (book.status !== 'completed') {
-        throw new BookServiceError('Book must be completed before export', 'BOOK_NOT_COMPLETED', {
-          currentStatus: book.status,
-        });
-      }
+      // Allow export at any time - no completion requirement needed
 
       // Get all chapters for the book (this would require ChapterService integration)
       // For now, we'll create a placeholder structure
@@ -411,7 +402,7 @@ class BookService {
     try {
       logger.info(`[BookService] Deleting book: ${bookId}`);
 
-      const deleted = await this.models.Book.findOneAndDelete({ bookId, user: userId });
+      const deleted = await BookModel.deleteByIdAndUser(bookId, userId);
       if (!deleted) {
         throw new BookServiceError('Book not found', 'BOOK_NOT_FOUND');
       }
@@ -488,6 +479,36 @@ class BookService {
   }
 
   /**
+   * Fetch all pages for a book organized by chapters
+   * @param {string} bookId - Book ID
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} Pages organized by chapter number
+   */
+  async fetchBookPages(bookId, userId) {
+    try {
+      const pages = await PageModel.find({
+        bookId: bookId,
+        user: userId,
+        status: { $in: ['approved', 'pending'] }, // Include approved and pending pages
+      }).sort({ chapterNumber: 1, pageNumber: 1 });
+
+      // Organize pages by chapter
+      const chapterPages = {};
+      pages.forEach((page) => {
+        if (!chapterPages[page.chapterNumber]) {
+          chapterPages[page.chapterNumber] = [];
+        }
+        chapterPages[page.chapterNumber].push(page);
+      });
+
+      return chapterPages;
+    } catch (error) {
+      logger.error('[BookService] Error fetching book pages:', error);
+      return {};
+    }
+  }
+
+  /**
    * Generate export content in the specified format
    * @param {Object} book - Book document
    * @param {string} format - Export format
@@ -501,12 +522,15 @@ class BookService {
       includePageNumbers = false,
     } = options;
 
+    // Fetch actual page content for the book
+    const chapterPages = await this.fetchBookPages(book.bookId, book.user);
+
     let content = '';
     let downloadInfo = {};
 
     switch (format) {
       case 'markdown':
-        content = this.generateMarkdownExport(book, {
+        content = await this.generateMarkdownExport(book, chapterPages, {
           includeMetadata,
           includeTableOfContents,
         });
@@ -517,7 +541,7 @@ class BookService {
         break;
 
       case 'html':
-        content = this.generateHtmlExport(book, {
+        content = await this.generateHtmlExport(book, chapterPages, {
           includeMetadata,
           includeTableOfContents,
           includePageNumbers,
@@ -529,7 +553,7 @@ class BookService {
         break;
 
       case 'txt':
-        content = this.generateTextExport(book, { includeMetadata });
+        content = await this.generateTextExport(book, chapterPages, { includeMetadata });
         downloadInfo = {
           filename: `${book.title.replace(/[^a-zA-Z0-9]/g, '_')}.txt`,
           mimeType: 'text/plain',
@@ -537,10 +561,22 @@ class BookService {
         break;
 
       case 'json':
-        content = JSON.stringify(this.generateJsonExport(book), null, 2);
+        content = JSON.stringify(await this.generateJsonExport(book, chapterPages), null, 2);
         downloadInfo = {
           filename: `${book.title.replace(/[^a-zA-Z0-9]/g, '_')}.json`,
           mimeType: 'application/json',
+        };
+        break;
+
+      case 'pdf':
+        content = await this.generatePdfExport(book, {
+          includeMetadata,
+          includeTableOfContents,
+          includePageNumbers: true, // Always include page numbers for PDF
+        });
+        downloadInfo = {
+          filename: `${book.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+          mimeType: 'application/pdf',
         };
         break;
 
@@ -554,7 +590,7 @@ class BookService {
   /**
    * Generate Markdown export format
    */
-  generateMarkdownExport(book, options) {
+  async generateMarkdownExport(book, chapterPages, options) {
     let content = `# ${book.title}\n\n`;
 
     if (options.includeMetadata) {
@@ -573,11 +609,21 @@ class BookService {
       content += '\n';
     }
 
-    // Add chapters (placeholder - would be populated with actual chapter content)
+    // Add chapters with actual page content
     book.outline.chapters.forEach((chapter, index) => {
-      content += `## Chapter ${index + 1}: ${chapter.title}\n\n`;
+      const chapterNumber = index + 1;
+      content += `## Chapter ${chapterNumber}: ${chapter.title}\n\n`;
       content += `${chapter.description}\n\n`;
-      content += `*[Chapter content would be inserted here]*\n\n`;
+
+      // Add actual page content if available
+      const pages = chapterPages[chapterNumber] || [];
+      if (pages.length > 0) {
+        pages.forEach((page) => {
+          content += `${page.content}\n\n`;
+        });
+      } else {
+        content += `*[Chapter content not yet generated]*\n\n`;
+      }
     });
 
     return content;
@@ -586,7 +632,7 @@ class BookService {
   /**
    * Generate HTML export format
    */
-  generateHtmlExport(book, options) {
+  async generateHtmlExport(book, chapterPages, options) {
     let content = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -631,13 +677,33 @@ class BookService {
     </div>`;
     }
 
-    // Add chapters
+    // Add chapters with actual page content
     book.outline.chapters.forEach((chapter, index) => {
+      const chapterNumber = index + 1;
       content += `
-    <div class="chapter" id="chapter-${index + 1}">
-        <h2>Chapter ${index + 1}: ${chapter.title}</h2>
-        <p>${chapter.description}</p>
-        <p><em>[Chapter content would be inserted here]</em></p>
+    <div class="chapter" id="chapter-${chapterNumber}">
+        <h2>Chapter ${chapterNumber}: ${chapter.title}</h2>
+        <p>${chapter.description}</p>`;
+
+      // Add actual page content if available
+      const pages = chapterPages[chapterNumber] || [];
+      if (pages.length > 0) {
+        pages.forEach((page) => {
+          // Convert line breaks to HTML paragraphs
+          const pageHtml = page.content
+            .split('\n\n')
+            .map((paragraph) =>
+              paragraph.trim() ? `<p>${paragraph.replace(/\n/g, '<br>')}</p>` : '',
+            )
+            .filter((p) => p)
+            .join('\n        ');
+          content += `\n        ${pageHtml}`;
+        });
+      } else {
+        content += `\n        <p><em>[Chapter content not yet generated]</em></p>`;
+      }
+
+      content += `
     </div>`;
     });
 
@@ -651,7 +717,7 @@ class BookService {
   /**
    * Generate plain text export format
    */
-  generateTextExport(book, options) {
+  async generateTextExport(book, chapterPages, options) {
     let content = `${book.title}\n${'='.repeat(book.title.length)}\n\n`;
 
     if (options.includeMetadata) {
@@ -662,12 +728,22 @@ class BookService {
       content += `Created: ${new Date(book.createdAt).toLocaleDateString()}\n\n`;
     }
 
-    // Add chapters
+    // Add chapters with actual page content
     book.outline.chapters.forEach((chapter, index) => {
-      content += `Chapter ${index + 1}: ${chapter.title}\n`;
+      const chapterNumber = index + 1;
+      content += `Chapter ${chapterNumber}: ${chapter.title}\n`;
       content += `${'-'.repeat(chapter.title.length + 12)}\n\n`;
       content += `${chapter.description}\n\n`;
-      content += `[Chapter content would be inserted here]\n\n`;
+
+      // Add actual page content if available
+      const pages = chapterPages[chapterNumber] || [];
+      if (pages.length > 0) {
+        pages.forEach((page) => {
+          content += `${page.content}\n\n`;
+        });
+      } else {
+        content += `[Chapter content not yet generated]\n\n`;
+      }
     });
 
     return content;
@@ -676,7 +752,7 @@ class BookService {
   /**
    * Generate JSON export format
    */
-  generateJsonExport(book) {
+  async generateJsonExport(book, chapterPages) {
     return {
       bookId: book.bookId,
       title: book.title,
@@ -690,15 +766,178 @@ class BookService {
         ...book.metadata,
         exportedAt: new Date().toISOString(),
       },
-      chapters: book.outline.chapters.map((chapter, index) => ({
-        number: index + 1,
-        title: chapter.title,
-        description: chapter.description,
-        content: '[Chapter content would be inserted here]',
-      })),
+      chapters: book.outline.chapters.map((chapter, index) => {
+        const chapterNumber = index + 1;
+        const pages = chapterPages[chapterNumber] || [];
+        const chapterContent =
+          pages.length > 0
+            ? pages.map((page) => page.content).join('\n\n')
+            : '[Chapter content not yet generated]';
+
+        return {
+          number: chapterNumber,
+          title: chapter.title,
+          description: chapter.description,
+          content: chapterContent,
+          pages: pages.map((page) => ({
+            pageNumber: page.pageNumber,
+            content: page.content,
+            status: page.status,
+            wordCount: page.content.split(/\s+/).filter((word) => word.length > 0).length,
+          })),
+        };
+      }),
       createdAt: book.createdAt,
       updatedAt: book.updatedAt,
     };
+  }
+
+  /**
+   * Generate PDF export format
+   */
+  async generatePdfExport(book, chapterPages, options) {
+    try {
+      // First generate HTML content
+      const htmlContent = await this.generateHtmlExport(book, chapterPages, {
+        ...options,
+        includePageNumbers: true,
+      });
+
+      // Enhanced CSS for better PDF formatting
+      const enhancedHtml = htmlContent.replace(
+        /<style>[\s\S]*?<\/style>/,
+        `<style>
+        @page {
+          margin: 1in;
+          @bottom-center {
+            content: "Page " counter(page) " of " counter(pages);
+            font-size: 10pt;
+            font-family: Arial, sans-serif;
+          }
+        }
+        body {
+          font-family: "Times New Roman", serif;
+          font-size: 12pt;
+          line-height: 1.6;
+          max-width: none;
+          margin: 0;
+          padding: 0;
+          color: #000;
+        }
+        h1 {
+          color: #000;
+          border-bottom: 2px solid #000;
+          page-break-before: always;
+          margin-top: 0;
+          font-size: 24pt;
+          text-align: center;
+        }
+        h2 {
+          color: #333;
+          margin-top: 30px;
+          page-break-before: always;
+          font-size: 18pt;
+          border-bottom: 1px solid #ccc;
+          padding-bottom: 5px;
+        }
+        .metadata {
+          background: #f8f8f8;
+          padding: 15px;
+          border: 1px solid #ddd;
+          margin-bottom: 30px;
+          page-break-inside: avoid;
+        }
+        .toc {
+          background: #f9f9f9;
+          padding: 15px;
+          border: 1px solid #ddd;
+          page-break-after: always;
+          page-break-inside: avoid;
+        }
+        .toc h2 {
+          page-break-before: avoid;
+          margin-top: 0;
+        }
+        .toc ul {
+          list-style-type: none;
+          padding-left: 0;
+        }
+        .toc li {
+          margin: 5px 0;
+          padding: 3px 0;
+          border-bottom: 1px dotted #ccc;
+        }
+        .chapter {
+          margin-top: 40px;
+          page-break-before: always;
+          page-break-inside: avoid;
+        }
+        .chapter:first-of-type {
+          page-break-before: avoid;
+        }
+        p {
+          text-align: justify;
+          margin-bottom: 12pt;
+          orphans: 2;
+          widows: 2;
+        }
+        @media print {
+          body { -webkit-print-color-adjust: exact; }
+        }
+        </style>`,
+      );
+
+      // Use puppeteer to generate PDF (when available)
+      try {
+        const puppeteer = require('puppeteer');
+        const browser = await puppeteer.launch({
+          headless: 'new',
+          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
+        const page = await browser.newPage();
+
+        await page.setContent(enhancedHtml, { waitUntil: 'networkidle0' });
+
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          margin: {
+            top: '1in',
+            right: '1in',
+            bottom: '1in',
+            left: '1in',
+          },
+          printBackground: true,
+          displayHeaderFooter: true,
+          headerTemplate: '<div></div>',
+          footerTemplate: `
+            <div style="font-size: 10px; text-align: center; width: 100%; margin: 0 auto;">
+              <span class="pageNumber"></span> / <span class="totalPages"></span>
+            </div>
+          `,
+        });
+
+        await browser.close();
+
+        // Convert buffer to base64 for transport
+        return pdfBuffer.toString('base64');
+      } catch (puppeteerError) {
+        logger.warn(
+          '[BookService] Puppeteer not available, returning HTML content:',
+          puppeteerError.message,
+        );
+        // Fallback to HTML if puppeteer is not available
+        return enhancedHtml;
+      }
+    } catch (error) {
+      logger.error('[BookService] Error generating PDF export:', error);
+      throw new BookServiceError(
+        `Failed to generate PDF export: ${error.message}`,
+        'PDF_GENERATION_FAILED',
+        {
+          originalError: error.message,
+        },
+      );
+    }
   }
 }
 

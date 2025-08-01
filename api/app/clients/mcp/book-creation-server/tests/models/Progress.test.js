@@ -76,7 +76,10 @@ describe('ProgressModel', () => {
     });
 
     it('should return null if progress not found', async () => {
-      const progress = await ProgressModel.findByBookAndUser('nonexistent-book', 'nonexistent-user');
+      const progress = await ProgressModel.findByBookAndUser(
+        'nonexistent-book',
+        'nonexistent-user',
+      );
       expect(progress).toBeNull();
     });
   });
@@ -270,7 +273,10 @@ describe('ProgressModel', () => {
     });
 
     it('should return false if progress not found', async () => {
-      const deleted = await ProgressModel.deleteByBookAndUser('nonexistent-book', 'nonexistent-user');
+      const deleted = await ProgressModel.deleteByBookAndUser(
+        'nonexistent-book',
+        'nonexistent-user',
+      );
       expect(deleted).toBe(false);
     });
   });
@@ -314,7 +320,10 @@ describe('ProgressModel', () => {
     });
 
     it('should return null if progress not found', async () => {
-      const analytics = await ProgressModel.getDetailedAnalytics('nonexistent-book', 'nonexistent-user');
+      const analytics = await ProgressModel.getDetailedAnalytics(
+        'nonexistent-book',
+        'nonexistent-user',
+      );
       expect(analytics).toBeNull();
     });
   });
