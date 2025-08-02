@@ -4,6 +4,11 @@ import { IBook, IChapter, IPage } from '~/types';
 // Page schema
 const PageSchema = new Schema<IPage>(
   {
+    pageId: {
+      type: String,
+      required: true,
+      unique: true,
+    },
     chapterId: {
       type: String,
       required: true,

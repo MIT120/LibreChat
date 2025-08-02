@@ -134,6 +134,7 @@ export type CreateBookRequest = z.infer<typeof CreateBookRequestSchema>;
 // MongoDB interfaces for Mongoose
 export interface IPage {
   _id?: string;
+  pageId: string;
   chapterId: string;
   pageNumber: number;
   title: string;

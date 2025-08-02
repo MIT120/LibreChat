@@ -1,93 +1,103 @@
-# 📚 Book Creation MCP Server - Restart Guide
+# 🔄 Book Creation MCP Server Restart Guide
 
-## ✅ Issues Fixed:
-1. **Database Connection**: Fixed lazy loading to prevent startup errors
-2. **YAML Configuration**: Corrected formatting and property order
-3. **Server Path**: Verified executable permissions and correct path
-4. **Icon**: Added custom book icon at correct location
+## ⚡ Quick Fix for Timeout Issues
 
-## 🚀 Steps to Make MCP Server Visible:
+The timeout error you're experiencing requires **restarting the MCP server** to pick up the new database connection improvements.
 
-### 1. Restart LibreChat Server
+## 🚀 How to Restart the MCP Server
+
+### Method 1: Full LibreChat Restart (Recommended)
 ```bash
-# If running with npm/docker, stop the current server:
-# Press Ctrl+C to stop
+# Stop LibreChat completely
+docker-compose down
 
-# Then restart:
-npm start
-# OR for Docker:
-docker-compose restart
+# Start it back up
+docker-compose up -d
 ```
 
-### 2. Verify in Browser
-1. Open LibreChat in your browser
-2. Start a new conversation
-3. Look for "MCP Servers" section/dropdown
-4. You should see **"book-creation"** with a book icon 📚
-
-### 3. Test the Server
-Try saying something like:
-> *"Create a book about sustainable technology with an academic tone"*
-
-The AI should be able to use the book creation tools.
-
-## 🔍 Debugging Steps (if still not visible):
-
-### Check Server Logs
+### Method 2: Restart Just the API Service
 ```bash
-# Look for MCP initialization in logs
-grep -i "book-creation\|mcp" librechat.log
-
-# Or check the terminal output when starting LibreChat
-npm start | grep -i mcp
+# Restart just the API container (which runs the MCP server)
+docker-compose restart api
 ```
 
-### Test Server Manually
+### Method 3: Check Server Logs (For Debugging)
 ```bash
-cd api/app/clients/mcp/book-creation-server
-node test-server.js
-# Should show: ✅ Server started successfully
+# View the logs to see if the server restarted properly
+docker-compose logs -f api
 ```
 
-### Verify Configuration
-```bash
-# Check YAML syntax
-npx js-yaml librechat.yaml > /dev/null && echo "✅ YAML is valid" || echo "❌ YAML has errors"
+## ✅ What the Fix Does
+
+The improvements I made will:
+
+1. **Fix Database Timeouts**: 
+   - Disabled mongoose buffering (`bufferCommands: false`)
+   - Added proper connection timeouts (15s-45s ranges)
+   - Optimized queries with `maxTimeMS()` timeouts
+
+2. **Optimize Performance**:
+   - Bulk queries instead of sequential ones
+   - Using `lean()` for faster object returns
+   - Better connection pooling
+
+3. **Better Error Handling**:
+   - Specific timeout messages
+   - Helpful troubleshooting tips
+   - Graceful degradation
+
+## 🔍 Verify the Fix
+
+After restarting, try exporting your book again. You should see:
+
+✅ **Success Indicators:**
+- Much faster response times
+- Detailed progress logs in console
+- Proper download links in chat
+- No more "buffering timed out" errors
+
+❌ **If Still Having Issues:**
+- Check Docker logs: `docker-compose logs api`
+- Verify MongoDB is running: `docker-compose ps`
+- Try a smaller book first to test
+
+## 📊 What Changed
+
+### Before:
+- Default mongoose buffering (10s timeout)
+- Sequential database queries
+- Basic error messages
+- Connection issues with large books
+
+### After:
+- Disabled buffering + custom timeouts (15-45s)
+- Optimized bulk queries
+- Detailed error messages with troubleshooting
+- Robust connection handling
+
+## 🆘 Troubleshooting
+
+### If restart doesn't work:
+1. **Check MongoDB**: `docker-compose ps mongodb`
+2. **Clear Docker cache**: `docker-compose down -v && docker-compose up -d`
+3. **Check disk space**: `df -h`
+4. **View full logs**: `docker-compose logs --tail=50 api`
+
+### Expected log output after restart:
+```
+🚀 Starting export for book [bookId] (format: pdf)
+MongoDB connection established successfully
+Book content loaded: X chapters, Y pages
+📄 Created PDF file: book-title.pdf (123 KB)
+✅ Export completed in 2.3s for book [bookId]
 ```
 
-### Check File Permissions
-```bash
-ls -la api/app/clients/mcp/book-creation-server/index.js
-# Should show: -rwxr-xr-x (executable)
+---
 
-ls -la client/public/assets/book-icon.svg
-# Should exist and be readable
-```
+## 💡 Pro Tips
 
-## 📋 Current Configuration:
-```yaml
-mcpServers:
-  book-creation:
-    type: stdio
-    command: node
-    args:
-      - api/app/clients/mcp/book-creation-server/index.js
-    timeout: 60000
-    disabled: false
-    chatMenu: true
-    iconPath: client/public/assets/book-icon.svg
-    env:
-      NODE_ENV: production
-      MONGODB_URI: ${MONGODB_URI}
-```
+- **Large Books**: May take 30-60 seconds (now with proper timeouts)
+- **Download Links**: Should work immediately in LibreChat chat
+- **Monitoring**: Check logs if you want to see detailed progress
 
-## 🎯 Expected Result:
-After restart, you should see the "book-creation" server available in the MCP dropdown, allowing you to create professional books with any theme using Anthropic models!
-
-## 🆘 Still Not Working?
-1. Check LibreChat version supports MCP servers
-2. Verify you have the required environment variables set
-3. Check browser console for any JavaScript errors
-4. Try a hard refresh (Ctrl+F5 or Cmd+Shift+R)
-
-The server is now properly configured and should appear in the LibreChat UI after restart! 🎉
+**Ready to test?** Just restart LibreChat and try the export again! 🎉

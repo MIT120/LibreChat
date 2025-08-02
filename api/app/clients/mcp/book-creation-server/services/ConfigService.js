@@ -1,5 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export class ConfigService {
   constructor() {
@@ -16,7 +20,9 @@ export class ConfigService {
         },
       },
       export: {
-        outputDirectory: process.env.EXPORT_DIR || './exports',
+        outputDirectory:
+          process.env.EXPORT_DIR ||
+          path.resolve(__dirname, '..', '..', '..', '..', '..', 'uploads'),
         maxFileSize: 50 * 1024 * 1024, // 50MB
         allowedFormats: ['pdf', 'epub', 'docx', 'html', 'txt'],
         compression: true,
@@ -150,9 +156,19 @@ export class ConfigService {
     return exportDir;
   }
 
-  getExportPath(bookId, format) {
+  getExportPath(bookId, format, userId) {
     const exportDir = this.ensureExportDirectory();
+    // Create user-specific directory
+    const userDir = path.join(exportDir, userId);
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir, { recursive: true });
+    }
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    return path.join(exportDir, `book-${bookId}-${timestamp}.${format}`);
+    const filename = `book-${bookId}-${timestamp}.${format}`;
+    return {
+      fullPath: path.join(userDir, filename),
+      relativePath: path.posix.join('/', 'uploads', userId, filename),
+      filename: filename,
+    };
   }
 }

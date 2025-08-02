@@ -10,7 +10,7 @@ export class BookService {
   }
 
   async initializeDatabase() {
-    if (this.initialized || mongoose.connection.readyState) {
+    if (this.initialized || mongoose.connection.readyState === 1) {
       return;
     }
 
@@ -19,27 +19,67 @@ export class BookService {
       const mongoUri =
         process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://mongodb:27017/LibreChat'; // Docker default
 
+      // Enhanced connection options to prevent timeouts
+      const connectionOptions = {
+        bufferCommands: false, // Disable mongoose buffering
+        serverSelectionTimeoutMS: 15000, // How long to wait for server selection
+        connectTimeoutMS: 20000, // How long to wait for initial connection
+        socketTimeoutMS: 45000, // How long to wait for socket operations
+        maxPoolSize: 10, // Maintain up to 10 socket connections
+        minPoolSize: 1, // Maintain at least 1 socket connection
+        maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
+        waitQueueTimeoutMS: 10000, // How long to wait for a connection from pool
+      };
+
       // Validate the connection string
       if (
         !mongoUri ||
         (!mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://'))
       ) {
         console.warn('Invalid or missing MongoDB URI, using Docker default');
-        await mongoose.connect('mongodb://mongodb:27017/LibreChat');
+        await mongoose.connect('mongodb://mongodb:27017/LibreChat', connectionOptions);
       } else {
-        await mongoose.connect(mongoUri);
+        await mongoose.connect(mongoUri, connectionOptions);
       }
 
+      // Wait for connection to be ready
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Database connection timeout after 20 seconds'));
+        }, 20000);
+
+        if (mongoose.connection.readyState === 1) {
+          clearTimeout(timeout);
+          resolve();
+        } else {
+          mongoose.connection.once('connected', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+          mongoose.connection.once('error', (error) => {
+            clearTimeout(timeout);
+            reject(error);
+          });
+        }
+      });
+
       this.initialized = true;
+      console.log('MongoDB connection established successfully');
     } catch (error) {
       console.error('MongoDB connection failed:', error.message);
+      this.initialized = false;
       throw new Error(`Database connection failed: ${error.message}`);
     }
   }
 
   async ensureConnection() {
-    if (!this.initialized) {
+    if (!this.initialized || mongoose.connection.readyState !== 1) {
       await this.initializeDatabase();
+    }
+
+    // Double-check connection is ready
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error('Database connection not ready');
     }
   }
 
@@ -91,6 +131,12 @@ export class BookService {
       const savedBook = await book.save();
       return savedBook;
     } catch (error) {
+      // If it's a duplicate key error for bookId, provide helpful information
+      if (error.message.includes('E11000') && error.message.includes('bookId')) {
+        throw new Error(
+          'Failed to create book: Database contains orphaned bookId index. Please run the database cleanup script to fix this issue.',
+        );
+      }
       throw new Error(`Failed to create book: ${error.message}`);
     }
   }
@@ -99,27 +145,59 @@ export class BookService {
     try {
       await this.ensureConnection();
 
-      const book = await Book.findById(bookId);
+      // Use lean() for better performance and add timeout
+      const book = await Book.findById(bookId)
+        .lean()
+        .maxTimeMS(15000) // 15 second timeout for this specific query
+        .exec();
+
       if (!book) {
         throw new Error(`Book with ID ${bookId} not found`);
       }
 
-      const result = book.toObject();
+      const result = { ...book };
 
       if (options.includeChapters) {
-        const chapters = await Chapter.find({ bookId }).sort({ chapterNumber: 1 });
+        // Optimize chapter query with timeout
+        const chapters = await Chapter.find({ bookId })
+          .sort({ chapterNumber: 1 })
+          .lean()
+          .maxTimeMS(10000) // 10 second timeout
+          .exec();
         result.chapters = chapters;
 
         if (options.includePages) {
-          for (const chapter of result.chapters) {
-            const pages = await Page.find({ chapterId: chapter._id }).sort({ pageNumber: 1 });
-            chapter.pages = pages;
-          }
+          // Optimize pages query - get all pages for all chapters in one query
+          const chapterIds = chapters.map((chapter) => chapter._id);
+          const allPages = await Page.find({ chapterId: { $in: chapterIds } })
+            .sort({ chapterId: 1, pageNumber: 1 })
+            .lean()
+            .maxTimeMS(15000) // 15 second timeout
+            .exec();
+
+          // Group pages by chapter
+          const pagesByChapter = {};
+          allPages.forEach((page) => {
+            const chapterId = page.chapterId.toString();
+            if (!pagesByChapter[chapterId]) {
+              pagesByChapter[chapterId] = [];
+            }
+            pagesByChapter[chapterId].push(page);
+          });
+
+          // Assign pages to their respective chapters
+          result.chapters.forEach((chapter) => {
+            const chapterId = chapter._id.toString();
+            chapter.pages = pagesByChapter[chapterId] || [];
+          });
         }
       }
 
       return result;
     } catch (error) {
+      if (error.name === 'MongooseError' && error.message.includes('buffering timed out')) {
+        throw new Error('Database connection timeout. Please try again in a moment.');
+      }
       throw new Error(`Failed to get book: ${error.message}`);
     }
   }
@@ -327,9 +405,11 @@ export class BookService {
 
       // Auto-generate chapter number if not provided
       if (!chapterData.chapterNumber) {
-        const lastChapter = await Chapter.findOne({ bookId: chapterData.bookId }).sort({
-          chapterNumber: -1,
-        });
+        const lastChapter = await Chapter.findOne({ bookId: chapterData.bookId })
+          .sort({ chapterNumber: -1 })
+          .lean()
+          .maxTimeMS(10000) // 10 second timeout
+          .exec();
         chapterData.chapterNumber = lastChapter ? lastChapter.chapterNumber + 1 : 1;
       }
 
@@ -468,18 +548,29 @@ export class BookService {
 
       // Auto-generate page number if not provided
       if (!pageData.pageNumber) {
-        const lastPage = await Page.findOne({ chapterId: pageData.chapterId }).sort({
-          pageNumber: -1,
-        });
+        const lastPage = await Page.findOne({ chapterId: pageData.chapterId })
+          .sort({ pageNumber: -1 })
+          .lean()
+          .maxTimeMS(10000) // 10 second timeout
+          .exec();
         pageData.pageNumber = lastPage ? lastPage.pageNumber + 1 : 1;
       }
 
       // Calculate word count
       const wordCount = pageData.content.split(/\s+/).filter((word) => word.length > 0).length;
 
-      // Create the page document
-      const page = new Page({
-        _id: uuidv4(),
+      // Generate unique pageId - ensure it's never null or undefined
+      const pageId = uuidv4();
+
+      // Validate pageId generation
+      if (!pageId || pageId === null || pageId === undefined) {
+        throw new Error('Failed to generate valid pageId');
+      }
+
+      // Create the page document with explicit pageId validation
+      const pageDocument = {
+        _id: pageId,
+        pageId: pageId,
         chapterId: pageData.chapterId,
         pageNumber: pageData.pageNumber,
         title: pageData.title,
@@ -487,8 +578,14 @@ export class BookService {
         wordCount: wordCount,
         notes: pageData.notes,
         status: pageData.status || 'draft',
-      });
+      };
 
+      // Double-check that pageId is set before creating the document
+      if (!pageDocument.pageId) {
+        throw new Error('pageId cannot be null or undefined');
+      }
+
+      const page = new Page(pageDocument);
       const savedPage = await page.save();
 
       // Update chapter word count
@@ -496,6 +593,12 @@ export class BookService {
 
       return savedPage;
     } catch (error) {
+      // If it's a duplicate key error, provide more helpful information
+      if (error.message.includes('E11000') && error.message.includes('pageId')) {
+        throw new Error(
+          'Failed to create page: A page with this ID already exists. This may indicate database corruption. Please run the database cleanup script.',
+        );
+      }
       throw new Error(`Failed to create page: ${error.message}`);
     }
   }

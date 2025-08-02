@@ -7,6 +7,11 @@ const PageSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    pageId: {
+      type: String,
+      required: true,
+      unique: true,
+    },
     chapterId: {
       type: String,
       required: true,
