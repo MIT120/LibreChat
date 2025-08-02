@@ -71,6 +71,8 @@ const startServer = async () => {
   app.use(staticCache(app.locals.paths.dist));
   app.use(staticCache(app.locals.paths.fonts));
   app.use(staticCache(app.locals.paths.assets));
+  app.use('/exports', staticCache(app.locals.paths.exports));
+  app.use('/c/exports', staticCache(app.locals.paths.exports));
 
   if (!ALLOW_SOCIAL_LOGIN) {
     console.warn('Social logins are disabled. Set ALLOW_SOCIAL_LOGIN=true to enable them.');
