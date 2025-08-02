@@ -28,7 +28,7 @@ const updateMatchByHltvId = async (hltvId, updateData) => {
   return await CS2Match.findOneAndUpdate(
     { hltvId },
     { ...updateData, 'metadata.lastUpdated': new Date() },
-    { new: true, upsert: false }
+    { new: true, upsert: false },
   ).lean();
 };
 
@@ -40,21 +40,21 @@ const updateMatchByHltvId = async (hltvId, updateData) => {
  */
 const findMatchesByTeam = async (teamId, options = {}) => {
   const { limit = 50, status, dateFrom, dateTo } = options;
-  
+
   const query = {
     'teams.team': teamId,
   };
-  
+
   if (status) {
     query.status = status;
   }
-  
+
   if (dateFrom || dateTo) {
     query.date = {};
     if (dateFrom) query.date.$gte = new Date(dateFrom);
     if (dateTo) query.date.$lte = new Date(dateTo);
   }
-  
+
   return await CS2Match.find(query)
     .populate('teams.team', 'name logo country')
     .sort({ date: -1 })
@@ -81,11 +81,11 @@ const findLiveMatches = async () => {
 const findUpcomingMatches = async (options = {}) => {
   const { limit = 20, hours = 24 } = options;
   const now = new Date();
-  const futureDate = new Date(now.getTime() + (hours * 60 * 60 * 1000));
-  
+  const futureDate = new Date(now.getTime() + hours * 60 * 60 * 1000);
+
   return await CS2Match.find({
     status: 'upcoming',
-    date: { $gte: now, $lte: futureDate }
+    date: { $gte: now, $lte: futureDate },
   })
     .populate('teams.team', 'name logo country ranking.current')
     .sort({ date: 1 })
@@ -100,16 +100,16 @@ const findUpcomingMatches = async (options = {}) => {
  */
 const findRecentFinishedMatches = async (options = {}) => {
   const { limit = 100, days = 7 } = options;
-  const dateFrom = new Date(Date.now() - (days * 24 * 60 * 60 * 1000));
-  
+  const dateFrom = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
   return await CS2Match.find({
     status: 'finished',
     date: { $gte: dateFrom },
     $or: [
       { 'predictions.halfTime.predicted': true },
       { 'predictions.mapWinner.predicted': true },
-      { 'predictions.seriesOutcome.predicted': true }
-    ]
+      { 'predictions.seriesOutcome.predicted': true },
+    ],
   })
     .populate('teams.team', 'name')
     .sort({ date: -1 })
@@ -125,26 +125,22 @@ const findRecentFinishedMatches = async (options = {}) => {
  */
 const updateMatchPredictions = async (hltvId, predictions) => {
   const updateData = {};
-  
+
   if (predictions.halfTime) {
     updateData['predictions.halfTime'] = predictions.halfTime;
   }
-  
+
   if (predictions.mapWinner) {
     updateData['predictions.mapWinner'] = predictions.mapWinner;
   }
-  
+
   if (predictions.seriesOutcome) {
     updateData['predictions.seriesOutcome'] = predictions.seriesOutcome;
   }
-  
+
   updateData['metadata.lastUpdated'] = new Date();
-  
-  return await CS2Match.findOneAndUpdate(
-    { hltvId },
-    { $set: updateData },
-    { new: true }
-  ).lean();
+
+  return await CS2Match.findOneAndUpdate({ hltvId }, { $set: updateData }, { new: true }).lean();
 };
 
 /**
@@ -156,13 +152,13 @@ const updateMatchPredictions = async (hltvId, predictions) => {
 const updateMatchEmbeddings = async (hltvId, embeddings) => {
   return await CS2Match.findOneAndUpdate(
     { hltvId },
-    { 
-      $set: { 
+    {
+      $set: {
         embeddings,
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -172,11 +168,11 @@ const updateMatchEmbeddings = async (hltvId, embeddings) => {
  * @returns {Promise<Object>} Delete result
  */
 const deleteOldMatches = async (daysOld = 365) => {
-  const cutoffDate = new Date(Date.now() - (daysOld * 24 * 60 * 60 * 1000));
-  
+  const cutoffDate = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000);
+
   return await CS2Match.deleteMany({
     date: { $lt: cutoffDate },
-    status: 'finished'
+    status: 'finished',
   });
 };
 

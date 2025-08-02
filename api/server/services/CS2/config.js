@@ -6,7 +6,8 @@ const config = {
   // Scraper settings
   scraper: {
     enabled: process.env.HLTV_SCRAPER_ENABLED === 'true' || true,
-    userAgent: process.env.HLTV_SCRAPER_USER_AGENT || 
+    userAgent:
+      process.env.HLTV_SCRAPER_USER_AGENT ||
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     requestDelay: parseInt(process.env.HLTV_SCRAPER_REQUEST_DELAY) || 2000,
     maxRetries: parseInt(process.env.HLTV_SCRAPER_MAX_RETRIES) || 3,

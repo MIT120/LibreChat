@@ -1,29 +1,32 @@
-import { createUserModel } from './user';
-import { createTokenModel } from './token';
-import { createSessionModel } from './session';
-import { createBalanceModel } from './balance';
-import { createConversationModel } from './convo';
-import { createMessageModel } from './message';
-import { createAgentModel } from './agent';
-import { createRoleModel } from './role';
 import { createActionModel } from './action';
+import { createAgentModel } from './agent';
 import { createAssistantModel } from './assistant';
-import { createFileModel } from './file';
+import { createBalanceModel } from './balance';
 import { createBannerModel } from './banner';
-import { createProjectModel } from './project';
+import { createBookModel } from './book';
+import { createChapterModel } from './chapter';
+import { createConversationTagModel } from './conversationTag';
+import { createConversationModel } from './convo';
+import { createCS2MatchModel } from './cs2Match';
+import { createCS2PlayerModel } from './cs2Player';
+import { createCS2TeamModel } from './cs2Team';
+import { createFileModel } from './file';
 import { createKeyModel } from './key';
+import { createMemoryModel } from './memory';
+import { createMessageModel } from './message';
+import { createPageModel } from './page';
 import { createPluginAuthModel } from './pluginAuth';
-import { createTransactionModel } from './transaction';
 import { createPresetModel } from './preset';
+import { createProjectModel } from './project';
 import { createPromptModel } from './prompt';
 import { createPromptGroupModel } from './promptGroup';
-import { createConversationTagModel } from './conversationTag';
+import { createRoleModel } from './role';
+import { createSessionModel } from './session';
 import { createSharedLinkModel } from './sharedLink';
+import { createTokenModel } from './token';
 import { createToolCallModel } from './toolCall';
-import { createMemoryModel } from './memory';
-import { createCS2MatchModel } from './cs2Match';
-import { createCS2TeamModel } from './cs2Team';
-import { createCS2PlayerModel } from './cs2Player';
+import { createTransactionModel } from './transaction';
+import { createUserModel } from './user';
 
 /**
  * Creates all database models for all collections
@@ -56,5 +59,8 @@ export function createModels(mongoose: typeof import('mongoose')) {
     CS2Match: createCS2MatchModel(mongoose),
     CS2Team: createCS2TeamModel(mongoose),
     CS2Player: createCS2PlayerModel(mongoose),
+    Book: createBookModel(mongoose),
+    Chapter: createChapterModel(mongoose),
+    Page: createPageModel(mongoose),
   };
 }

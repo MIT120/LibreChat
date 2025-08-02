@@ -23,7 +23,7 @@ beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
-  
+
   const models = createModels(mongoose);
   CS2Match = models.CS2Match;
   CS2Team = models.CS2Team;
@@ -41,7 +41,7 @@ beforeEach(async () => {
 
 describe('CS2Match Model Methods', () => {
   let testTeam1, testTeam2;
-  
+
   beforeEach(async () => {
     // Create test teams
     testTeam1 = await CS2Team.create({
@@ -69,7 +69,7 @@ describe('CS2Match Model Methods', () => {
         isActive: true,
       },
     });
-    
+
     testTeam2 = await CS2Team.create({
       hltvId: 'team2',
       name: 'Team Beta',
@@ -128,7 +128,7 @@ describe('CS2Match Model Methods', () => {
       };
 
       const match = await createMatch(matchData);
-      
+
       expect(match).toBeDefined();
       expect(match.hltvId).toBe('match123');
       expect(match.tournament.name).toBe('Test Tournament');
@@ -161,7 +161,7 @@ describe('CS2Match Model Methods', () => {
       };
 
       await createMatch(matchData);
-      
+
       await expect(createMatch(matchData)).rejects.toThrow();
     });
   });
@@ -193,7 +193,7 @@ describe('CS2Match Model Methods', () => {
 
       await createMatch(matchData);
       const found = await findMatchByHltvId('find123');
-      
+
       expect(found).toBeDefined();
       expect(found.hltvId).toBe('find123');
       expect(found.status).toBe('live');
@@ -231,12 +231,12 @@ describe('CS2Match Model Methods', () => {
       };
 
       await createMatch(matchData);
-      
+
       const updated = await updateMatchByHltvId('update123', {
         status: 'live',
         'teams.0.score': 1,
       });
-      
+
       expect(updated).toBeDefined();
       expect(updated.status).toBe('live');
       expect(updated.metadata.lastUpdated).toBeDefined();
@@ -269,9 +269,9 @@ describe('CS2Match Model Methods', () => {
       };
 
       await createMatch(matchData);
-      
+
       const matches = await findMatchesByTeam(testTeam1._id.toString());
-      
+
       expect(matches).toHaveLength(1);
       expect(matches[0].hltvId).toBe('team_match123');
     });
@@ -325,9 +325,9 @@ describe('CS2Match Model Methods', () => {
 
       await createMatch(liveMatch);
       await createMatch(finishedMatch);
-      
+
       const liveMatches = await findMatchesByTeam(testTeam1._id.toString(), { status: 'live' });
-      
+
       expect(liveMatches).toHaveLength(1);
       expect(liveMatches[0].status).toBe('live');
     });
@@ -383,9 +383,9 @@ describe('CS2Match Model Methods', () => {
 
       await createMatch(liveMatch);
       await createMatch(upcomingMatch);
-      
+
       const liveMatches = await findLiveMatches();
-      
+
       expect(liveMatches).toHaveLength(1);
       expect(liveMatches[0].status).toBe('live');
     });
@@ -417,7 +417,7 @@ describe('CS2Match Model Methods', () => {
       };
 
       await createMatch(matchData);
-      
+
       const predictions = {
         halfTime: {
           predicted: true,
@@ -429,9 +429,9 @@ describe('CS2Match Model Methods', () => {
           ],
         },
       };
-      
+
       const updated = await updateMatchPredictions('predict123', predictions);
-      
+
       expect(updated).toBeDefined();
       expect(updated.predictions.halfTime.predicted).toBe(true);
       expect(updated.predictions.halfTime.confidence).toBe(0.75);

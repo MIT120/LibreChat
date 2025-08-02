@@ -27,8 +27,8 @@ const findPlayerByHltvId = async (hltvId) => {
  * @returns {Promise<Object|null>} The player document or null if not found
  */
 const findPlayerByNickname = async (nickname) => {
-  return await CS2Player.findOne({ 
-    nickname: { $regex: new RegExp(nickname, 'i') }
+  return await CS2Player.findOne({
+    nickname: { $regex: new RegExp(nickname, 'i') },
   })
     .populate('currentTeam.team', 'name logo country ranking.current')
     .lean();
@@ -44,7 +44,7 @@ const updatePlayerByHltvId = async (hltvId, updateData) => {
   return await CS2Player.findOneAndUpdate(
     { hltvId },
     { ...updateData, 'metadata.lastUpdated': new Date() },
-    { new: true, upsert: false }
+    { new: true, upsert: false },
   ).lean();
 };
 
@@ -55,15 +55,15 @@ const updatePlayerByHltvId = async (hltvId, updateData) => {
  */
 const findTopPlayers = async (options = {}) => {
   const { limit = 50, activeOnly = true, minMaps = 50 } = options;
-  
+
   const query = {
-    'statistics.overall.totalMaps': { $gte: minMaps }
+    'statistics.overall.totalMaps': { $gte: minMaps },
   };
-  
+
   if (activeOnly) {
     query['metadata.isActive'] = true;
   }
-  
+
   return await CS2Player.find(query)
     .populate('currentTeam.team', 'name logo country ranking.current')
     .sort({ 'statistics.overall.rating': -1 })
@@ -79,18 +79,16 @@ const findTopPlayers = async (options = {}) => {
  */
 const findPlayersByTeam = async (teamId, options = {}) => {
   const { activeOnly = true } = options;
-  
+
   const query = {
-    'currentTeam.team': teamId
+    'currentTeam.team': teamId,
   };
-  
+
   if (activeOnly) {
     query['metadata.isActive'] = true;
   }
-  
-  return await CS2Player.find(query)
-    .sort({ 'statistics.overall.rating': -1 })
-    .lean();
+
+  return await CS2Player.find(query).sort({ 'statistics.overall.rating': -1 }).lean();
 };
 
 /**
@@ -101,12 +99,12 @@ const findPlayersByTeam = async (teamId, options = {}) => {
  */
 const findPlayersByCountry = async (country, options = {}) => {
   const { limit = 30, activeOnly = true } = options;
-  
+
   const query = { country };
   if (activeOnly) {
     query['metadata.isActive'] = true;
   }
-  
+
   return await CS2Player.find(query)
     .populate('currentTeam.team', 'name logo ranking.current')
     .sort({ 'statistics.overall.rating': -1 })
@@ -122,25 +120,21 @@ const findPlayersByCountry = async (country, options = {}) => {
  */
 const updatePlayerStatistics = async (hltvId, statsData) => {
   const updateData = {};
-  
+
   if (statsData.overall) {
     updateData['statistics.overall'] = statsData.overall;
   }
-  
+
   if (statsData.recent) {
     updateData['statistics.recent'] = {
       ...statsData.recent,
-      lastUpdated: new Date()
+      lastUpdated: new Date(),
     };
   }
-  
+
   updateData['metadata.lastUpdated'] = new Date();
-  
-  return await CS2Player.findOneAndUpdate(
-    { hltvId },
-    { $set: updateData },
-    { new: true }
-  ).lean();
+
+  return await CS2Player.findOneAndUpdate({ hltvId }, { $set: updateData }, { new: true }).lean();
 };
 
 /**
@@ -154,27 +148,27 @@ const updatePlayerMapStats = async (hltvId, mapName, mapStats) => {
   // First try to update existing map stats
   const updated = await CS2Player.findOneAndUpdate(
     { hltvId, 'mapStats.mapName': mapName },
-    { 
-      $set: { 
+    {
+      $set: {
         'mapStats.$': { mapName, ...mapStats },
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
-  
+
   // If no existing map stats, add new entry
   if (!updated) {
     return await CS2Player.findOneAndUpdate(
       { hltvId },
-      { 
+      {
         $push: { mapStats: { mapName, ...mapStats } },
-        $set: { 'metadata.lastUpdated': new Date() }
+        $set: { 'metadata.lastUpdated': new Date() },
       },
-      { new: true }
+      { new: true },
     ).lean();
   }
-  
+
   return updated;
 };
 
@@ -190,29 +184,29 @@ const updatePlayerCurrentTeam = async (hltvId, teamData) => {
   if (player && player.currentTeam && player.currentTeam.team) {
     await CS2Player.findOneAndUpdate(
       { hltvId },
-      { 
-        $push: { 
+      {
+        $push: {
           teamHistory: {
             team: player.currentTeam.team,
             startDate: player.currentTeam.joinDate,
             endDate: new Date(),
-            role: player.currentTeam.role
-          }
-        }
-      }
+            role: player.currentTeam.role,
+          },
+        },
+      },
     );
   }
-  
+
   // Update current team
   return await CS2Player.findOneAndUpdate(
     { hltvId },
-    { 
-      $set: { 
+    {
+      $set: {
         currentTeam: teamData,
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -225,13 +219,13 @@ const updatePlayerCurrentTeam = async (hltvId, teamData) => {
 const updatePlayerWeaponStats = async (hltvId, weaponStats) => {
   return await CS2Player.findOneAndUpdate(
     { hltvId },
-    { 
-      $set: { 
+    {
+      $set: {
         weaponStats,
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -244,11 +238,11 @@ const updatePlayerWeaponStats = async (hltvId, weaponStats) => {
 const addPlayerAchievement = async (hltvId, achievement) => {
   return await CS2Player.findOneAndUpdate(
     { hltvId },
-    { 
+    {
       $push: { achievements: achievement },
-      $set: { 'metadata.lastUpdated': new Date() }
+      $set: { 'metadata.lastUpdated': new Date() },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -261,13 +255,13 @@ const addPlayerAchievement = async (hltvId, achievement) => {
 const updatePlayerEmbeddings = async (hltvId, embeddings) => {
   return await CS2Player.findOneAndUpdate(
     { hltvId },
-    { 
-      $set: { 
+    {
+      $set: {
         embeddings,
-        'metadata.lastUpdated': new Date()
-      }
+        'metadata.lastUpdated': new Date(),
+      },
     },
-    { new: true }
+    { new: true },
   ).lean();
 };
 
@@ -279,15 +273,15 @@ const updatePlayerEmbeddings = async (hltvId, embeddings) => {
  */
 const searchPlayers = async (searchTerm, options = {}) => {
   const { limit = 10, activeOnly = true } = options;
-  
+
   const query = {
-    nickname: { $regex: new RegExp(searchTerm, 'i') }
+    nickname: { $regex: new RegExp(searchTerm, 'i') },
   };
-  
+
   if (activeOnly) {
     query['metadata.isActive'] = true;
   }
-  
+
   return await CS2Player.find(query)
     .populate('currentTeam.team', 'name logo')
     .select('nickname realName country photo statistics.overall.rating currentTeam')
@@ -304,19 +298,19 @@ const searchPlayers = async (searchTerm, options = {}) => {
  */
 const findSimilarPlayers = async (hltvId, options = {}) => {
   const { limit = 5, ratingTolerance = 0.1 } = options;
-  
+
   const player = await CS2Player.findOne({ hltvId }).lean();
   if (!player) return [];
-  
+
   const targetRating = player.statistics.overall.rating;
-  
+
   return await CS2Player.find({
     hltvId: { $ne: hltvId },
     'statistics.overall.rating': {
       $gte: targetRating - ratingTolerance,
-      $lte: targetRating + ratingTolerance
+      $lte: targetRating + ratingTolerance,
     },
-    'metadata.isActive': true
+    'metadata.isActive': true,
   })
     .populate('currentTeam.team', 'name logo')
     .select('nickname country photo statistics.overall currentTeam')

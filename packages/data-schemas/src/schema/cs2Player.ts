@@ -39,22 +39,24 @@ const cs2PlayerSchema = new Schema<ICS2Player>(
         type: Date,
       },
     },
-    teamHistory: [{
-      team: {
-        type: Schema.Types.ObjectId,
-        ref: 'CS2Team',
+    teamHistory: [
+      {
+        team: {
+          type: Schema.Types.ObjectId,
+          ref: 'CS2Team',
+        },
+        startDate: {
+          type: Date,
+        },
+        endDate: {
+          type: Date,
+        },
+        role: {
+          type: String,
+          enum: ['IGL', 'AWPer', 'Entry', 'Support', 'Lurker'],
+        },
       },
-      startDate: {
-        type: Date,
-      },
-      endDate: {
-        type: Date,
-      },
-      role: {
-        type: String,
-        enum: ['IGL', 'AWPer', 'Entry', 'Support', 'Lurker'],
-      },
-    }],
+    ],
     statistics: {
       overall: {
         rating: {
@@ -128,36 +130,38 @@ const cs2PlayerSchema = new Schema<ICS2Player>(
         },
       },
     },
-    mapStats: [{
-      mapName: {
-        type: String,
-        required: true,
+    mapStats: [
+      {
+        mapName: {
+          type: String,
+          required: true,
+        },
+        rating: {
+          type: Number,
+          default: 0,
+        },
+        kd: {
+          type: Number,
+          default: 0,
+        },
+        adr: {
+          type: Number,
+          default: 0,
+        },
+        kast: {
+          type: Number,
+          default: 0,
+        },
+        mapsPlayed: {
+          type: Number,
+          default: 0,
+        },
+        winRate: {
+          type: Number,
+          default: 0,
+        },
       },
-      rating: {
-        type: Number,
-        default: 0,
-      },
-      kd: {
-        type: Number,
-        default: 0,
-      },
-      adr: {
-        type: Number,
-        default: 0,
-      },
-      kast: {
-        type: Number,
-        default: 0,
-      },
-      mapsPlayed: {
-        type: Number,
-        default: 0,
-      },
-      winRate: {
-        type: Number,
-        default: 0,
-      },
-    }],
+    ],
     weaponStats: {
       rifle: {
         kills: {
@@ -202,21 +206,23 @@ const cs2PlayerSchema = new Schema<ICS2Player>(
         },
       },
     },
-    achievements: [{
-      tournament: {
-        type: String,
+    achievements: [
+      {
+        tournament: {
+          type: String,
+        },
+        placement: {
+          type: String, // e.g., "1st", "2nd", "3-4th"
+        },
+        date: {
+          type: Date,
+        },
+        mvp: {
+          type: Boolean,
+          default: false,
+        },
       },
-      placement: {
-        type: String, // e.g., "1st", "2nd", "3-4th"
-      },
-      date: {
-        type: Date,
-      },
-      mvp: {
-        type: Boolean,
-        default: false,
-      },
-    }],
+    ],
     embeddings: {
       performance: {
         type: [Number],
