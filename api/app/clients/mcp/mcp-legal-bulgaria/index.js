@@ -14,9 +14,12 @@ import {
     McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
+import { ApisService } from './services/ApisService.js';
 import { CaseLawService } from './services/CaseLawService.js';
 import { CitationService } from './services/CitationService.js';
 import { DocumentAnalysisService } from './services/DocumentAnalysisService.js';
+import { LawyerToolsService } from './services/LawyerToolsService.js';
+import { LexBgService } from './services/LexBgService.js';
 
 class BulgarianLegalServer {
     constructor() {
@@ -35,6 +38,9 @@ class BulgarianLegalServer {
         this.caseLawService = new CaseLawService();
         this.documentAnalysisService = new DocumentAnalysisService();
         this.citationService = new CitationService();
+        this.lexBgService = new LexBgService();
+        this.apisService = new ApisService();
+        this.lawyerToolsService = new LawyerToolsService();
 
         this.setupToolHandlers();
         this.setupErrorHandling();
@@ -287,6 +293,393 @@ class BulgarianLegalServer {
                             required: ['documentText'],
                         },
                     },
+                    {
+                        name: 'search_lex_bg',
+                        description:
+                            'Search legal documents and news from lex.bg - the most visited Bulgarian legal portal. Find court decisions, legal updates, and professional news.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                query: {
+                                    type: 'string',
+                                    description: 'Search query for legal documents or topics',
+                                    minLength: 2,
+                                },
+                                documentType: {
+                                    type: 'string',
+                                    description: 'Type of document to search for',
+                                    default: '',
+                                },
+                                institution: {
+                                    type: 'string',
+                                    description: 'Institution or court name',
+                                    default: '',
+                                },
+                                dateFrom: {
+                                    type: 'string',
+                                    description: 'Start date (YYYY-MM-DD format)',
+                                    default: '',
+                                },
+                                dateTo: {
+                                    type: 'string',
+                                    description: 'End date (YYYY-MM-DD format)',
+                                    default: '',
+                                },
+                                limit: {
+                                    type: 'integer',
+                                    description: 'Maximum number of results to return',
+                                    default: 20,
+                                    minimum: 1,
+                                    maximum: 50,
+                                },
+                            },
+                            required: ['query'],
+                        },
+                    },
+                    {
+                        name: 'search_apis_legislation',
+                        description:
+                            'Search Bulgarian legislation and legal information from АПИС - the leading Bulgarian legal information provider. Access laws, regulations, case law and legal updates.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                query: {
+                                    type: 'string',
+                                    description: 'Search query for legal documents',
+                                    minLength: 2,
+                                },
+                                database: {
+                                    type: 'string',
+                                    enum: ['law', 'eu_law', 'finance', 'company', 'gdpr', 'construction'],
+                                    description: 'АПИС database to search in',
+                                    default: 'law',
+                                },
+                                dateFrom: {
+                                    type: 'string',
+                                    description: 'Start date (YYYY-MM-DD format)',
+                                    default: '',
+                                },
+                                dateTo: {
+                                    type: 'string',
+                                    description: 'End date (YYYY-MM-DD format)',
+                                    default: '',
+                                },
+                                documentType: {
+                                    type: 'string',
+                                    description: 'Type of document (law, regulation, case, etc.)',
+                                    default: '',
+                                },
+                                limit: {
+                                    type: 'integer',
+                                    description: 'Maximum number of results to return',
+                                    default: 20,
+                                    minimum: 1,
+                                    maximum: 50,
+                                },
+                            },
+                            required: ['query'],
+                        },
+                    },
+                    {
+                        name: 'get_legal_news',
+                        description: 'Get the latest legal news and updates from lex.bg and АПИС sources.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                category: {
+                                    type: 'string',
+                                    description: 'News category to filter by',
+                                    default: '',
+                                },
+                                limit: {
+                                    type: 'integer',
+                                    description: 'Maximum number of news items to return',
+                                    default: 10,
+                                    minimum: 1,
+                                    maximum: 25,
+                                },
+                            },
+                            required: [],
+                        },
+                    },
+                    {
+                        name: 'comprehensive_legal_research',
+                        description:
+                            'Perform comprehensive legal research combining multiple Bulgarian legal databases (lex.bg, АПИС) to provide complete legal analysis.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                query: {
+                                    type: 'string',
+                                    description: 'Legal research topic or question',
+                                    minLength: 3,
+                                },
+                                includeLegislation: {
+                                    type: 'boolean',
+                                    description: 'Include legislation search',
+                                    default: true,
+                                },
+                                includeCaselaw: {
+                                    type: 'boolean',
+                                    description: 'Include case law search',
+                                    default: true,
+                                },
+                                includeNews: {
+                                    type: 'boolean',
+                                    description: 'Include recent legal news',
+                                    default: true,
+                                },
+                                includeEULaw: {
+                                    type: 'boolean',
+                                    description: 'Include EU law search',
+                                    default: false,
+                                },
+                                maxResults: {
+                                    type: 'integer',
+                                    description: 'Maximum total results across all sources',
+                                    default: 50,
+                                    minimum: 10,
+                                    maximum: 100,
+                                },
+                            },
+                            required: ['query'],
+                        },
+                    },
+                    {
+                        name: 'analyze_document_with_real_data',
+                        description:
+                            'Analyze a legal document using real Bulgarian case law and legislation data to identify risks, compliance issues, and provide recommendations.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                documentText: {
+                                    type: 'string',
+                                    description: 'Full text of the legal document to analyze',
+                                    minLength: 10,
+                                },
+                                analysisType: {
+                                    type: 'string',
+                                    enum: ['general', 'contract', 'compliance', 'risk'],
+                                    description: 'Type of analysis to perform',
+                                    default: 'general',
+                                },
+                            },
+                            required: ['documentText'],
+                        },
+                    },
+                    {
+                        name: 'generate_case_strategy',
+                        description:
+                            'Generate legal case strategy based on similar Bulgarian cases and precedents from real legal databases.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                caseType: {
+                                    type: 'string',
+                                    description: 'Type of legal case',
+                                    minLength: 3,
+                                },
+                                facts: {
+                                    type: 'string',
+                                    description: 'Brief description of case facts',
+                                    minLength: 10,
+                                },
+                                legalBasis: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'Legal articles or laws that apply',
+                                    default: [],
+                                },
+                                desiredOutcome: {
+                                    type: 'string',
+                                    description: 'Desired case outcome',
+                                    default: '',
+                                },
+                                timeline: {
+                                    type: 'string',
+                                    description: 'Available timeline for the case',
+                                    default: '',
+                                },
+                            },
+                            required: ['caseType', 'facts'],
+                        },
+                    },
+                    {
+                        name: 'monitor_legal_changes',
+                        description:
+                            'Monitor recent legal changes and updates relevant to specific practice areas using real-time data from Bulgarian legal sources.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                practiceAreas: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'Legal practice areas to monitor',
+                                    default: [],
+                                },
+                                keywords: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'Additional keywords to monitor',
+                                    default: [],
+                                },
+                            },
+                            required: [],
+                        },
+                    },
+                    {
+                        name: 'generate_client_advice',
+                        description:
+                            'Generate comprehensive client advice based on their legal situation using real Bulgarian legal research and precedents.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                situation: {
+                                    type: 'string',
+                                    description: "Description of the client's legal situation",
+                                    minLength: 10,
+                                },
+                                legalQuestions: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'Specific legal questions from the client',
+                                    default: [],
+                                },
+                                urgency: {
+                                    type: 'string',
+                                    enum: ['low', 'normal', 'high', 'urgent'],
+                                    description: 'Urgency level of the situation',
+                                    default: 'normal',
+                                },
+                                clientType: {
+                                    type: 'string',
+                                    enum: ['individual', 'business', 'organization'],
+                                    description: 'Type of client',
+                                    default: 'individual',
+                                },
+                            },
+                            required: ['situation'],
+                        },
+                    },
+                    {
+                        name: 'test_data_sources',
+                        description:
+                            'Test connectivity and availability of real legal data sources (lex.bg and АПИС).',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {},
+                            required: [],
+                        },
+                    },
+                    {
+                        name: 'query_rag_legal_documents',
+                        description:
+                            'Query previously stored legal documents from RAG system for fast retrieval.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                query: {
+                                    type: 'string',
+                                    description: 'Search query for stored legal documents',
+                                    minLength: 2,
+                                },
+                                limit: {
+                                    type: 'integer',
+                                    description: 'Maximum number of results to return',
+                                    default: 10,
+                                    minimum: 1,
+                                    maximum: 50,
+                                },
+                                minSimilarity: {
+                                    type: 'number',
+                                    description: 'Minimum similarity score (0.0-1.0)',
+                                    default: 0.7,
+                                    minimum: 0.0,
+                                    maximum: 1.0,
+                                },
+                            },
+                            required: ['query'],
+                        },
+                    },
+                    {
+                        name: 'store_legal_document_in_rag',
+                        description: 'Store a legal document in RAG system for future retrieval and analysis.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                title: {
+                                    type: 'string',
+                                    description: 'Title of the legal document',
+                                    minLength: 3,
+                                },
+                                content: {
+                                    type: 'string',
+                                    description: 'Full content of the legal document',
+                                    minLength: 10,
+                                },
+                                metadata: {
+                                    type: 'object',
+                                    description: 'Additional metadata about the document',
+                                    properties: {
+                                        url: { type: 'string' },
+                                        date: { type: 'string' },
+                                        type: { type: 'string' },
+                                        court: { type: 'string' },
+                                        caseNumber: { type: 'string' },
+                                    },
+                                    default: {},
+                                },
+                                source: {
+                                    type: 'string',
+                                    description: 'Source of the document',
+                                    default: 'manual_upload',
+                                },
+                            },
+                            required: ['title', 'content'],
+                        },
+                    },
+                    {
+                        name: 'enhanced_legal_search',
+                        description:
+                            'Perform enhanced legal search that combines RAG retrieval with live scraping for comprehensive results.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                query: {
+                                    type: 'string',
+                                    description: 'Legal search query',
+                                    minLength: 2,
+                                },
+                                sources: {
+                                    type: 'array',
+                                    items: {
+                                        type: 'string',
+                                        enum: ['lex.bg', 'apis', 'both'],
+                                    },
+                                    description: 'Sources to search',
+                                    default: ['both'],
+                                },
+                                useRagFirst: {
+                                    type: 'boolean',
+                                    description: 'Check RAG system first before live search',
+                                    default: true,
+                                },
+                                storeResults: {
+                                    type: 'boolean',
+                                    description: 'Store new results in RAG system',
+                                    default: true,
+                                },
+                                limit: {
+                                    type: 'integer',
+                                    description: 'Maximum total results to return',
+                                    default: 20,
+                                    minimum: 5,
+                                    maximum: 50,
+                                },
+                            },
+                            required: ['query'],
+                        },
+                    },
                 ],
             };
         });
@@ -319,6 +712,42 @@ class BulgarianLegalServer {
 
                     case 'extract_key_terms':
                         return await this.handleExtractKeyTerms(args);
+
+                    case 'search_lex_bg':
+                        return await this.handleSearchLexBg(args);
+
+                    case 'search_apis_legislation':
+                        return await this.handleSearchApisLegislation(args);
+
+                    case 'get_legal_news':
+                        return await this.handleGetLegalNews(args);
+
+                    case 'comprehensive_legal_research':
+                        return await this.handleComprehensiveLegalResearch(args);
+
+                    case 'analyze_document_with_real_data':
+                        return await this.handleAnalyzeDocumentWithRealData(args);
+
+                    case 'generate_case_strategy':
+                        return await this.handleGenerateCaseStrategy(args);
+
+                    case 'monitor_legal_changes':
+                        return await this.handleMonitorLegalChanges(args);
+
+                    case 'generate_client_advice':
+                        return await this.handleGenerateClientAdvice(args);
+
+                    case 'test_data_sources':
+                        return await this.handleTestDataSources(args);
+
+                    case 'query_rag_legal_documents':
+                        return await this.handleQueryRagLegalDocuments(args);
+
+                    case 'store_legal_document_in_rag':
+                        return await this.handleStoreLegalDocumentInRag(args);
+
+                    case 'enhanced_legal_search':
+                        return await this.handleEnhancedLegalSearch(args);
 
                     default:
                         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
@@ -554,6 +983,725 @@ class BulgarianLegalServer {
                 },
             ],
         };
+    }
+
+    // New real-data integration handlers
+
+    async handleSearchLexBg(args) {
+        const result = await this.lexBgService.searchLegalDocuments(args);
+
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: result.success
+                        ? `Търсене в lex.bg намери ${result.results.length} резултата:\n\n` +
+                        result.results
+                            .map(
+                                (doc, index) =>
+                                    `${index + 1}. ${doc.title}\n` +
+                                    `   Източник: ${doc.source}\n` +
+                                    `   Дата: ${doc.date}\n` +
+                                    `   Тип: ${doc.type}\n` +
+                                    `   URL: ${doc.url}\n` +
+                                    `   Резюме: ${doc.summary}\n\n`,
+                            )
+                            .join('')
+                        : `Грешка при търсене в lex.bg: ${result.error}`,
+                },
+            ],
+        };
+    }
+
+    async handleSearchApisLegislation(args) {
+        const result = await this.apisService.searchLegislation(args);
+
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: result.success
+                        ? `Търсене в АПИС (${args.database}) намери ${result.results.length} резултата:\n\n` +
+                        result.results
+                            .map(
+                                (doc, index) =>
+                                    `${index + 1}. ${doc.title}\n` +
+                                    `   Източник: ${doc.source}\n` +
+                                    `   Дата: ${doc.date}\n` +
+                                    `   Тип: ${doc.type}\n` +
+                                    `   URL: ${doc.url}\n` +
+                                    `   Резюме: ${doc.summary}\n\n`,
+                            )
+                            .join('')
+                        : `Грешка при търсене в АПИС: ${result.error}`,
+                },
+            ],
+        };
+    }
+
+    async handleGetLegalNews(args) {
+        const [lexNews, apisNews] = await Promise.allSettled([
+            this.lexBgService.getLegalNews(args),
+            this.apisService.getLatestUpdates('law', args.limit || 5),
+        ]);
+
+        let newsText = 'Последни правни новини:\n\n';
+
+        if (lexNews.status === 'fulfilled' && lexNews.value.success) {
+            newsText += '📰 lex.bg новини:\n';
+            lexNews.value.news.forEach((item, index) => {
+                newsText += `${index + 1}. ${item.title}\n`;
+                if (item.date) newsText += `   Дата: ${item.date}\n`;
+                if (item.summary) newsText += `   ${item.summary.substring(0, 150)}...\n`;
+                if (item.url) newsText += `   URL: ${item.url}\n`;
+                newsText += '\n';
+            });
+        }
+
+        if (apisNews.status === 'fulfilled' && apisNews.value.success) {
+            newsText += '\n📚 АПИС актуализации:\n';
+            apisNews.value.updates.forEach((item, index) => {
+                newsText += `${index + 1}. ${item.title}\n`;
+                if (item.date) newsText += `   Дата: ${item.date}\n`;
+                if (item.summary) newsText += `   ${item.summary.substring(0, 150)}...\n`;
+                if (item.url) newsText += `   URL: ${item.url}\n`;
+                newsText += '\n';
+            });
+        }
+
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: newsText,
+                },
+            ],
+        };
+    }
+
+    async handleComprehensiveLegalResearch(args) {
+        const result = await this.lawyerToolsService.comprehensiveLegalResearch(args.query, args);
+
+        if (!result.success) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Грешка при изследването: ${result.error}`,
+                    },
+                ],
+            };
+        }
+
+        const { results, totalItems, sources } = result;
+
+        let researchText = `🔍 Обширно правно изследване за: "${args.query}"\n`;
+        researchText += `📊 Общо намерени документи: ${totalItems}\n`;
+        researchText += `🔗 Търсени източници: ${sources.join(', ')}\n\n`;
+
+        researchText += `📋 Резюме: ${results.summary}\n\n`;
+
+        if (results.legislation.length > 0) {
+            researchText += `⚖️ ЗАКОНОДАТЕЛСТВО (${results.legislation.length}):\n`;
+            results.legislation.slice(0, 10).forEach((item, index) => {
+                researchText += `${index + 1}. ${item.title}\n`;
+                if (item.summary) researchText += `   ${item.summary.substring(0, 100)}...\n`;
+                researchText += '\n';
+            });
+        }
+
+        if (results.caselaw.length > 0) {
+            researchText += `🏛️ СЪДЕБНА ПРАКТИКА (${results.caselaw.length}):\n`;
+            results.caselaw.slice(0, 10).forEach((item, index) => {
+                researchText += `${index + 1}. ${item.title}\n`;
+                if (item.summary) researchText += `   ${item.summary.substring(0, 100)}...\n`;
+                researchText += '\n';
+            });
+        }
+
+        if (results.news.length > 0) {
+            researchText += `📰 НОВИНИ И АКТУАЛИЗАЦИИ (${results.news.length}):\n`;
+            results.news.slice(0, 5).forEach((item, index) => {
+                researchText += `${index + 1}. ${item.title}\n`;
+                if (item.date) researchText += `   Дата: ${item.date}\n`;
+                researchText += '\n';
+            });
+        }
+
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: researchText,
+                },
+            ],
+        };
+    }
+
+    async handleAnalyzeDocumentWithRealData(args) {
+        const result = await this.lawyerToolsService.analyzeLegalDocument(
+            args.documentText,
+            args.analysisType,
+        );
+
+        if (!result.success) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Грешка при анализа: ${result.error}`,
+                    },
+                ],
+            };
+        }
+
+        const { analysis, confidence } = result;
+
+        let analysisText = `📋 АНАЛИЗ НА ПРАВЕН ДОКУМЕНТ\n`;
+        analysisText += `🎯 Степен на увереност: ${Math.round(confidence * 100)}%\n\n`;
+
+        analysisText += `📄 Тип документ: ${analysis.documentType}\n`;
+        analysisText += `🔗 Правни препратки: ${analysis.legalReferences.length}\n`;
+        analysisText += `🔑 Ключови термини: ${analysis.keyTerms.join(', ')}\n\n`;
+
+        if (analysis.riskAssessment.high.length > 0) {
+            analysisText += `⚠️ ВИСОКИ РИСКОВЕ:\n`;
+            analysis.riskAssessment.high.forEach((risk) => {
+                analysisText += `• ${risk}\n`;
+            });
+            analysisText += '\n';
+        }
+
+        if (analysis.riskAssessment.medium.length > 0) {
+            analysisText += `⚡ СРЕДНИ РИСКОВЕ:\n`;
+            analysis.riskAssessment.medium.forEach((risk) => {
+                analysisText += `• ${risk}\n`;
+            });
+            analysisText += '\n';
+        }
+
+        if (analysis.recommendations.length > 0) {
+            analysisText += `💡 ПРЕПОРЪКИ:\n`;
+            analysis.recommendations.forEach((rec) => {
+                analysisText += `• ${rec}\n`;
+            });
+            analysisText += '\n';
+        }
+
+        if (analysis.relatedCases.length > 0) {
+            analysisText += `🏛️ СВЪРЗАНИ ДЕЛА (${analysis.relatedCases.length}):\n`;
+            analysis.relatedCases.slice(0, 5).forEach((case_item, index) => {
+                analysisText += `${index + 1}. ${case_item.title}\n`;
+            });
+        }
+
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: analysisText,
+                },
+            ],
+        };
+    }
+
+    async handleGenerateCaseStrategy(args) {
+        const result = await this.lawyerToolsService.generateCaseStrategy(args);
+
+        if (!result.success) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Грешка при генериране на стратегия: ${result.error}`,
+                    },
+                ],
+            };
+        }
+
+        const { strategy, similarCases, confidence } = result;
+
+        let strategyText = `⚖️ ПРАВНА СТРАТЕГИЯ ЗА ДЕЛО\n`;
+        strategyText += `🎯 Степен на увереност: ${Math.round(confidence * 100)}%\n\n`;
+
+        strategyText += `📋 Тип дело: ${args.caseType}\n`;
+        strategyText += `📝 Факти: ${args.facts}\n\n`;
+
+        if (strategy.legalArguments.length > 0) {
+            strategyText += `⚖️ ПРАВНИ АРГУМЕНТИ:\n`;
+            strategy.legalArguments.forEach((arg) => {
+                strategyText += `• ${arg}\n`;
+            });
+            strategyText += '\n';
+        }
+
+        if (strategy.riskFactors.length > 0) {
+            strategyText += `⚠️ РИСКОВИ ФАКТОРИ:\n`;
+            strategy.riskFactors.forEach((risk) => {
+                strategyText += `• ${risk}\n`;
+            });
+            strategyText += '\n';
+        }
+
+        strategyText += `⏱️ Прогнозен срок: ${strategy.timeline}\n`;
+        strategyText += `📊 Вероятност за успех: ${Math.round(strategy.successProbability * 100)}%\n\n`;
+
+        if (strategy.strategicRecommendations.length > 0) {
+            strategyText += `💡 СТРАТЕГИЧЕСКИ ПРЕПОРЪКИ:\n`;
+            strategy.strategicRecommendations.forEach((rec) => {
+                strategyText += `• ${rec}\n`;
+            });
+            strategyText += '\n';
+        }
+
+        if (similarCases.length > 0) {
+            strategyText += `🏛️ ПОДОБНИ ДЕЛА (${similarCases.length}):\n`;
+            similarCases.slice(0, 5).forEach((case_item, index) => {
+                strategyText += `${index + 1}. ${case_item.title}\n`;
+            });
+        }
+
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: strategyText,
+                },
+            ],
+        };
+    }
+
+    async handleMonitorLegalChanges(args) {
+        const result = await this.lawyerToolsService.monitorLegalChanges(
+            args.practiceAreas,
+            args.keywords,
+        );
+
+        if (!result.success) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Грешка при мониторинг: ${result.error}`,
+                    },
+                ],
+            };
+        }
+
+        const { changes, practiceAreas, lastUpdated } = result;
+
+        let monitorText = `📡 МОНИТОРИНГ НА ПРАВНИ ПРОМЕНИ\n`;
+        monitorText += `🎯 Области: ${practiceAreas.join(', ')}\n`;
+        monitorText += `🕐 Последна актуализация: ${new Date(lastUpdated).toLocaleString('bg-BG')}\n\n`;
+
+        if (changes.alerts.length > 0) {
+            monitorText += `🚨 ВАЖНИ ИЗВЕСТИЯ:\n`;
+            changes.alerts.forEach((alert) => {
+                monitorText += `• ${alert.title} (${alert.priority})\n`;
+            });
+            monitorText += '\n';
+        }
+
+        if (changes.legislation.length > 0) {
+            monitorText += `⚖️ НОВИ НОРМАТИВНИ АКТОВЕ:\n`;
+            changes.legislation.slice(0, 10).forEach((item, index) => {
+                monitorText += `${index + 1}. ${item.title}\n`;
+                if (item.date) monitorText += `   Дата: ${item.date}\n`;
+                monitorText += '\n';
+            });
+        }
+
+        if (changes.caselaw.length > 0) {
+            monitorText += `🏛️ НОВА СЪДЕБНА ПРАКТИКА:\n`;
+            changes.caselaw.slice(0, 10).forEach((item, index) => {
+                monitorText += `${index + 1}. ${item.title}\n`;
+                if (item.date) monitorText += `   Дата: ${item.date}\n`;
+                monitorText += '\n';
+            });
+        }
+
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: monitorText,
+                },
+            ],
+        };
+    }
+
+    async handleGenerateClientAdvice(args) {
+        const result = await this.lawyerToolsService.generateClientAdvice(args);
+
+        if (!result.success) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Грешка при генериране на съвет: ${result.error}`,
+                    },
+                ],
+            };
+        }
+
+        const { advice, research, confidence } = result;
+
+        let adviceText = `💼 ПРАВЕН СЪВЕТ ЗА КЛИЕНТ\n`;
+        adviceText += `🎯 Степен на увереност: ${Math.round(confidence * 100)}%\n\n`;
+
+        adviceText += `📋 Ситуация: ${args.situation}\n`;
+        adviceText += `⚡ Спешност: ${args.urgency}\n`;
+        adviceText += `👤 Тип клиент: ${args.clientType}\n\n`;
+
+        adviceText += `📝 РЕЗЮМЕ:\n${advice.summary}\n\n`;
+
+        if (advice.recommendedActions.length > 0) {
+            adviceText += `✅ ПРЕПОРЪЧАНИ ДЕЙСТВИЯ:\n`;
+            advice.recommendedActions.forEach((action) => {
+                adviceText += `• ${action}\n`;
+            });
+            adviceText += '\n';
+        }
+
+        if (advice.risks.length > 0) {
+            adviceText += `⚠️ РИСКОВЕ:\n`;
+            advice.risks.forEach((risk) => {
+                adviceText += `• ${risk}\n`;
+            });
+            adviceText += '\n';
+        }
+
+        if (advice.nextSteps.length > 0) {
+            adviceText += `➡️ СЛЕДВАЩИ СТЪПКИ:\n`;
+            advice.nextSteps.forEach((step) => {
+                adviceText += `• ${step}\n`;
+            });
+            adviceText += '\n';
+        }
+
+        if (advice.legalOptions.length > 0) {
+            adviceText += `⚖️ ПРАВНИ ОПЦИИ:\n`;
+            advice.legalOptions.forEach((option, index) => {
+                adviceText += `${index + 1}. ${option.option} (${option.viability} вероятност)\n`;
+                adviceText += `   Цена: ${option.cost}, Време: ${option.timeframe}\n`;
+            });
+        }
+
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: adviceText,
+                },
+            ],
+        };
+    }
+
+    async handleTestDataSources(args) {
+        const [lexTest, apisTest] = await Promise.allSettled([
+            this.lexBgService.testConnection(),
+            this.apisService.testConnection(),
+        ]);
+
+        let testText = '🔧 ТЕСТ НА ИЗТОЧНИЦИ НА ДАННИ\n\n';
+
+        testText += '📍 lex.bg:\n';
+        if (lexTest.status === 'fulfilled') {
+            const result = lexTest.value;
+            testText += `   Статус: ${result.success ? '✅ Работи' : '❌ Не работи'}\n`;
+            testText += `   HTTP код: ${result.status}\n`;
+            testText += `   Съобщение: ${result.message}\n`;
+        } else {
+            testText += '   Статус: ❌ Грешка при тест\n';
+            testText += `   Грешка: ${lexTest.reason}\n`;
+        }
+
+        testText += '\n📚 АПИС:\n';
+        if (apisTest.status === 'fulfilled') {
+            const result = apisTest.value;
+            testText += `   Статус: ${result.success ? '✅ Работи' : '❌ Не работи'}\n`;
+            testText += `   HTTP код: ${result.status}\n`;
+            testText += `   Съобщение: ${result.message}\n`;
+        } else {
+            testText += '   Статус: ❌ Грешка при тест\n';
+            testText += `   Грешка: ${apisTest.reason}\n`;
+        }
+
+        const availableDatabases = this.apisService.getAvailableDatabases();
+        if (availableDatabases.success) {
+            testText += '\n📊 Налични АПИС бази данни:\n';
+            Object.entries(availableDatabases.databases).forEach(([key, name]) => {
+                testText += `   • ${key}: ${name}\n`;
+            });
+        }
+
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: testText,
+                },
+            ],
+        };
+    }
+
+    // RAG Integration Handlers
+
+    async handleQueryRagLegalDocuments(args) {
+        if (!process.env.RAG_API_URL) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: '❌ RAG система не е налична. Моля, настройте RAG_API_URL.',
+                    },
+                ],
+            };
+        }
+
+        try {
+            const result = await this.lawyerToolsService.ragService.queryLegalDocuments(args.query, {
+                limit: args.limit || 10,
+                minSimilarity: args.minSimilarity || 0.7,
+            });
+
+            if (!result.success) {
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: `❌ Грешка при търсене в RAG: ${result.error}`,
+                        },
+                    ],
+                };
+            }
+
+            let responseText = `🔍 RAG ТЪРСЕНЕ: "${args.query}"\n`;
+            responseText += `📊 Намерени документи: ${result.results.length}\n\n`;
+
+            if (result.results.length === 0) {
+                responseText += '❗ Няма намерени документи в RAG системата.\n';
+                responseText +=
+                    'Използвайте enhanced_legal_search за нови търсения или store_legal_document_in_rag за добавяне на документи.\n';
+            } else {
+                result.results.forEach((doc, index) => {
+                    responseText += `${index + 1}. ${doc.title || 'Неизвестен документ'}\n`;
+                    if (doc.metadata) {
+                        if (doc.metadata.source) responseText += `   📍 Източник: ${doc.metadata.source}\n`;
+                        if (doc.metadata.date) responseText += `   📅 Дата: ${doc.metadata.date}\n`;
+                        if (doc.metadata.type) responseText += `   📋 Тип: ${doc.metadata.type}\n`;
+                    }
+                    if (doc.similarity)
+                        responseText += `   🎯 Сходство: ${Math.round(doc.similarity * 100)}%\n`;
+                    if (doc.content) responseText += `   📄 ${doc.content.substring(0, 200)}...\n`;
+                    responseText += '\n';
+                });
+            }
+
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: responseText,
+                    },
+                ],
+            };
+        } catch (error) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `❌ Системна грешка: ${error.message}`,
+                    },
+                ],
+            };
+        }
+    }
+
+    async handleStoreLegalDocumentInRag(args) {
+        if (!process.env.RAG_API_URL) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: '❌ RAG система не е налична. Моля, настройте RAG_API_URL.',
+                    },
+                ],
+            };
+        }
+
+        try {
+            const documentData = {
+                title: args.title,
+                content: args.content,
+                metadata: args.metadata || {},
+                source: args.source || 'manual_upload',
+            };
+
+            const result = await this.lawyerToolsService.ragService.storeLegalDocument(documentData);
+
+            let responseText = `📄 СЪХРАНЯВАНЕ В RAG\n\n`;
+            responseText += `📋 Заглавие: ${args.title}\n`;
+            responseText += `📍 Източник: ${args.source || 'manual_upload'}\n`;
+            responseText += `📊 Размер: ${args.content.length} символа\n\n`;
+
+            if (result.success) {
+                responseText += `✅ Документът е успешно съхранен в RAG системата!\n`;
+                responseText += `🆔 ID на файла: ${result.fileId}\n`;
+                responseText += `🔗 Вградено: ${result.embedded ? 'Да' : 'Не'}\n\n`;
+                responseText += `💡 Документът вече може да се търси чрез query_rag_legal_documents.`;
+            } else {
+                responseText += `❌ Грешка при съхраняването: ${result.error}\n`;
+                responseText += `💡 Моля, проверете дали RAG системата работи правилно.`;
+            }
+
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: responseText,
+                    },
+                ],
+            };
+        } catch (error) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `❌ Системна грешка при съхраняването: ${error.message}`,
+                    },
+                ],
+            };
+        }
+    }
+
+    async handleEnhancedLegalSearch(args) {
+        if (!process.env.RAG_API_URL) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: '❌ RAG система не е налична. Използва се обикновено търсене.',
+                    },
+                ],
+            };
+        }
+
+        try {
+            const {
+                query,
+                sources = ['both'],
+                useRagFirst = true,
+                storeResults = true,
+                limit = 20,
+            } = args;
+
+            let searchPromises = [];
+
+            // Determine which sources to search
+            const searchLex = sources.includes('lex.bg') || sources.includes('both');
+            const searchApis = sources.includes('apis') || sources.includes('both');
+
+            if (searchLex) {
+                searchPromises.push(
+                    this.lexBgService
+                        .searchLegalDocuments({
+                            query,
+                            useRag: useRagFirst,
+                            storeResults,
+                            limit: Math.floor(limit / (searchApis ? 2 : 1)),
+                        })
+                        .then((result) => ({ source: 'lex.bg', ...result })),
+                );
+            }
+
+            if (searchApis) {
+                searchPromises.push(
+                    this.apisService
+                        .searchLegislation({
+                            query,
+                            useRag: useRagFirst,
+                            storeResults,
+                            limit: Math.floor(limit / (searchLex ? 2 : 1)),
+                        })
+                        .then((result) => ({ source: 'apis', ...result })),
+                );
+            }
+
+            const searchResults = await Promise.allSettled(searchPromises);
+
+            let responseText = `🔍 РАЗШИРЕНО ПРАВНО ТЪРСЕНЕ\n`;
+            responseText += `📝 Запитване: "${query}"\n`;
+            responseText += `📡 Използва RAG: ${useRagFirst ? 'Да' : 'Не'}\n`;
+            responseText += `💾 Съхранява резултати: ${storeResults ? 'Да' : 'Не'}\n\n`;
+
+            let totalResults = 0;
+            let ragResults = 0;
+            let liveResults = 0;
+
+            searchResults.forEach((result, index) => {
+                if (result.status === 'fulfilled' && result.value.success) {
+                    const data = result.value;
+                    const sourceName = data.source;
+
+                    responseText += `📊 ${sourceName.toUpperCase()} РЕЗУЛТАТИ:\n`;
+                    responseText += `   Общо: ${data.results ? data.results.length : 0}\n`;
+
+                    if (data.ragResults !== undefined) {
+                        responseText += `   От RAG: ${data.ragResults}\n`;
+                        responseText += `   Нови: ${data.liveResults}\n`;
+                        ragResults += data.ragResults;
+                        liveResults += data.liveResults;
+                    }
+
+                    responseText += '\n';
+
+                    if (data.results && data.results.length > 0) {
+                        totalResults += data.results.length;
+
+                        data.results.slice(0, 5).forEach((item, idx) => {
+                            responseText += `${idx + 1}. ${item.title}\n`;
+                            if (item.source) responseText += `   📍 ${item.source}\n`;
+                            if (item.date) responseText += `   📅 ${item.date}\n`;
+                            if (item.summary) responseText += `   📄 ${item.summary.substring(0, 100)}...\n`;
+                            responseText += '\n';
+                        });
+
+                        if (data.results.length > 5) {
+                            responseText += `... и още ${data.results.length - 5} резултата\n\n`;
+                        }
+                    }
+                } else {
+                    const sourceName = sources[index] || 'неизвестен източник';
+                    responseText += `❌ Грешка в ${sourceName}: ${result.reason || 'неизвестна грешка'}\n\n`;
+                }
+            });
+
+            responseText += `📈 ОБОБЩЕНИЕ:\n`;
+            responseText += `   Общо документи: ${totalResults}\n`;
+            if (useRagFirst) {
+                responseText += `   От RAG: ${ragResults}\n`;
+                responseText += `   Нови търсения: ${liveResults}\n`;
+            }
+
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: responseText,
+                    },
+                ],
+            };
+        } catch (error) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `❌ Грешка при разширеното търсене: ${error.message}`,
+                    },
+                ],
+            };
+        }
     }
 
     setupErrorHandling() {

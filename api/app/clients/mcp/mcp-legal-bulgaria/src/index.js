@@ -144,6 +144,107 @@ class BulgarianLegalServer {
             },
           },
           {
+            name: 'search_supreme_court_cassation',
+            description:
+              'Search decisions and case law from the Bulgarian Supreme Court of Cassation (Върховен Касационен съд). Specialized search for highest court precedents in civil and criminal matters.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query for Supreme Court decisions (in Bulgarian or English)',
+                  minLength: 5,
+                  maxLength: 500,
+                },
+                caseNumber: {
+                  type: 'string',
+                  description: 'Specific case number (e.g., "№ 123/2023")',
+                  maxLength: 50,
+                },
+                legalArticle: {
+                  type: 'string',
+                  description: 'Specific legal article cited (e.g., "чл. 45 от ГК")',
+                  maxLength: 100,
+                },
+                chamber: {
+                  type: 'string',
+                  enum: ['civil', 'criminal', 'commercial', 'any'],
+                  description: 'Supreme Court chamber (civil, criminal, commercial)',
+                  default: 'any',
+                },
+                decisionType: {
+                  type: 'string',
+                  enum: ['cassation', 'interpretation', 'unification', 'any'],
+                  description: 'Type of Supreme Court decision',
+                  default: 'any',
+                },
+                dateRange: {
+                  type: 'object',
+                  properties: {
+                    from: {
+                      type: 'string',
+                      format: 'date',
+                      description: 'Start date (YYYY-MM-DD)',
+                    },
+                    to: {
+                      type: 'string',
+                      format: 'date',
+                      description: 'End date (YYYY-MM-DD)',
+                    },
+                    lastYears: {
+                      type: 'number',
+                      description: 'Search decisions from last N years',
+                      minimum: 1,
+                      maximum: 20,
+                    },
+                  },
+                  description: 'Date range filter for decisions',
+                },
+                legalArea: {
+                  type: 'string',
+                  enum: [
+                    'civil_law',
+                    'criminal_law',
+                    'commercial_law',
+                    'family_law',
+                    'property_law',
+                    'contract_law',
+                    'tort_law',
+                    'procedural_law',
+                    'any',
+                  ],
+                  description: 'Area of law',
+                  default: 'any',
+                },
+                precedentValue: {
+                  type: 'string',
+                  enum: ['binding', 'persuasive', 'interpretive', 'any'],
+                  description: 'Precedential value of the decision',
+                  default: 'any',
+                },
+                maxResults: {
+                  type: 'number',
+                  description: 'Maximum number of results to return',
+                  default: 15,
+                  minimum: 1,
+                  maximum: 50,
+                },
+                includeAnalysis: {
+                  type: 'boolean',
+                  description: 'Include detailed legal analysis of decisions',
+                  default: true,
+                },
+                language: {
+                  type: 'string',
+                  enum: ['bulgarian', 'english', 'bilingual'],
+                  description: 'Language for response',
+                  default: 'bulgarian',
+                },
+              },
+              required: ['query'],
+            },
+          },
+          {
             name: 'analyze_legal_precedent',
             description:
               'Analyze legal precedents for a specific case or situation, providing detailed reasoning and applicable law interpretation.',
@@ -662,6 +763,8 @@ class BulgarianLegalServer {
         switch (name) {
           case 'search_case_law':
             return await this.handleSearchCaseLaw(args);
+          case 'search_supreme_court_cassation':
+            return await this.handleSearchSupremeCourt(args);
           case 'analyze_legal_precedent':
             return await this.handleAnalyzeLegalPrecedent(args);
           case 'analyze_contract_compliance':
@@ -729,6 +832,131 @@ ${results.totalCount > 5 ? `\n*Showing 5 of ${results.totalCount} results. Use m
         {
           type: 'text',
           text: summary,
+        },
+      ],
+    };
+  }
+
+  async handleSearchSupremeCourt(args) {
+    try {
+      // Enhance query for Supreme Court specific search
+      const enhancedQuery = `Върховен касационен съд ${args.query}`;
+
+      // Build search parameters for Supreme Court specific search
+      const searchParams = {
+        query: enhancedQuery,
+        courtLevel: 'supreme',
+        useRag: true,
+        storeResults: true,
+        limit: args.maxResults || 15,
+        ...args,
+      };
+
+      // If chamber is specified, add it to the query
+      if (args.chamber && args.chamber !== 'any') {
+        searchParams.query += ` ${args.chamber === 'civil'
+            ? 'гражданска колегия'
+            : args.chamber === 'criminal'
+              ? 'наказателна колегия'
+              : args.chamber === 'commercial'
+                ? 'търговска колегия'
+                : ''
+          }`;
+      }
+
+      // If decision type is specified, add it to the query
+      if (args.decisionType && args.decisionType !== 'any') {
+        searchParams.query += ` ${args.decisionType === 'cassation'
+            ? 'касационно решение'
+            : args.decisionType === 'interpretation'
+              ? 'тълкувателно решение'
+              : args.decisionType === 'unification'
+                ? 'обединително решение'
+                : ''
+          }`;
+      }
+
+      // Search using enhanced legal search for better results
+      const results = await this.handleEnhancedLegalSearch({
+        query: searchParams.query,
+        sources: ['both'],
+        useRagFirst: true,
+        storeResults: true,
+        limit: searchParams.limit,
+      });
+
+      // Process and format results specifically for Supreme Court
+      const supremeCourtResponse = await this.formatSupremeCourtResults(results, args);
+
+      return supremeCourtResponse;
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Грешка при търсене във Върховния касационен съд: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  async formatSupremeCourtResults(searchResults, originalArgs) {
+    if (!searchResults || !searchResults.content || !searchResults.content[0]) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '❌ Няма намерени резултати от Върховния касационен съд.',
+          },
+        ],
+      };
+    }
+
+    const baseResponse = searchResults.content[0].text;
+
+    // Add Supreme Court specific formatting and analysis
+    const supremeCourtHeader = `🏛️ **ТЪРСЕНЕ ВЪВ ВЪРХОВНИЯ КАСАЦИОНЕН СЪД**\n\n`;
+
+    const searchParams = `**Параметри на търсенето:**
+- Заявка: ${originalArgs.query}
+${originalArgs.caseNumber ? `- Номер на делото: ${originalArgs.caseNumber}` : ''}
+${originalArgs.legalArticle ? `- Правна разпоредба: ${originalArgs.legalArticle}` : ''}
+- Колегия: ${originalArgs.chamber === 'civil'
+        ? 'Гражданска'
+        : originalArgs.chamber === 'criminal'
+          ? 'Наказателна'
+          : originalArgs.chamber === 'commercial'
+            ? 'Търговска'
+            : 'Всички'
+      }
+- Тип решение: ${originalArgs.decisionType === 'cassation'
+        ? 'Касационно'
+        : originalArgs.decisionType === 'interpretation'
+          ? 'Тълкувателно'
+          : originalArgs.decisionType === 'unification'
+            ? 'Обединително'
+            : 'Всички типове'
+      }
+${originalArgs.legalArea && originalArgs.legalArea !== 'any' ? `- Правна област: ${originalArgs.legalArea}` : ''}
+
+`;
+
+    const precedentNote = `\n\n**📋 Забележка за прецедентната стойност:**
+Решенията на Върховния касационен съд имат висока прецедентна стойност в българската правна система. Тълкувателните решения са задължителни за всички съдилища, а касационните решения създават важни правни прецеденти.
+
+**⚖️ Правна значимост:**
+- Касационни решения: Установяват единна съдебна практика
+- Тълкувателни решения: Задължителни за всички съдилища  
+- Обединителни решения: Решават противоречия в съдебната практика`;
+
+    const formattedResponse = supremeCourtHeader + searchParams + baseResponse + precedentNote;
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: formattedResponse,
         },
       ],
     };
