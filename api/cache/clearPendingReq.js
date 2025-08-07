@@ -1,5 +1,5 @@
 const { Time, CacheKeys } = require('librechat-data-provider');
-const { isEnabled } = require('~/server/utils');
+const { isEnabled } = require('../server/utils');
 const getLogStores = require('./getLogStores');
 
 const { USE_REDIS, LIMIT_CONCURRENT_MESSAGES } = process.env ?? {};

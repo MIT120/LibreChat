@@ -1,3 +1,6 @@
+const path = require('path');
+require('module-alias')({ base: path.resolve(__dirname, '..') });
+
 const mongoose = require('mongoose');
 const { createMethods } = require('@librechat/data-schemas');
 const methods = createMethods(mongoose);

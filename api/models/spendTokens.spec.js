@@ -3,7 +3,7 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const { spendTokens, spendStructuredTokens } = require('./spendTokens');
 const { createTransaction, createAutoRefillTransaction } = require('./Transaction');
 
-require('~/db/models');
+require('../db/models');
 
 // Mock the logger to prevent console output during tests
 jest.mock('~/config', () => ({

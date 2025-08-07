@@ -2,7 +2,7 @@ const { logger } = require('@librechat/data-schemas');
 const { createTempChatExpirationDate } = require('@librechat/api');
 const getCustomConfig = require('~/server/services/Config/getCustomConfig');
 const { getMessages, deleteMessages } = require('./Message');
-const { Conversation } = require('~/db/models');
+const { Conversation } = require('../db/models');
 
 /**
  * Searches for a conversation by conversationId and returns a lean document with only conversationId and user.

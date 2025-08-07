@@ -4,7 +4,7 @@ const { spendTokens, spendStructuredTokens } = require('./spendTokens');
 const { getBalanceConfig } = require('~/server/services/Config');
 const { getMultiplier, getCacheMultiplier } = require('./tx');
 const { createTransaction } = require('./Transaction');
-const { Balance } = require('~/db/models');
+const { Balance } = require('../db/models');
 
 // Mock the custom config module so we can control the balance flag.
 jest.mock('~/server/services/Config');

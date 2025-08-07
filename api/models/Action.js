@@ -1,4 +1,4 @@
-const { Action } = require('~/db/models');
+const { Action } = require('../db/models');
 
 /**
  * Update an action with new data without overwriting existing properties,

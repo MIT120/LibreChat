@@ -1,5 +1,5 @@
 const { logger } = require('@librechat/data-schemas');
-const { ConversationTag, Conversation } = require('~/db/models');
+const { ConversationTag, Conversation } = require('../db/models');
 
 /**
  * Retrieves all conversation tags for a user.
@@ -135,13 +135,13 @@ const adjustPositions = async (user, oldPosition, newPosition) => {
   const position =
     oldPosition < newPosition
       ? {
-          $gt: Math.min(oldPosition, newPosition),
-          $lte: Math.max(oldPosition, newPosition),
-        }
+        $gt: Math.min(oldPosition, newPosition),
+        $lte: Math.max(oldPosition, newPosition),
+      }
       : {
-          $gte: Math.min(oldPosition, newPosition),
-          $lt: Math.max(oldPosition, newPosition),
-        };
+        $gte: Math.min(oldPosition, newPosition),
+        $lt: Math.max(oldPosition, newPosition),
+      };
 
   await ConversationTag.updateMany(
     {

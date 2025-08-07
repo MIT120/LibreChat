@@ -136,14 +136,34 @@ export class ExportService {
         throw new Error('Unauthorized: You can only export your own books');
       }
 
-      // Fetch images for the book
-      const bookImages = this.imageService
-        ? await this.imageService.getBookImages(bookId, { status: 'approved' })
-        : [];
+      // Fetch images for the book (include all images regardless of status)
+      const bookImages = this.imageService ? await this.imageService.getBookImages(bookId) : [];
+
+      console.log(`📸 Export: Found ${bookImages.length} images for book ${bookId}`);
+      if (bookImages.length > 0) {
+        console.log(
+          '📸 Image details:',
+          bookImages.map((img) => ({
+            id: img._id,
+            chapterId: img.chapterId,
+            targetPageNumber: img.targetPageNumber,
+            placement: img.placement?.position,
+            url: img.url,
+            filename: img.filename,
+          })),
+        );
+      }
 
       // Organize images by chapter and page
       bookData.imagesByChapter = this.organizeImagesByChapter(bookImages);
       bookData.allImages = bookImages;
+
+      console.log(
+        `📸 Images organized by chapter:`,
+        Object.keys(bookData.imagesByChapter).map(
+          (chapterId) => `${chapterId}: ${bookData.imagesByChapter[chapterId].length} images`,
+        ),
+      );
 
       switch (format) {
         case 'pdf':
@@ -609,8 +629,8 @@ export class ExportService {
       );
 
       const downloadUrl = registration.success
-        ? `files/download/${bookData.authorId}/${registration.file.file_id}`
-        : `exports/${filename}`;
+        ? `/api/files/download/${bookData.authorId}/${registration.file.file_id}`
+        : `/exports/${filename}`;
 
       return {
         success: true,
@@ -880,6 +900,9 @@ export class ExportService {
 
         if (chapter.pages && chapter.pages.length > 0) {
           const chapterImages = bookData.imagesByChapter[chapter._id] || [];
+          console.log(
+            `📸 HTML Export - Chapter ${chapter._id}: ${chapterImages.length} images available`,
+          );
 
           chapter.pages.forEach((page) => {
             // Add images before page
@@ -954,8 +977,8 @@ export class ExportService {
       );
 
       const downloadUrl = registration.success
-        ? `files/download/${bookData.authorId}/${registration.file.file_id}`
-        : `exports/${filename}`;
+        ? `/api/files/download/${bookData.authorId}/${registration.file.file_id}`
+        : `/exports/${filename}`;
 
       return {
         success: true,
@@ -1102,8 +1125,8 @@ export class ExportService {
       );
 
       const downloadUrl = registration.success
-        ? `files/download/${bookData.authorId}/${registration.file.file_id}`
-        : `exports/${filename}`;
+        ? `/api/files/download/${bookData.authorId}/${registration.file.file_id}`
+        : `/exports/${filename}`;
 
       return {
         success: true,

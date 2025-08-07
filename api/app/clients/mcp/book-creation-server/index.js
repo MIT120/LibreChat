@@ -16,9 +16,9 @@ import { BookService } from './services/BookService.js';
 import { ConfigService } from './services/ConfigService.js';
 import { ContentOrganizationService } from './services/ContentOrganizationService.js';
 import { ExportService } from './services/ExportService.js';
-import { InfluencerResearchService } from './services/InfluencerResearchService.js';
 import { GrammarStyleService } from './services/GrammarStyleService.js';
 import { ImageService } from './services/ImageService.js';
+import { InfluencerResearchService } from './services/InfluencerResearchService.js';
 import { ResearchService } from './services/ResearchService.js';
 import { WebScoutingService } from './services/WebScoutingService.js';
 import { WorldBuildingService } from './services/WorldBuildingService.js';
@@ -3638,7 +3638,7 @@ class BookCreationServer {
       const primaryMethod = downloadInfo.downloadMethods?.[0] || {};
       const downloadUrl =
         primaryMethod.url ||
-        `files/${exportData.userId}/${exportData.file_id}/${exportData.filename}`;
+        `/api/files/${exportData.userId}/${exportData.file_id}/${exportData.filename}`;
 
       // Determine export status and method used
       let exportMethod = 'standard';

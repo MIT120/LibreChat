@@ -12,7 +12,7 @@ const {
   agentParamSettings,
   validateSettingDefinitions,
 } = require('librechat-data-provider');
-const getLogStores = require('~/cache/getLogStores');
+const getLogStores = require('../../../cache/getLogStores');
 
 const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
 const defaultConfigPath = path.resolve(projectRoot, 'librechat.yaml');
@@ -144,7 +144,7 @@ function parseCustomParams(endpointName, customParams) {
   if (!validEndpoints.has(paramEndpoint)) {
     throw new Error(
       `defaultParamsEndpoint of "${endpointName}" endpoint is invalid. ` +
-        `Valid options are ${Array.from(validEndpoints).join(', ')}`,
+      `Valid options are ${Array.from(validEndpoints).join(', ')}`,
     );
   }
 
@@ -161,7 +161,7 @@ function parseCustomParams(endpointName, customParams) {
   if (paramKeys.some((key) => !validKeys.has(key))) {
     throw new Error(
       `paramDefinitions of "${endpointName}" endpoint contains invalid key(s). ` +
-        `Valid parameter keys are ${Array.from(validKeys).join(', ')}`,
+      `Valid parameter keys are ${Array.from(validKeys).join(', ')}`,
     );
   }
 

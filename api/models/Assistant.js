@@ -1,4 +1,4 @@
-const { Assistant } = require('~/db/models');
+const { Assistant } = require('../db/models');
 
 /**
  * Update an assistant with new data without overwriting existing properties,

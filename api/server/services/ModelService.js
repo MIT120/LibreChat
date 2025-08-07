@@ -4,10 +4,10 @@ const { logAxiosError } = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { EModelEndpoint, defaultModels, CacheKeys } = require('librechat-data-provider');
-const { inputSchema, extractBaseURL, processModelData } = require('~/utils');
-const { OllamaClient } = require('~/app/clients/OllamaClient');
-const { isUserProvided } = require('~/server/utils');
-const getLogStores = require('~/cache/getLogStores');
+const { inputSchema, extractBaseURL, processModelData } = require('../utils');
+const { OllamaClient } = require('../../app/clients/OllamaClient');
+const { isUserProvided } = require('../utils');
+const getLogStores = require('../../cache/getLogStores');
 
 /**
  * Splits a string by commas and trims each resulting value.

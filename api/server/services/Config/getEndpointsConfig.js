@@ -7,7 +7,7 @@ const {
 } = require('librechat-data-provider');
 const loadDefaultEndpointsConfig = require('./loadDefaultEConfig');
 const loadConfigEndpoints = require('./loadConfigEndpoints');
-const getLogStores = require('~/cache/getLogStores');
+const getLogStores = require('../../../cache/getLogStores');
 
 /**
  *

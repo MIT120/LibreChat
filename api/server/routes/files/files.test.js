@@ -65,7 +65,7 @@ describe('File Routes - Delete with Agent Access', () => {
     await mongoose.connect(mongoServer.getUri());
 
     // Initialize models
-    require('~/db/models');
+    require('../../../db/models');
 
     app = express();
     app.use(express.json());

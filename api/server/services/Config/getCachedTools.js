@@ -1,5 +1,5 @@
 const { CacheKeys } = require('librechat-data-provider');
-const getLogStores = require('~/cache/getLogStores');
+const getLogStores = require('../../../cache/getLogStores');
 
 /**
  * Cache key generators for different tool access patterns

@@ -1,5 +1,5 @@
 const { logger } = require('@librechat/data-schemas');
-const { Preset } = require('~/db/models');
+const { Preset } = require('../db/models');
 
 const getPreset = async (user, presetId) => {
   try {

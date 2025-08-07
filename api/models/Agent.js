@@ -11,10 +11,10 @@ const {
   removeAgentIdsFromProject,
   removeAgentFromAllProjects,
 } = require('./Project');
-const { getCachedTools } = require('~/server/services/Config');
-const getLogStores = require('~/cache/getLogStores');
+const { getCachedTools } = require('../server/services/Config');
+const getLogStores = require('../cache/getLogStores');
 const { getActions } = require('./Action');
-const { Agent } = require('~/db/models');
+const { Agent } = require('../db/models');
 
 /**
  * Create an agent with the provided data.

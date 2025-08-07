@@ -2,7 +2,7 @@ const { logger } = require('@librechat/data-schemas');
 const { EToolResources, FileContext, Constants } = require('librechat-data-provider');
 const { getProjectByName } = require('./Project');
 const { getAgent } = require('./Agent');
-const { File } = require('~/db/models');
+const { File } = require('../db/models');
 
 /**
  * Finds a file by its file_id with additional query options.

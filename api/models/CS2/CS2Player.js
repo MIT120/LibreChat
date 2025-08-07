@@ -1,4 +1,4 @@
-const { CS2Player } = require('~/db/models');
+const { CS2Player } = require('../../db/models');
 
 /**
  * Create a new CS2 player record

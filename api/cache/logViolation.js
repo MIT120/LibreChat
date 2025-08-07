@@ -1,4 +1,4 @@
-const { isEnabled } = require('~/server/utils');
+const { isEnabled } = require('../server/utils');
 const { ViolationTypes } = require('librechat-data-provider');
 const getLogStores = require('./getLogStores');
 const banViolation = require('./banViolation');

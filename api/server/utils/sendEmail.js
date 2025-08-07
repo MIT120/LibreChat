@@ -6,7 +6,7 @@ const nodemailer = require('nodemailer');
 const handlebars = require('handlebars');
 const { logAxiosError } = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
-const { isEnabled } = require('~/server/utils/handleText');
+const { isEnabled } = require('./handleText');
 
 /**
  * Sends an email using Mailgun API.

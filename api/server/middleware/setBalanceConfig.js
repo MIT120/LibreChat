@@ -1,6 +1,6 @@
 const { logger } = require('@librechat/data-schemas');
 const { getBalanceConfig } = require('~/server/services/Config');
-const { Balance } = require('~/db/models');
+const { Balance } = require('../../db/models');
 
 /**
  * Middleware to synchronize user balance settings with current balance configuration.

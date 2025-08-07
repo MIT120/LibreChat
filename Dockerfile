@@ -25,11 +25,15 @@ RUN \
     touch .env ; \
     # Create directories for the volumes to inherit the correct permissions
     mkdir -p /app/client/public/images /app/api/logs /app/exports/images ; \
-    # Fix npm cache permissions
-    mkdir -p /app/.npm && npm config set cache /app/.npm ; \
+    # Fix npm cache permissions and set npm cache directory
+    mkdir -p /app/.npm && chown -R node:node /app/.npm ; \
+    npm config set cache /app/.npm ; \
     npm config set fetch-retry-maxtimeout 600000 ; \
     npm config set fetch-retries 5 ; \
     npm config set fetch-retry-mintimeout 15000 ; \
+    # Set proper npm global directory to avoid permission issues
+    npm config set prefix /app/.npm-global ; \
+    mkdir -p /app/.npm-global && chown -R node:node /app/.npm-global ; \
     npm install --no-audit; \
     # React client build
     NODE_OPTIONS="--max-old-space-size=2048" npm run frontend; \

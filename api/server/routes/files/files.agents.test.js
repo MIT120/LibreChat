@@ -66,7 +66,7 @@ describe('File Routes - Agent Files Endpoint', () => {
     await mongoose.connect(mongoServer.getUri());
 
     // Initialize models
-    require('~/db/models');
+    require('../../../db/models');
 
     app = express();
     app.use(express.json());

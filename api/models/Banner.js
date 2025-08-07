@@ -1,5 +1,5 @@
 const { logger } = require('@librechat/data-schemas');
-const { Banner } = require('~/db/models');
+const { Banner } = require('../db/models');
 
 /**
  * Retrieves the current active banner.

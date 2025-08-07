@@ -7,7 +7,7 @@ const {
   removeGroupIdsFromProject,
   removeGroupFromAllProjects,
 } = require('./Project');
-const { PromptGroup, Prompt } = require('~/db/models');
+const { PromptGroup, Prompt } = require('../db/models');
 const { escapeRegExp } = require('~/server/utils');
 
 /**

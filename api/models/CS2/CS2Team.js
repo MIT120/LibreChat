@@ -1,4 +1,4 @@
-const { CS2Team } = require('~/db/models');
+const { CS2Team } = require('../../db/models');
 
 /**
  * Create a new CS2 team record

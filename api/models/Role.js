@@ -7,8 +7,8 @@ const {
   removeNullishValues,
 } = require('librechat-data-provider');
 const { logger } = require('@librechat/data-schemas');
-const getLogStores = require('~/cache/getLogStores');
-const { Role } = require('~/db/models');
+const getLogStores = require('../cache/getLogStores');
+const { Role } = require('../db/models');
 
 /**
  * Retrieve a role by name and convert the found role document to a plain object.

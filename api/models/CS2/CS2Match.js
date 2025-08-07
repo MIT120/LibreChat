@@ -1,4 +1,4 @@
-const { CS2Match } = require('~/db/models');
+const { CS2Match } = require('../../db/models');
 
 /**
  * Create a new CS2 match record

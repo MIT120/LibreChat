@@ -1,4 +1,4 @@
-const { ToolCall } = require('~/db/models');
+const { ToolCall } = require('../db/models');
 
 /**
  * Create a new tool call

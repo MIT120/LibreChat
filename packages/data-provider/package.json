@@ -3,17 +3,17 @@
   "version": "0.7.902",
   "description": "data services for librechat apps",
   "main": "dist/index.js",
-  "module": "dist/index.es.js",
+  "module": "dist/index.es.mjs",
   "types": "./dist/types/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.es.js",
       "require": "./dist/index.js",
+      "import": "./dist/index.es.mjs",
       "types": "./dist/types/index.d.ts"
     },
     "./react-query": {
-      "import": "./dist/react-query/index.es.js",
       "require": "./dist/react-query/index.js",
+      "import": "./dist/react-query/index.es.mjs",
       "types": "./dist/types/react-query/index.d.ts"
     }
   },

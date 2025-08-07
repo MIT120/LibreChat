@@ -3,7 +3,7 @@ const { ViolationTypes } = require('librechat-data-provider');
 const { createAutoRefillTransaction } = require('./Transaction');
 const { logViolation } = require('~/cache');
 const { getMultiplier } = require('./tx');
-const { Balance } = require('~/db/models');
+const { Balance } = require('../db/models');
 
 function isInvalidDate(date) {
   return isNaN(date);
@@ -56,7 +56,7 @@ const checkBalanceRecord = async function ({
     if (
       isInvalidDate(lastRefillDate) ||
       now >=
-        addIntervalToDate(lastRefillDate, record.refillIntervalValue, record.refillIntervalUnit)
+      addIntervalToDate(lastRefillDate, record.refillIntervalValue, record.refillIntervalUnit)
     ) {
       try {
         /** @type {{ rate: number, user: string, balance: number, transaction: import('@librechat/data-schemas').ITransaction}} */

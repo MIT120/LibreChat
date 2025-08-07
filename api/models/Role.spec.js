@@ -9,7 +9,7 @@ const {
 const { getRoleByName, updateAccessPermissions } = require('~/models/Role');
 const getLogStores = require('~/cache/getLogStores');
 const { initializeRoles } = require('~/models');
-const { Role } = require('~/db/models');
+const { Role } = require('../db/models');
 
 // Mock the cache
 jest.mock('~/cache/getLogStores', () =>
