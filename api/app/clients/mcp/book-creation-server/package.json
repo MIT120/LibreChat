@@ -2,13 +2,19 @@
     "name": "book-creation-server",
     "version": "1.0.0",
     "description": "MCP server for book creation and management",
-    "main": "index.js",
+    "main": "dist/index.js",
     "type": "module",
     "scripts": {
-        "start": "node index.js",
-        "dev": "node --watch index.js",
+        "build": "tsc",
+        "build:watch": "tsc --watch",
+        "start": "node dist/index.js",
+        "start:js": "node index.js",
+        "dev": "tsc && node --watch dist/index.js",
+        "dev:ts": "tsc --watch & node --watch dist/index.js",
         "test": "jest",
-        "test:watch": "jest --watch"
+        "test:watch": "jest --watch",
+        "clean": "rm -rf dist",
+        "type-check": "tsc --noEmit"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^0.6.0",
@@ -24,8 +30,12 @@
     "devDependencies": {
         "@types/jest": "^29.5.0",
         "@types/node": "^20.0.0",
+        "@types/uuid": "^10.0.0",
+        "@types/pdfkit": "^0.12.0",
         "jest": "^29.5.0",
-        "ts-jest": "^29.1.0"
+        "ts-jest": "^29.1.0",
+        "ts-node": "^10.9.0",
+        "typescript": "^5.3.0"
     },
     "engines": {
         "node": ">=18.0.0"
