@@ -1,0 +1,39 @@
+{
+  "name": "mcp-legal-bulgaria",
+  "version": "1.0.0",
+  "description": "MCP server for Bulgarian legal assistance and case law research",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "test": "jest",
+    "dev": "node --inspect index.js"
+  },
+  "keywords": [
+    "mcp",
+    "legal",
+    "bulgaria",
+    "case-law",
+    "research",
+    "lawyers"
+  ],
+  "author": "LibreChat Legal Team",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.3",
+    "cheerio": "^1.0.0",
+    "node-fetch": "^3.3.2",
+    "pdfjs-dist": "^3.11.174",
+    "mongoose": "^8.0.0",
+    "date-fns": "^2.30.0",
+    "natural": "^6.12.0",
+    "iconv-lite": "^0.6.3"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@jest/globals": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
