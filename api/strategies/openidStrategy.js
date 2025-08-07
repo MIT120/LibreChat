@@ -1,17 +1,30 @@
 const undici = require('undici');
 const fetch = require('node-fetch');
 const passport = require('passport');
-const client = require('openid-client');
 const jwtDecode = require('jsonwebtoken/decode');
 const { CacheKeys } = require('librechat-data-provider');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { hashToken, logger } = require('@librechat/data-schemas');
-const { Strategy: OpenIDStrategy } = require('openid-client/passport');
 const { isEnabled, safeStringify, logHeaders } = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { findUser, createUser, updateUser } = require('~/models');
 const { getBalanceConfig } = require('~/server/services/Config');
 const getLogStores = require('~/cache/getLogStores');
+
+// Dynamic imports for ES modules
+let client;
+let OpenIDStrategy;
+
+/**
+ * Initialize ES modules dynamically
+ */
+async function initializeESModules() {
+  if (!client || !OpenIDStrategy) {
+    const openidClient = await import('openid-client');
+    client = openidClient;
+    OpenIDStrategy = openidClient.Strategy;
+  }
+}
 
 /**
  * @typedef {import('openid-client').ClientMetadata} ClientMetadata
@@ -93,20 +106,6 @@ let openidConfig = null;
 
 //overload currenturl function because of express version 4 buggy req.host doesn't include port
 //More info https://github.com/panva/openid-client/pull/713
-
-class CustomOpenIDStrategy extends OpenIDStrategy {
-  currentUrl(req) {
-    const hostAndProtocol = process.env.DOMAIN_SERVER;
-    return new URL(`${hostAndProtocol}${req.originalUrl ?? req.url}`);
-  }
-  authorizationRequestParams(req, options) {
-    const params = super.authorizationRequestParams(req, options);
-    if (options?.state && !params.has('state')) {
-      params.set('state', options.state);
-    }
-    return params;
-  }
-}
 
 /**
  * Exchange the access token for a new access token using the on-behalf-of flow if required.
@@ -268,6 +267,9 @@ function convertToUsername(input, defaultValue = '') {
  */
 async function setupOpenId() {
   try {
+    // Initialize ES modules
+    await initializeESModules();
+
     /** @type {ClientMetadata} */
     const clientMetadata = {
       client_id: process.env.OPENID_CLIENT_ID,
@@ -289,6 +291,22 @@ async function setupOpenId() {
     const requiredRoleParameterPath = process.env.OPENID_REQUIRED_ROLE_PARAMETER_PATH;
     const requiredRoleTokenKind = process.env.OPENID_REQUIRED_ROLE_TOKEN_KIND;
     const usePKCE = isEnabled(process.env.OPENID_USE_PKCE);
+
+    // Create CustomOpenIDStrategy class that extends the dynamically imported OpenIDStrategy
+    class CustomOpenIDStrategy extends OpenIDStrategy {
+      currentUrl(req) {
+        const hostAndProtocol = process.env.DOMAIN_SERVER;
+        return new URL(`${hostAndProtocol}${req.originalUrl ?? req.url}`);
+      }
+      authorizationRequestParams(req, options) {
+        const params = super.authorizationRequestParams(req, options);
+        if (options?.state && !params.has('state')) {
+          params.set('state', options.state);
+        }
+        return params;
+      }
+    }
+
     const openidLogin = new CustomOpenIDStrategy(
       {
         config: openidConfig,
@@ -307,8 +325,7 @@ async function setupOpenId() {
           if (!user) {
             user = await findUser({ email: claims.email });
             logger.info(
-              `[openidStrategy] user ${user ? 'found' : 'not found'} with email: ${
-                claims.email
+              `[openidStrategy] user ${user ? 'found' : 'not found'} with email: ${claims.email
               } for openidId: ${claims.sub}`,
             );
           }
