@@ -13,7 +13,9 @@ import { BookService } from './services/BookService.js';
 import { ConfigService } from './services/ConfigService.js';
 import { ContentOrganizationService } from './services/ContentOrganizationService.js';
 import { ExportService } from './services/ExportService.js';
+import { InfluencerResearchService } from './services/InfluencerResearchService.js';
 import { ResearchService } from './services/ResearchService.js';
+import { WebScoutingService } from './services/WebScoutingService.js';
 import { WorldBuildingService } from './services/WorldBuildingService.js';
 import { WritingAnalyticsService } from './services/WritingAnalyticsService.js';
 
@@ -39,6 +41,8 @@ class BookCreationServer {
     this.worldBuildingService = new WorldBuildingService();
     this.writingAnalyticsService = new WritingAnalyticsService();
     this.contentOrganizationService = new ContentOrganizationService();
+    this.influencerResearchService = new InfluencerResearchService();
+    this.webScoutingService = new WebScoutingService();
 
     this.setupToolHandlers();
     this.setupErrorHandling();
@@ -1117,6 +1121,734 @@ class BookCreationServer {
             },
           },
           {
+            name: 'initiate_influencer_research',
+            description:
+              'Initiates comprehensive research for an influencer profile to gather data for autobiography creation. This starts the research phase for collecting biographical, professional, and social media data.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                primaryName: {
+                  type: 'string',
+                  description: 'Primary name or handle of the influencer',
+                  minLength: 1,
+                  maxLength: 200,
+                },
+                category: {
+                  type: 'string',
+                  enum: [
+                    'content_creator',
+                    'entrepreneur',
+                    'athlete',
+                    'musician',
+                    'actor',
+                    'author',
+                    'scientist',
+                    'politician',
+                    'activist',
+                    'chef',
+                    'fashion',
+                    'beauty',
+                    'gaming',
+                    'fitness',
+                    'tech',
+                    'education',
+                    'lifestyle',
+                    'other',
+                  ],
+                  description: 'Primary category/industry of the influencer',
+                },
+                bookId: {
+                  type: 'string',
+                  description: 'The unique identifier of the book this research is for',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author conducting the research',
+                },
+                priority: {
+                  type: 'string',
+                  enum: ['high', 'medium', 'low'],
+                  default: 'medium',
+                  description: 'Priority level for this research',
+                },
+                tags: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Tags to categorize this influencer research',
+                },
+                initialInfo: {
+                  type: 'object',
+                  description: 'Any initial information already known about the influencer',
+                  properties: {
+                    personalInfo: { type: 'object' },
+                    professionalInfo: { type: 'object' },
+                    socialMediaAccounts: { type: 'array' },
+                  },
+                },
+              },
+              required: ['primaryName', 'category', 'bookId', 'authorId'],
+            },
+          },
+          {
+            name: 'add_social_media_account',
+            description:
+              'Adds social media account data to an influencer profile including follower counts, engagement metrics, and account details.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                profileId: {
+                  type: 'string',
+                  description: 'The unique identifier of the influencer profile',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author for verification',
+                },
+                platform: {
+                  type: 'string',
+                  enum: [
+                    'twitter',
+                    'instagram',
+                    'youtube',
+                    'tiktok',
+                    'linkedin',
+                    'facebook',
+                    'twitch',
+                    'snapchat',
+                    'pinterest',
+                    'reddit',
+                    'discord',
+                    'clubhouse',
+                    'threads',
+                    'other',
+                  ],
+                  description: 'Social media platform name',
+                },
+                username: {
+                  type: 'string',
+                  description: 'Username on the platform',
+                },
+                handle: {
+                  type: 'string',
+                  description: 'Handle or @ username if different',
+                },
+                url: {
+                  type: 'string',
+                  description: 'Direct URL to the profile',
+                },
+                followerCount: {
+                  type: 'number',
+                  minimum: 0,
+                  description: 'Number of followers',
+                },
+                followingCount: {
+                  type: 'number',
+                  minimum: 0,
+                  description: 'Number of accounts following',
+                },
+                postCount: {
+                  type: 'number',
+                  minimum: 0,
+                  description: 'Total number of posts',
+                },
+                verificationStatus: {
+                  type: 'boolean',
+                  description: 'Whether the account is verified',
+                },
+                bio: {
+                  type: 'string',
+                  maxLength: 1000,
+                  description: 'Account bio/description',
+                },
+                engagementRate: {
+                  type: 'number',
+                  minimum: 0,
+                  maximum: 100,
+                  description: 'Average engagement rate percentage',
+                },
+              },
+              required: ['profileId', 'authorId', 'platform', 'username'],
+            },
+          },
+          {
+            name: 'add_career_milestone',
+            description:
+              "Adds a significant career milestone, achievement, or event to an influencer's timeline.",
+            inputSchema: {
+              type: 'object',
+              properties: {
+                profileId: {
+                  type: 'string',
+                  description: 'The unique identifier of the influencer profile',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author for verification',
+                },
+                year: {
+                  type: 'number',
+                  description: 'Year when the milestone occurred',
+                },
+                event: {
+                  type: 'string',
+                  maxLength: 500,
+                  description: 'Brief description of the milestone/event',
+                },
+                description: {
+                  type: 'string',
+                  maxLength: 2000,
+                  description: 'Detailed description of the milestone',
+                },
+                source: {
+                  type: 'string',
+                  description: 'Source of this information',
+                },
+                sourceUrl: {
+                  type: 'string',
+                  description: 'URL of the source',
+                },
+                significance: {
+                  type: 'string',
+                  enum: ['high', 'medium', 'low'],
+                  default: 'medium',
+                  description: 'Significance level of this milestone',
+                },
+                category: {
+                  type: 'string',
+                  enum: [
+                    'award',
+                    'achievement',
+                    'collaboration',
+                    'controversy',
+                    'career_change',
+                    'breakthrough',
+                    'milestone',
+                    'personal',
+                    'other',
+                  ],
+                  default: 'other',
+                  description: 'Category of the milestone',
+                },
+              },
+              required: ['profileId', 'authorId', 'year', 'event'],
+            },
+          },
+          {
+            name: 'update_personal_info',
+            description:
+              'Updates personal information for an influencer including demographics, education, family details, and background.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                profileId: {
+                  type: 'string',
+                  description: 'The unique identifier of the influencer profile',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author for verification',
+                },
+                fullName: {
+                  type: 'string',
+                  maxLength: 200,
+                  description: 'Full legal name',
+                },
+                knownAs: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Other names, nicknames, or stage names',
+                },
+                dateOfBirth: {
+                  type: 'string',
+                  format: 'date',
+                  description: 'Date of birth',
+                },
+                birthPlace: {
+                  type: 'string',
+                  maxLength: 200,
+                  description: 'Place of birth',
+                },
+                nationality: {
+                  type: 'string',
+                  maxLength: 100,
+                  description: 'Nationality',
+                },
+                currentLocation: {
+                  type: 'string',
+                  maxLength: 200,
+                  description: 'Current location/residence',
+                },
+                education: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      institution: { type: 'string' },
+                      degree: { type: 'string' },
+                      field: { type: 'string' },
+                      year: { type: 'number' },
+                    },
+                  },
+                  description: 'Education background',
+                },
+                family: {
+                  type: 'object',
+                  properties: {
+                    spouse: { type: 'string' },
+                    children: { type: 'number' },
+                    siblings: { type: 'array', items: { type: 'string' } },
+                    parents: { type: 'array', items: { type: 'string' } },
+                  },
+                  description: 'Family information',
+                },
+                languages: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Languages spoken',
+                },
+                interests: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Personal interests and hobbies',
+                },
+                skills: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Skills and competencies',
+                },
+              },
+              required: ['profileId', 'authorId'],
+            },
+          },
+          {
+            name: 'update_professional_info',
+            description:
+              'Updates professional information including occupation, companies, achievements, and business ventures.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                profileId: {
+                  type: 'string',
+                  description: 'The unique identifier of the influencer profile',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author for verification',
+                },
+                primaryOccupation: {
+                  type: 'string',
+                  maxLength: 200,
+                  description: 'Primary occupation or job title',
+                },
+                industry: {
+                  type: 'string',
+                  maxLength: 100,
+                  description: 'Industry or sector',
+                },
+                specializations: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Areas of specialization',
+                },
+                companies: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      role: { type: 'string' },
+                      startDate: { type: 'string', format: 'date' },
+                      endDate: { type: 'string', format: 'date' },
+                      description: { type: 'string' },
+                    },
+                  },
+                  description: 'Work history and companies',
+                },
+                achievements: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      title: { type: 'string' },
+                      year: { type: 'number' },
+                      description: { type: 'string' },
+                      source: { type: 'string' },
+                    },
+                  },
+                  description: 'Professional achievements and awards',
+                },
+                collaborations: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      type: { type: 'string' },
+                      description: { type: 'string' },
+                      year: { type: 'number' },
+                    },
+                  },
+                  description: 'Notable collaborations',
+                },
+                netWorth: {
+                  type: 'object',
+                  properties: {
+                    estimated: { type: 'number' },
+                    currency: { type: 'string' },
+                    year: { type: 'number' },
+                    source: { type: 'string' },
+                  },
+                  description: 'Estimated net worth information',
+                },
+                businessVentures: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      type: { type: 'string' },
+                      description: { type: 'string' },
+                      startDate: { type: 'string', format: 'date' },
+                      status: { type: 'string' },
+                    },
+                  },
+                  description: 'Business ventures and investments',
+                },
+              },
+              required: ['profileId', 'authorId'],
+            },
+          },
+          {
+            name: 'add_external_source',
+            description:
+              'Adds external sources and references for influencer research including news articles, interviews, and documentation.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                profileId: {
+                  type: 'string',
+                  description: 'The unique identifier of the influencer profile',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author for verification',
+                },
+                type: {
+                  type: 'string',
+                  description: 'Type of source (article, interview, video, etc.)',
+                },
+                url: {
+                  type: 'string',
+                  description: 'URL of the source',
+                },
+                title: {
+                  type: 'string',
+                  description: 'Title of the source material',
+                },
+                description: {
+                  type: 'string',
+                  description: 'Description or summary of the source content',
+                },
+                reliability: {
+                  type: 'string',
+                  enum: ['high', 'medium', 'low'],
+                  default: 'medium',
+                  description: 'Reliability rating of the source',
+                },
+              },
+              required: ['profileId', 'authorId', 'type', 'url', 'title'],
+            },
+          },
+          {
+            name: 'get_influencer_profile',
+            description:
+              'Retrieves a complete influencer profile with all research data including personal info, social media, career milestones, and sources.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                profileId: {
+                  type: 'string',
+                  description: 'The unique identifier of the influencer profile',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author for verification',
+                },
+              },
+              required: ['profileId', 'authorId'],
+            },
+          },
+          {
+            name: 'list_influencer_profiles',
+            description:
+              'Lists all influencer profiles for a book with filtering and sorting options.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The unique identifier of the book',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author',
+                },
+                category: {
+                  type: 'string',
+                  enum: [
+                    'content_creator',
+                    'entrepreneur',
+                    'athlete',
+                    'musician',
+                    'actor',
+                    'author',
+                    'scientist',
+                    'politician',
+                    'activist',
+                    'chef',
+                    'fashion',
+                    'beauty',
+                    'gaming',
+                    'fitness',
+                    'tech',
+                    'education',
+                    'lifestyle',
+                    'other',
+                  ],
+                  description: 'Filter by influencer category',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['research_started', 'data_gathering', 'verification', 'completed'],
+                  description: 'Filter by research status',
+                },
+                tags: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Filter by tags',
+                },
+                limit: {
+                  type: 'number',
+                  default: 50,
+                  minimum: 1,
+                  maximum: 100,
+                  description: 'Maximum number of profiles to return',
+                },
+                offset: {
+                  type: 'number',
+                  default: 0,
+                  minimum: 0,
+                  description: 'Number of profiles to skip for pagination',
+                },
+                sortBy: {
+                  type: 'string',
+                  enum: ['lastUpdated', 'completion', 'name'],
+                  default: 'lastUpdated',
+                  description: 'Field to sort by',
+                },
+                sortOrder: {
+                  type: 'string',
+                  enum: ['asc', 'desc'],
+                  default: 'desc',
+                  description: 'Sort order',
+                },
+              },
+              required: ['bookId', 'authorId'],
+            },
+          },
+          {
+            name: 'generate_research_summary',
+            description:
+              'Generates a comprehensive research summary for an influencer including metrics, completion status, and data gaps.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                profileId: {
+                  type: 'string',
+                  description: 'The unique identifier of the influencer profile',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author for verification',
+                },
+              },
+              required: ['profileId', 'authorId'],
+            },
+          },
+          {
+            name: 'get_influencer_research_statistics',
+            description:
+              'Provides comprehensive statistics for all influencer research in a book including completion rates and data metrics.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The unique identifier of the book',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author',
+                },
+              },
+              required: ['bookId', 'authorId'],
+            },
+          },
+          {
+            name: 'generate_research_plan',
+            description:
+              'Generates a comprehensive research plan for gathering influencer data from the internet, including search strategies, recommended sources, and research tips.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                profileId: {
+                  type: 'string',
+                  description: 'The unique identifier of the influencer profile',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'ID of the author for verification',
+                },
+              },
+              required: ['profileId', 'authorId'],
+            },
+          },
+          {
+            name: 'get_platform_research_guide',
+            description:
+              'Provides platform-specific research guidance for gathering data from social media platforms.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                platform: {
+                  type: 'string',
+                  enum: [
+                    'twitter',
+                    'instagram',
+                    'youtube',
+                    'tiktok',
+                    'linkedin',
+                    'facebook',
+                    'twitch',
+                    'snapchat',
+                    'pinterest',
+                    'reddit',
+                    'discord',
+                    'clubhouse',
+                    'threads',
+                    'other',
+                  ],
+                  description: 'Social media platform name',
+                },
+              },
+              required: ['platform'],
+            },
+          },
+          {
+            name: 'generate_search_queries',
+            description:
+              'Generates targeted search queries for finding specific types of information about an influencer.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                influencerName: {
+                  type: 'string',
+                  description: 'Name of the influencer to research',
+                },
+                category: {
+                  type: 'string',
+                  enum: [
+                    'content_creator',
+                    'entrepreneur',
+                    'athlete',
+                    'musician',
+                    'actor',
+                    'author',
+                    'scientist',
+                    'politician',
+                    'activist',
+                    'chef',
+                    'fashion',
+                    'beauty',
+                    'gaming',
+                    'fitness',
+                    'tech',
+                    'education',
+                    'lifestyle',
+                    'other',
+                  ],
+                  description: 'Category of the influencer',
+                },
+                researchFocus: {
+                  type: 'string',
+                  enum: [
+                    'biographical',
+                    'professional',
+                    'recent',
+                    'media',
+                    'social',
+                    'controversies',
+                  ],
+                  description: 'Specific focus area for the search queries',
+                },
+              },
+              required: ['influencerName', 'category'],
+            },
+          },
+          {
+            name: 'get_verification_checklist',
+            description:
+              'Provides a comprehensive checklist for verifying and fact-checking research data.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                dataType: {
+                  type: 'string',
+                  enum: [
+                    'biographical',
+                    'professional',
+                    'social_media',
+                    'achievements',
+                    'controversies',
+                  ],
+                  description: 'Type of data to verify',
+                },
+              },
+              required: ['dataType'],
+            },
+          },
+          {
+            name: 'get_ethical_guidelines',
+            description:
+              'Provides ethical guidelines and best practices for conducting influencer research.',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+          {
+            name: 'generate_research_timeline',
+            description:
+              'Generates a structured timeline for conducting influencer research with specific milestones and tasks.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                urgency: {
+                  type: 'string',
+                  enum: ['quick', 'normal', 'comprehensive'],
+                  default: 'normal',
+                  description: 'Urgency level of the research',
+                },
+                comprehensiveness: {
+                  type: 'string',
+                  enum: ['quick', 'standard', 'comprehensive'],
+                  default: 'standard',
+                  description: 'Level of detail required',
+                },
+              },
+            },
+          },
+          {
             name: 'record_writing_session',
             description:
               'Records a writing session with word count, time spent, productivity metrics, and goals. Essential for tracking daily writing progress.',
@@ -1618,6 +2350,38 @@ class BookCreationServer {
             return await this.handleGenerateBibliography(args);
           case 'get_research_statistics':
             return await this.handleGetResearchStatistics(args);
+          case 'initiate_influencer_research':
+            return await this.handleInitiateInfluencerResearch(args);
+          case 'add_social_media_account':
+            return await this.handleAddSocialMediaAccount(args);
+          case 'add_career_milestone':
+            return await this.handleAddCareerMilestone(args);
+          case 'update_personal_info':
+            return await this.handleUpdatePersonalInfo(args);
+          case 'update_professional_info':
+            return await this.handleUpdateProfessionalInfo(args);
+          case 'add_external_source':
+            return await this.handleAddExternalSource(args);
+          case 'get_influencer_profile':
+            return await this.handleGetInfluencerProfile(args);
+          case 'list_influencer_profiles':
+            return await this.handleListInfluencerProfiles(args);
+          case 'generate_research_summary':
+            return await this.handleGenerateResearchSummary(args);
+          case 'get_influencer_research_statistics':
+            return await this.handleGetInfluencerResearchStatistics(args);
+          case 'generate_research_plan':
+            return await this.handleGenerateResearchPlan(args);
+          case 'get_platform_research_guide':
+            return await this.handleGetPlatformResearchGuide(args);
+          case 'generate_search_queries':
+            return await this.handleGenerateSearchQueries(args);
+          case 'get_verification_checklist':
+            return await this.handleGetVerificationChecklist(args);
+          case 'get_ethical_guidelines':
+            return await this.handleGetEthicalGuidelines(args);
+          case 'generate_research_timeline':
+            return await this.handleGenerateResearchTimeline(args);
           case 'record_writing_session':
             return await this.handleRecordWritingSession(args);
           case 'get_writing_statistics':
@@ -2104,6 +2868,230 @@ class BookCreationServer {
         {
           type: 'text',
           text: JSON.stringify(stats, null, 2),
+        },
+      ],
+    };
+  }
+
+  // Influencer Research Handlers
+  async handleInitiateInfluencerResearch(args) {
+    const profile = await this.influencerResearchService.initiateInfluencerResearch(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Successfully initiated influencer research for "${profile.primaryName}" (${profile.category}). Profile ID: ${profile._id}. Research status: ${profile.status}. You can now start adding social media accounts, career milestones, and other biographical data.`,
+        },
+      ],
+    };
+  }
+
+  async handleAddSocialMediaAccount(args) {
+    await this.influencerResearchService.addSocialMediaAccount(args.profileId, args, args.authorId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Successfully added ${args.platform} account (@${args.username}) to influencer profile. ${args.followerCount ? `Followers: ${args.followerCount.toLocaleString()}` : ''} ${args.verificationStatus ? 'Verified account.' : ''}`,
+        },
+      ],
+    };
+  }
+
+  async handleAddCareerMilestone(args) {
+    await this.influencerResearchService.addCareerMilestone(args.profileId, args, args.authorId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Successfully added career milestone: "${args.event}" (${args.year}). Significance: ${args.significance}, Category: ${args.category}. ${args.source ? `Source: ${args.source}` : ''}`,
+        },
+      ],
+    };
+  }
+
+  async handleUpdatePersonalInfo(args) {
+    const { profileId, authorId, ...personalData } = args;
+    const profile = await this.influencerResearchService.updatePersonalInfo(
+      profileId,
+      personalData,
+      authorId,
+    );
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Successfully updated personal information for "${profile.primaryName}". Research completion: ${profile.researchMetadata.completionPercentage}%`,
+        },
+      ],
+    };
+  }
+
+  async handleUpdateProfessionalInfo(args) {
+    const { profileId, authorId, ...professionalData } = args;
+    const profile = await this.influencerResearchService.updateProfessionalInfo(
+      profileId,
+      professionalData,
+      authorId,
+    );
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Successfully updated professional information for "${profile.primaryName}". Primary occupation: ${profile.professionalInfo.primaryOccupation || 'Not specified'}`,
+        },
+      ],
+    };
+  }
+
+  async handleAddExternalSource(args) {
+    const { profileId, authorId, ...sourceData } = args;
+    const profile = await this.influencerResearchService.addExternalSource(
+      profileId,
+      sourceData,
+      authorId,
+    );
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Successfully added external source: "${sourceData.title}" (${sourceData.type}). Total sources: ${profile.externalSources.length}, Reliability: ${sourceData.reliability}`,
+        },
+      ],
+    };
+  }
+
+  async handleGetInfluencerProfile(args) {
+    const profile = await this.influencerResearchService.getInfluencerProfile(
+      args.profileId,
+      args.authorId,
+    );
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(profile, null, 2),
+        },
+      ],
+    };
+  }
+
+  async handleListInfluencerProfiles(args) {
+    const result = await this.influencerResearchService.listInfluencerProfiles(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  }
+
+  async handleGenerateResearchSummary(args) {
+    const summary = await this.influencerResearchService.generateResearchSummary(
+      args.profileId,
+      args.authorId,
+    );
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(summary, null, 2),
+        },
+      ],
+    };
+  }
+
+  async handleGetInfluencerResearchStatistics(args) {
+    const stats = await this.influencerResearchService.getInfluencerResearchStatistics(
+      args.bookId,
+      args.authorId,
+    );
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(stats, null, 2),
+        },
+      ],
+    };
+  }
+
+  // Web Scouting Handlers
+  async handleGenerateResearchPlan(args) {
+    const profile = await this.influencerResearchService.getInfluencerProfile(
+      args.profileId,
+      args.authorId,
+    );
+    const plan = await this.webScoutingService.generateResearchPlan(profile);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(plan, null, 2),
+        },
+      ],
+    };
+  }
+
+  async handleGetPlatformResearchGuide(args) {
+    const guide = this.webScoutingService.getPlatformResearchGuide(args.platform);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(guide, null, 2),
+        },
+      ],
+    };
+  }
+
+  async handleGenerateSearchQueries(args) {
+    const queries = this.webScoutingService.generateSearchQueries(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(queries, null, 2),
+        },
+      ],
+    };
+  }
+
+  async handleGetVerificationChecklist(args) {
+    const checklist = this.webScoutingService.generateVerificationChecklist({
+      type: args.dataType,
+    });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(checklist, null, 2),
+        },
+      ],
+    };
+  }
+
+  async handleGetEthicalGuidelines() {
+    const guidelines = this.webScoutingService.getEthicalGuidelines();
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(guidelines, null, 2),
+        },
+      ],
+    };
+  }
+
+  async handleGenerateResearchTimeline(args) {
+    const timeline = this.webScoutingService.generateResearchTimeline(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(timeline, null, 2),
         },
       ],
     };
