@@ -341,12 +341,11 @@ Generate the content now:`;
 - Target Word Count: ${wordCount} words
 ${continuePrevious ? `- Continue from previous content: Yes` : '- Standalone page content'}
 
-${
-  continuePrevious && previousContent
-    ? `**Previous Content to Continue From:**
+${continuePrevious && previousContent
+        ? `**Previous Content to Continue From:**
 ${previousContent.slice(-500)}...`
-    : ''
-}
+        : ''
+      }
 
 Please generate content that:
 1. Matches the book's established writing style
@@ -415,19 +414,17 @@ Provide the improved version:`;
 - Target Audience: ${book.targetAudience}
 - Writing Style: ${book.writingStyle.tone} tone, ${book.writingStyle.voice} voice
 
-${
-  existingChapters.length > 0
-    ? `**Existing Chapters:**
+${existingChapters.length > 0
+        ? `**Existing Chapters:**
 ${existingChapters.map((ch) => `Chapter ${ch.number}: ${ch.title} - ${ch.description || 'No description'}`).join('\n')}`
-    : ''
-}
+        : ''
+      }
 
-${
-  previousChapterSummary
-    ? `**Previous Chapter Summary:**
+${previousChapterSummary
+        ? `**Previous Chapter Summary:**
 ${previousChapterSummary}`
-    : ''
-}
+        : ''
+      }
 
 **New Chapter Requirements:**
 - Chapter ${newChapter.number}: "${newChapter.title}"

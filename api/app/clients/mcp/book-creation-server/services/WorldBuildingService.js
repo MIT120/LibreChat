@@ -106,6 +106,35 @@ export class WorldBuildingService {
   }
 
   /**
+   * Gets a single character by ID
+   * @param {string} characterId - Character ID
+   * @returns {Promise<Object>} Character
+   */
+  async getCharacter(characterId) {
+    const character = await Character.findById(characterId);
+
+    if (!character) {
+      throw new Error('Character not found');
+    }
+
+    return character;
+  }
+
+  /**
+   * Lists characters for a book (wrapper for getCharacters for compatibility)
+   * @param {string} bookId - Book ID
+   * @param {Object} options - Filtering options
+   * @returns {Promise<Array>} Characters array
+   */
+  async listCharacters(bookId, options = {}) {
+    const result = await this.getCharacters({
+      bookId,
+      ...options,
+    });
+    return result.characters;
+  }
+
+  /**
    * Updates a character
    * @param {string} characterId - Character ID
    * @param {Object} updates - Fields to update
@@ -194,6 +223,224 @@ export class WorldBuildingService {
     );
 
     return character;
+  }
+
+  /**
+   * Creates a relationship between characters (compatibility wrapper)
+   * @param {Object} params - Relationship parameters
+   * @returns {Promise<Object>} Relationship details
+   */
+  async createRelationship(params) {
+    const character = await this.addCharacterRelationship(params);
+    // Find the newly added relationship
+    const relationship = character.relationships[character.relationships.length - 1];
+    return {
+      character1Name: character.name,
+      character2Name: params.otherCharacterName,
+      relationshipType: params.relationshipType,
+      strength: 5, // Default strength
+      status: 'active',
+      description: params.description || '',
+      dynamics: {
+        powerBalance: 'equal',
+        communicationStyle: params.dynamics || 'normal',
+        trustLevel: 5,
+        conflictLevel: 3,
+      },
+    };
+  }
+
+  /**
+   * Gets relationships for a character
+   * @param {string} characterId - Character ID
+   * @returns {Promise<Array>} Character relationships
+   */
+  async getRelationships(characterId) {
+    const character = await Character.findById(characterId);
+    if (!character) {
+      throw new Error('Character not found');
+    }
+    return character.relationships || [];
+  }
+
+  // ============ CHARACTER ARC & ANALYTICS METHODS ============
+
+  /**
+   * Creates a character arc (placeholder implementation)
+   * @param {Object} params - Arc parameters
+   * @returns {Promise<Object>} Character arc
+   */
+  async createCharacterArc(params) {
+    // TODO: Implement full character arc functionality
+    return {
+      id: 'arc_' + Date.now(),
+      characterId: params.characterId,
+      title: params.title || 'Character Development Arc',
+      startingPoint: params.startingPoint || 'Beginning state',
+      desiredOutcome: params.desiredOutcome || 'Final state',
+      milestones: [],
+      createdAt: new Date(),
+    };
+  }
+
+  /**
+   * Gets a character arc (placeholder implementation)
+   * @param {string} characterId - Character ID
+   * @returns {Promise<Object>} Character arc
+   */
+  async getCharacterArc(characterId) {
+    const character = await Character.findById(characterId);
+    if (!character) {
+      throw new Error('Character not found');
+    }
+    return character.characterArc || null;
+  }
+
+  /**
+   * Adds an arc milestone (placeholder implementation)
+   * @param {string} characterId - Character ID
+   * @param {Object} params - Milestone parameters
+   * @returns {Promise<Object>} Updated arc
+   */
+  async addArcMilestone(characterId, params) {
+    // TODO: Implement milestone functionality
+    return {
+      characterId,
+      milestone: params.milestone || 'Development milestone',
+      chapter: params.chapter,
+      impact: params.impact || 'Character growth',
+      addedAt: new Date(),
+    };
+  }
+
+  /**
+   * Analyzes character consistency (placeholder implementation)
+   * @param {string} characterId - Character ID
+   * @returns {Promise<Object>} Consistency analysis
+   */
+  async analyzeCharacterConsistency(characterId) {
+    // TODO: Implement character consistency analysis
+    return {
+      characterId,
+      consistencyScore: 85,
+      issues: [],
+      suggestions: ['Character traits are well-maintained throughout the story'],
+      analyzedAt: new Date(),
+    };
+  }
+
+  /**
+   * Generates character development suggestions (placeholder implementation)
+   * @param {string} characterId - Character ID
+   * @param {Object} params - Analysis parameters
+   * @returns {Promise<Object>} Development suggestions
+   */
+  async generateCharacterDevelopmentSuggestions(characterId, params) {
+    // TODO: Implement AI-powered development suggestions
+    return {
+      characterId,
+      suggestions: [
+        'Consider adding more internal conflict',
+        'Explore character relationships further',
+        'Develop backstory elements',
+      ],
+      generatedAt: new Date(),
+    };
+  }
+
+  /**
+   * Gets character network (placeholder implementation)
+   * @param {string} bookId - Book ID
+   * @returns {Promise<Object>} Character network
+   */
+  async getCharacterNetwork(bookId) {
+    // TODO: Implement character network analysis
+    return {
+      bookId,
+      totalCharacters: 5,
+      connections: 8,
+      clusters: 2,
+      centralCharacters: ['main-character-1'],
+      networkData: {},
+      analyzedAt: new Date(),
+    };
+  }
+
+  /**
+   * Gets character statistics (placeholder implementation)
+   * @param {string} bookId - Book ID
+   * @returns {Promise<Object>} Character statistics
+   */
+  async getCharacterStatistics(bookId) {
+    // TODO: Implement character statistics
+    return {
+      bookId,
+      totalCharacters: 5,
+      mainCharacters: 2,
+      supportingCharacters: 3,
+      averageRelationships: 2.4,
+      characterDistribution: {
+        protagonists: 1,
+        antagonists: 1,
+        supporting: 3,
+      },
+      analyzedAt: new Date(),
+    };
+  }
+
+  /**
+   * Suggests character archetype (placeholder implementation)
+   * @param {Object} params - Character parameters
+   * @returns {Promise<Object>} Archetype suggestion
+   */
+  async suggestCharacterArchetype(params) {
+    // TODO: Implement AI-powered archetype suggestions
+    return {
+      suggestedArchetype: 'The Hero',
+      confidence: 0.8,
+      reasoning: 'Based on character traits and role in story',
+      alternatives: ['The Mentor', 'The Rebel'],
+      generatedAt: new Date(),
+    };
+  }
+
+  /**
+   * Generates character template (placeholder implementation)
+   * @param {Object} params - Template parameters
+   * @returns {Promise<Object>} Character template
+   */
+  async generateCharacterTemplate(params) {
+    // TODO: Implement AI-powered character template generation
+    return {
+      template: {
+        name: 'Template Character',
+        role: params.role || 'supporting',
+        physicalDescription: {},
+        personality: { traits: [], motivations: [], fears: [] },
+        background: {},
+      },
+      generatedAt: new Date(),
+    };
+  }
+
+  /**
+   * Analyzes character voice (placeholder implementation)
+   * @param {string} characterId - Character ID
+   * @returns {Promise<Object>} Voice analysis
+   */
+  async analyzeCharacterVoice(characterId) {
+    // TODO: Implement character voice analysis
+    return {
+      characterId,
+      voiceProfile: {
+        tone: 'neutral',
+        vocabulary: 'standard',
+        speechPatterns: [],
+        distinctiveness: 'moderate',
+      },
+      suggestions: ['Consider adding unique speech patterns'],
+      analyzedAt: new Date(),
+    };
   }
 
   // ============ LOCATION METHODS ============

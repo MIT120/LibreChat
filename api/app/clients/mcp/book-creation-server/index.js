@@ -8,12 +8,17 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import mongoose from 'mongoose';
 import { AIContentService } from './services/AIContentService.js';
 import { BookService } from './services/BookService.js';
+// import { CharacterService } from './services/CharacterService.js'; // Removed: Using WorldBuildingService instead
+// import { CollaborationService } from './services/CollaborationService.js'; // Disabled: Service has only placeholder implementations
 import { ConfigService } from './services/ConfigService.js';
 import { ContentOrganizationService } from './services/ContentOrganizationService.js';
 import { ExportService } from './services/ExportService.js';
 import { InfluencerResearchService } from './services/InfluencerResearchService.js';
+import { GrammarStyleService } from './services/GrammarStyleService.js';
+import { ImageService } from './services/ImageService.js';
 import { ResearchService } from './services/ResearchService.js';
 import { WebScoutingService } from './services/WebScoutingService.js';
 import { WorldBuildingService } from './services/WorldBuildingService.js';
@@ -35,7 +40,8 @@ class BookCreationServer {
 
     this.bookService = new BookService();
     this.configService = new ConfigService();
-    this.exportService = new ExportService(this.bookService);
+    this.imageService = new ImageService(this.bookService);
+    this.exportService = new ExportService(this.bookService, this.imageService);
     this.aiContentService = new AIContentService();
     this.researchService = new ResearchService();
     this.worldBuildingService = new WorldBuildingService();
@@ -43,6 +49,9 @@ class BookCreationServer {
     this.contentOrganizationService = new ContentOrganizationService();
     this.influencerResearchService = new InfluencerResearchService();
     this.webScoutingService = new WebScoutingService();
+    this.grammarStyleService = new GrammarStyleService();
+    // this.collaborationService = new CollaborationService(); // Disabled: Service has only placeholder implementations
+    // this.characterService = new CharacterService(); // Removed: Using WorldBuildingService instead
 
     this.setupToolHandlers();
     this.setupErrorHandling();
@@ -2287,6 +2296,1046 @@ class BookCreationServer {
               required: ['bookId'],
             },
           },
+          // Grammar and Style Tools
+          {
+            name: 'analyze_text_grammar',
+            description:
+              'Analyzes text for grammar, style, and readability issues using external tools like LanguageTool.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                text: {
+                  type: 'string',
+                  description: 'The text content to analyze',
+                  minLength: 1,
+                  maxLength: 50000,
+                },
+                language: {
+                  type: 'string',
+                  description: 'Language code for analysis (e.g., en-US)',
+                  default: 'en-US',
+                },
+                checkGrammar: {
+                  type: 'boolean',
+                  description: 'Whether to check grammar',
+                  default: true,
+                },
+                checkStyle: {
+                  type: 'boolean',
+                  description: 'Whether to check writing style',
+                  default: true,
+                },
+                checkReadability: {
+                  type: 'boolean',
+                  description: 'Whether to calculate readability score',
+                  default: true,
+                },
+                service: {
+                  type: 'string',
+                  enum: ['auto', 'languagetool', 'grammarly', 'builtin'],
+                  description: 'Which grammar service to use',
+                  default: 'auto',
+                },
+              },
+              required: ['text'],
+            },
+          },
+          {
+            name: 'analyze_page_grammar',
+            description: 'Analyzes grammar and style for a specific page or chapter content.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                pageId: {
+                  type: 'string',
+                  description: 'Page ID to analyze (optional if chapterId provided)',
+                },
+                chapterId: {
+                  type: 'string',
+                  description: 'Chapter ID to analyze all pages (optional if pageId provided)',
+                },
+                bookId: {
+                  type: 'string',
+                  description:
+                    'Book ID to analyze entire book (optional if pageId/chapterId provided)',
+                },
+                language: {
+                  type: 'string',
+                  description: 'Language code for analysis',
+                  default: 'en-US',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'analyze_style_consistency',
+            description:
+              'Analyzes writing style consistency across a book based on the defined writing style.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID to analyze',
+                },
+                targetStyle: {
+                  type: 'object',
+                  description: "Override the book's writing style for comparison (optional)",
+                  properties: {
+                    tone: { type: 'string' },
+                    voice: { type: 'string' },
+                    vocabulary: { type: 'string' },
+                    sentenceStructure: { type: 'string' },
+                  },
+                },
+              },
+              required: ['bookId'],
+            },
+          },
+          {
+            name: 'proofread_content',
+            description:
+              'Performs automated proofreading with correction suggestions and optional auto-fixes.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                text: {
+                  type: 'string',
+                  description: 'Text content to proofread',
+                  minLength: 1,
+                  maxLength: 50000,
+                },
+                language: {
+                  type: 'string',
+                  description: 'Language code',
+                  default: 'en-US',
+                },
+                autoApplySimpleFixes: {
+                  type: 'boolean',
+                  description: 'Automatically apply high-confidence simple fixes',
+                  default: false,
+                },
+                confidenceThreshold: {
+                  type: 'number',
+                  description: 'Minimum confidence for auto-fixes (0.0-1.0)',
+                  default: 0.9,
+                  minimum: 0,
+                  maximum: 1,
+                },
+              },
+              required: ['text'],
+            },
+          },
+          // Collaboration Tools
+          {
+            name: 'add_collaborator',
+            description: 'Adds a collaborator to a book with specified role and permissions.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                ownerId: {
+                  type: 'string',
+                  description: 'ID of the user adding the collaborator',
+                },
+                collaboratorId: {
+                  type: 'string',
+                  description: 'ID of the user being added as collaborator',
+                },
+                role: {
+                  type: 'string',
+                  enum: ['owner', 'editor', 'reviewer', 'viewer'],
+                  description: 'Role to assign to the collaborator',
+                  default: 'editor',
+                },
+                permissions: {
+                  type: 'object',
+                  description: 'Custom permissions (optional)',
+                  properties: {
+                    canEdit: { type: 'boolean' },
+                    canComment: { type: 'boolean' },
+                    canExport: { type: 'boolean' },
+                    canManageCollaborators: { type: 'boolean' },
+                    canDelete: { type: 'boolean' },
+                  },
+                },
+                inviteMessage: {
+                  type: 'string',
+                  description: 'Optional invitation message',
+                  maxLength: 1000,
+                },
+              },
+              required: ['bookId', 'ownerId', 'collaboratorId'],
+            },
+          },
+          {
+            name: 'list_collaborators',
+            description: 'Lists all collaborators for a book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                requestingUserId: {
+                  type: 'string',
+                  description: 'ID of the user making the request',
+                },
+              },
+              required: ['bookId', 'requestingUserId'],
+            },
+          },
+          {
+            name: 'accept_collaboration_invite',
+            description: 'Accepts a collaboration invitation for a book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                userId: {
+                  type: 'string',
+                  description: 'ID of the user accepting the invitation',
+                },
+              },
+              required: ['bookId', 'userId'],
+            },
+          },
+          {
+            name: 'add_comment',
+            description: 'Adds a comment to a page, chapter, or book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                userId: {
+                  type: 'string',
+                  description: 'ID of the user adding the comment',
+                },
+                targetType: {
+                  type: 'string',
+                  enum: ['page', 'chapter', 'book'],
+                  description: 'What the comment is attached to',
+                },
+                targetId: {
+                  type: 'string',
+                  description: 'ID of the target (pageId, chapterId, or bookId)',
+                },
+                content: {
+                  type: 'string',
+                  description: 'Comment content',
+                  minLength: 1,
+                  maxLength: 5000,
+                },
+                commentType: {
+                  type: 'string',
+                  enum: ['general', 'suggestion', 'issue', 'approval', 'question'],
+                  description: 'Type of comment',
+                  default: 'general',
+                },
+                selectionStart: {
+                  type: 'number',
+                  description: 'Start position for text selection comments',
+                  minimum: 0,
+                },
+                selectionEnd: {
+                  type: 'number',
+                  description: 'End position for text selection comments',
+                  minimum: 0,
+                },
+                selectedText: {
+                  type: 'string',
+                  description: 'Selected text content',
+                  maxLength: 1000,
+                },
+                parentCommentId: {
+                  type: 'string',
+                  description: 'Parent comment ID for replies',
+                },
+              },
+              required: ['bookId', 'userId', 'targetType', 'targetId', 'content'],
+            },
+          },
+          {
+            name: 'list_comments',
+            description: 'Lists comments for a target (page, chapter, or book).',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                userId: {
+                  type: 'string',
+                  description: 'ID of the requesting user',
+                },
+                targetType: {
+                  type: 'string',
+                  enum: ['page', 'chapter', 'book'],
+                  description: 'What to get comments for',
+                },
+                targetId: {
+                  type: 'string',
+                  description: 'ID of the target',
+                },
+                includeResolved: {
+                  type: 'boolean',
+                  description: 'Include resolved comments',
+                  default: true,
+                },
+                sortBy: {
+                  type: 'string',
+                  enum: ['createdAt', 'commentType'],
+                  description: 'Sort field',
+                  default: 'createdAt',
+                },
+                sortOrder: {
+                  type: 'string',
+                  enum: ['asc', 'desc'],
+                  description: 'Sort order',
+                  default: 'asc',
+                },
+              },
+              required: ['bookId', 'userId', 'targetType', 'targetId'],
+            },
+          },
+          {
+            name: 'create_version',
+            description: 'Creates a version snapshot of the current book state.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                userId: {
+                  type: 'string',
+                  description: 'ID of the user creating the version',
+                },
+                versionName: {
+                  type: 'string',
+                  description: 'Name for this version',
+                  maxLength: 200,
+                },
+                description: {
+                  type: 'string',
+                  description: 'Description of changes in this version',
+                  maxLength: 1000,
+                },
+                versionType: {
+                  type: 'string',
+                  enum: ['manual', 'auto', 'milestone', 'backup'],
+                  description: 'Type of version',
+                  default: 'manual',
+                },
+              },
+              required: ['bookId', 'userId'],
+            },
+          },
+          {
+            name: 'list_versions',
+            description: 'Lists version history for a book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                userId: {
+                  type: 'string',
+                  description: 'ID of the requesting user',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of versions to return',
+                  default: 20,
+                  minimum: 1,
+                  maximum: 100,
+                },
+                offset: {
+                  type: 'number',
+                  description: 'Pagination offset',
+                  default: 0,
+                  minimum: 0,
+                },
+                versionType: {
+                  type: 'string',
+                  enum: ['manual', 'auto', 'milestone', 'backup'],
+                  description: 'Filter by version type',
+                },
+              },
+              required: ['bookId', 'userId'],
+            },
+          },
+          {
+            name: 'get_collaboration_analytics',
+            description: 'Gets collaboration analytics and activity data for a book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                userId: {
+                  type: 'string',
+                  description: 'ID of the requesting user',
+                },
+                timeRange: {
+                  type: 'string',
+                  enum: ['7d', '30d', '90d', 'all'],
+                  description: 'Time range for analytics',
+                  default: '30d',
+                },
+                includeDetailedActivity: {
+                  type: 'boolean',
+                  description: 'Include detailed activity log',
+                  default: false,
+                },
+              },
+              required: ['bookId', 'userId'],
+            },
+          },
+          // Character Management Tools
+          {
+            name: 'create_character',
+            description: 'Creates a new character for the book (fictional or non-fictional).',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                name: {
+                  type: 'string',
+                  description: 'Character name',
+                },
+                characterType: {
+                  type: 'string',
+                  enum: ['fictional', 'non-fictional', 'inspired-by-real'],
+                  description: 'Type of character',
+                },
+                importance: {
+                  type: 'string',
+                  enum: ['main', 'secondary', 'minor'],
+                  description: 'Character importance level',
+                  default: 'main',
+                },
+                age: {
+                  type: 'string',
+                  description: 'Character age',
+                },
+                occupation: {
+                  type: 'string',
+                  description: 'Character occupation',
+                },
+                personalityTraits: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      trait: { type: 'string' },
+                      strength: { type: 'number', minimum: 1, maximum: 10 },
+                      description: { type: 'string' },
+                    },
+                    required: ['trait'],
+                  },
+                  description: 'Character personality traits',
+                },
+                appearance: {
+                  type: 'object',
+                  properties: {
+                    height: { type: 'string' },
+                    build: { type: 'string' },
+                    hairColor: { type: 'string' },
+                    eyeColor: { type: 'string' },
+                    distinctiveFeatures: {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                  },
+                  description: 'Character physical appearance',
+                },
+                backstory: {
+                  type: 'string',
+                  description: 'Character background and history',
+                },
+                motivations: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Character motivations and goals',
+                },
+                fears: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Character fears and weaknesses',
+                },
+              },
+              required: ['bookId', 'name', 'characterType'],
+            },
+          },
+          {
+            name: 'get_character',
+            description: 'Retrieves detailed information about a character.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+              },
+              required: ['characterId'],
+            },
+          },
+          {
+            name: 'list_characters',
+            description: 'Lists all characters for a book with optional filtering.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                characterType: {
+                  type: 'string',
+                  enum: ['fictional', 'non-fictional', 'inspired-by-real'],
+                  description: 'Filter by character type',
+                },
+                importance: {
+                  type: 'string',
+                  enum: ['main', 'secondary', 'minor'],
+                  description: 'Filter by importance level',
+                },
+                search: {
+                  type: 'string',
+                  description: 'Search characters by name, occupation, or tags',
+                },
+              },
+              required: ['bookId'],
+            },
+          },
+          {
+            name: 'update_character',
+            description: 'Updates character information.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+                updates: {
+                  type: 'object',
+                  description: 'Fields to update (any character property)',
+                },
+              },
+              required: ['characterId', 'updates'],
+            },
+          },
+          {
+            name: 'delete_character',
+            description: 'Deletes a character and all related data.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+              },
+              required: ['characterId'],
+            },
+          },
+          {
+            name: 'create_character_relationship',
+            description: 'Creates a relationship between two characters.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                character1Id: {
+                  type: 'string',
+                  description: 'First character ID',
+                },
+                character2Id: {
+                  type: 'string',
+                  description: 'Second character ID',
+                },
+                relationshipType: {
+                  type: 'string',
+                  enum: [
+                    'family',
+                    'romantic',
+                    'friendship',
+                    'mentorship',
+                    'rivalry',
+                    'enemity',
+                    'professional',
+                    'acquaintance',
+                    'authority',
+                    'dependency',
+                    'alliance',
+                    'betrayal',
+                    'unknown',
+                    'complex',
+                  ],
+                  description: 'Type of relationship',
+                },
+                description: {
+                  type: 'string',
+                  description: 'Description of the relationship',
+                },
+                strength: {
+                  type: 'number',
+                  minimum: 1,
+                  maximum: 10,
+                  description: 'Relationship strength (1-10)',
+                  default: 5,
+                },
+              },
+              required: ['character1Id', 'character2Id', 'relationshipType'],
+            },
+          },
+          {
+            name: 'get_character_relationships',
+            description: 'Gets all relationships for a character.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+              },
+              required: ['characterId'],
+            },
+          },
+          {
+            name: 'create_character_arc',
+            description: 'Creates a character arc to track development over time.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+                arcType: {
+                  type: 'string',
+                  enum: [
+                    'positive_change',
+                    'negative_change',
+                    'flat_arc',
+                    'redemption',
+                    'fall',
+                    'coming_of_age',
+                    'disillusionment',
+                    'corruption',
+                    'transformation',
+                    'growth',
+                    'testing',
+                    'custom',
+                  ],
+                  description: 'Type of character arc',
+                },
+                arcTitle: {
+                  type: 'string',
+                  description: 'Title or name for the arc',
+                },
+                arcDescription: {
+                  type: 'string',
+                  description: 'Description of the character arc',
+                },
+                startingState: {
+                  type: 'object',
+                  properties: {
+                    worldview: { type: 'string' },
+                    primaryMotivation: { type: 'string' },
+                    emotionalState: { type: 'string' },
+                    skillLevel: { type: 'string' },
+                  },
+                  description: 'Character state at the beginning',
+                },
+                endingState: {
+                  type: 'object',
+                  properties: {
+                    worldview: { type: 'string' },
+                    primaryMotivation: { type: 'string' },
+                    emotionalState: { type: 'string' },
+                    skillLevel: { type: 'string' },
+                  },
+                  description: 'Character state at the end',
+                },
+              },
+              required: ['characterId', 'arcType'],
+            },
+          },
+          {
+            name: 'get_character_arc',
+            description: 'Gets the character arc for a character.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+              },
+              required: ['characterId'],
+            },
+          },
+          {
+            name: 'add_character_milestone',
+            description: 'Adds a development milestone to a character arc.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+                milestoneType: {
+                  type: 'string',
+                  enum: [
+                    'introduction',
+                    'inciting_incident',
+                    'first_plot_point',
+                    'midpoint',
+                    'climax',
+                    'resolution',
+                    'character_reveal',
+                    'transformation',
+                    'realization',
+                    'decision',
+                    'action',
+                    'setback',
+                    'growth',
+                    'custom',
+                  ],
+                  description: 'Type of milestone',
+                },
+                title: {
+                  type: 'string',
+                  description: 'Milestone title',
+                },
+                description: {
+                  type: 'string',
+                  description: 'Milestone description',
+                },
+                chapterId: {
+                  type: 'string',
+                  description: 'Chapter ID where this occurs',
+                },
+                pageId: {
+                  type: 'string',
+                  description: 'Page ID where this occurs',
+                },
+                changeIntensity: {
+                  type: 'number',
+                  minimum: 1,
+                  maximum: 10,
+                  description: 'Intensity of character change (1-10)',
+                  default: 5,
+                },
+              },
+              required: ['characterId', 'milestoneType', 'title'],
+            },
+          },
+          {
+            name: 'analyze_character_consistency',
+            description: 'Analyzes character consistency and identifies potential issues.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+              },
+              required: ['characterId'],
+            },
+          },
+          {
+            name: 'generate_character_development_suggestions',
+            description: 'Generates suggestions for character development.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+              },
+              required: ['characterId'],
+            },
+          },
+          {
+            name: 'get_character_network',
+            description: 'Gets the character relationship network for a book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+              },
+              required: ['bookId'],
+            },
+          },
+          {
+            name: 'get_character_statistics',
+            description: 'Gets comprehensive statistics about characters in a book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+              },
+              required: ['bookId'],
+            },
+          },
+          {
+            name: 'suggest_character_archetype',
+            description: 'Suggests character archetypes based on character data.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterData: {
+                  type: 'object',
+                  description: 'Character data for archetype analysis',
+                },
+                characterType: {
+                  type: 'string',
+                  enum: ['fictional', 'non-fictional'],
+                  description: 'Type of character',
+                  default: 'fictional',
+                },
+              },
+              required: ['characterData'],
+            },
+          },
+          {
+            name: 'generate_character_template',
+            description: 'Generates a character template based on specified type.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                templateType: {
+                  type: 'string',
+                  enum: ['basic', 'hero', 'villain', 'leader', 'innovator'],
+                  description: 'Type of character template',
+                },
+                characterType: {
+                  type: 'string',
+                  enum: ['fictional', 'non-fictional'],
+                  description: 'Whether character is fictional or non-fictional',
+                  default: 'fictional',
+                },
+              },
+              required: ['templateType'],
+            },
+          },
+          {
+            name: 'analyze_character_voice',
+            description: 'Analyzes character voice and dialogue consistency.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                characterId: {
+                  type: 'string',
+                  description: 'The character ID',
+                },
+              },
+              required: ['characterId'],
+            },
+          },
+          // Image Generation Tools
+          {
+            name: 'generate_contextual_image',
+            description:
+              'Generates an AI image based on story context and placement. The image will be positioned optimally within the chapter flow.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                chapterId: {
+                  type: 'string',
+                  description: 'The chapter ID where the image should be placed',
+                },
+                targetPageNumber: {
+                  type: 'number',
+                  description: 'The page number around which to place the image',
+                },
+                imagePrompt: {
+                  type: 'string',
+                  description: 'Description of the image to generate',
+                  minLength: 10,
+                  maxLength: 500,
+                },
+                style: {
+                  type: 'string',
+                  enum: [
+                    'book_illustration',
+                    'realistic',
+                    'artistic',
+                    'fantasy',
+                    'modern',
+                    'vintage',
+                  ],
+                  description: 'Style of the image to generate',
+                  default: 'book_illustration',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'Author ID for authorization',
+                },
+              },
+              required: ['bookId', 'chapterId', 'targetPageNumber', 'imagePrompt', 'authorId'],
+            },
+          },
+          {
+            name: 'get_book_images',
+            description: 'Gets all images for a book or specific chapter.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                bookId: {
+                  type: 'string',
+                  description: 'The book ID',
+                },
+                chapterId: {
+                  type: 'string',
+                  description: 'Optional chapter ID to filter images',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['generating', 'generated', 'failed', 'approved'],
+                  description: 'Optional status filter',
+                },
+              },
+              required: ['bookId'],
+            },
+          },
+          {
+            name: 'approve_image',
+            description: 'Approves an image for publication in the book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                imageId: {
+                  type: 'string',
+                  description: 'The image ID to approve',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'Author ID for authorization',
+                },
+              },
+              required: ['imageId', 'authorId'],
+            },
+          },
+          {
+            name: 'update_image_placement',
+            description: 'Updates the placement of an image within the book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                imageId: {
+                  type: 'string',
+                  description: 'The image ID to update',
+                },
+                placement: {
+                  type: 'object',
+                  properties: {
+                    position: {
+                      type: 'string',
+                      enum: ['before', 'after', 'between'],
+                      description: 'New position for the image',
+                    },
+                    reason: {
+                      type: 'string',
+                      description: 'Reason for the placement',
+                    },
+                    confidence: {
+                      type: 'number',
+                      minimum: 0,
+                      maximum: 1,
+                      description: 'Confidence score for placement',
+                    },
+                  },
+                  required: ['position'],
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'Author ID for authorization',
+                },
+              },
+              required: ['imageId', 'placement', 'authorId'],
+            },
+          },
+          {
+            name: 'regenerate_image',
+            description: 'Regenerates an image with a new prompt while maintaining its placement.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                imageId: {
+                  type: 'string',
+                  description: 'The image ID to regenerate',
+                },
+                newPrompt: {
+                  type: 'string',
+                  description: 'New prompt for image generation',
+                  minLength: 10,
+                  maxLength: 500,
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'Author ID for authorization',
+                },
+              },
+              required: ['imageId', 'newPrompt', 'authorId'],
+            },
+          },
+          {
+            name: 'delete_image',
+            description: 'Deletes an image from the book.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                imageId: {
+                  type: 'string',
+                  description: 'The image ID to delete',
+                },
+                authorId: {
+                  type: 'string',
+                  description: 'Author ID for authorization',
+                },
+              },
+              required: ['imageId', 'authorId'],
+            },
+          },
         ],
       };
     });
@@ -2402,6 +3451,80 @@ class BookCreationServer {
             return await this.handleReorganizeBookStructure(args);
           case 'analyze_book_structure':
             return await this.handleAnalyzeBookStructure(args);
+          // Grammar and Style Tools
+          case 'analyze_text_grammar':
+            return await this.handleAnalyzeTextGrammar(args);
+          case 'analyze_page_grammar':
+            return await this.handleAnalyzePageGrammar(args);
+          case 'analyze_style_consistency':
+            return await this.handleAnalyzeStyleConsistency(args);
+          case 'proofread_content':
+            return await this.handleProofreadContent(args);
+          // Collaboration Tools - DISABLED (placeholder implementations only)
+          // case 'add_collaborator':
+          //   return await this.handleAddCollaborator(args);
+          // case 'list_collaborators':
+          //   return await this.handleListCollaborators(args);
+          // case 'accept_collaboration_invite':
+          //   return await this.handleAcceptCollaborationInvite(args);
+          // case 'add_comment':
+          //   return await this.handleAddComment(args);
+          // case 'list_comments':
+          //   return await this.handleListComments(args);
+          // case 'create_version':
+          //   return await this.handleCreateVersion(args);
+          // case 'list_versions':
+          //   return await this.handleListVersions(args);
+          // case 'get_collaboration_analytics':
+          //   return await this.handleGetCollaborationAnalytics(args);
+          // Character Management Tools
+          case 'create_character':
+            return await this.handleCreateCharacter(args);
+          case 'get_character':
+            return await this.handleGetCharacter(args);
+          case 'list_characters':
+            return await this.handleListCharacters(args);
+          case 'update_character':
+            return await this.handleUpdateCharacter(args);
+          case 'delete_character':
+            return await this.handleDeleteCharacter(args);
+          case 'create_character_relationship':
+            return await this.handleCreateCharacterRelationship(args);
+          case 'get_character_relationships':
+            return await this.handleGetCharacterRelationships(args);
+          case 'create_character_arc':
+            return await this.handleCreateCharacterArc(args);
+          case 'get_character_arc':
+            return await this.handleGetCharacterArc(args);
+          case 'add_character_milestone':
+            return await this.handleAddCharacterMilestone(args);
+          case 'analyze_character_consistency':
+            return await this.handleAnalyzeCharacterConsistency(args);
+          case 'generate_character_development_suggestions':
+            return await this.handleGenerateCharacterDevelopmentSuggestions(args);
+          case 'get_character_network':
+            return await this.handleGetCharacterNetwork(args);
+          case 'get_character_statistics':
+            return await this.handleGetCharacterStatistics(args);
+          case 'suggest_character_archetype':
+            return await this.handleSuggestCharacterArchetype(args);
+          case 'generate_character_template':
+            return await this.handleGenerateCharacterTemplate(args);
+          case 'analyze_character_voice':
+            return await this.handleAnalyzeCharacterVoice(args);
+          // Image Generation Tools
+          case 'generate_contextual_image':
+            return await this.handleGenerateContextualImage(args);
+          case 'get_book_images':
+            return await this.handleGetBookImages(args);
+          case 'approve_image':
+            return await this.handleApproveImage(args);
+          case 'update_image_placement':
+            return await this.handleUpdateImagePlacement(args);
+          case 'regenerate_image':
+            return await this.handleRegenerateImage(args);
+          case 'delete_image':
+            return await this.handleDeleteImage(args);
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
@@ -3223,6 +4346,859 @@ class BookCreationServer {
     };
   }
 
+  // Grammar and Style Tool Handlers
+  async handleAnalyzeTextGrammar(args) {
+    const analysis = await this.grammarStyleService.analyzeText(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Grammar and Style Analysis Results:
+
+**Service Used:** ${analysis.service}
+**Text Statistics:**
+- Length: ${analysis.textLength} characters
+- Word Count: ${analysis.wordCount} words
+
+**Issues Found:** ${analysis.issues.length}
+
+**Issue Summary:**
+${analysis.summary.errorCount > 0 ? `- Errors: ${analysis.summary.errorCount}` : ''}
+${analysis.summary.warningCount > 0 ? `- Warnings: ${analysis.summary.warningCount}` : ''}
+${analysis.summary.infoCount > 0 ? `- Info: ${analysis.summary.infoCount}` : ''}
+
+${analysis.readabilityScore ? `**Readability Score:** ${analysis.readabilityScore.score} (${analysis.readabilityScore.level})` : ''}
+
+**Detailed Issues:**
+${analysis.issues.map((issue) => `- ${issue.message} (${issue.severity})`).join('\n')}
+
+**Suggestions:**
+${analysis.issues
+              .filter((i) => i.suggestions && i.suggestions.length > 0)
+              .map((issue) => `- "${issue.context}" → "${issue.suggestions[0].text}"`)
+              .join('\n')}`,
+        },
+      ],
+    };
+  }
+
+  async handleAnalyzePageGrammar(args) {
+    const analysis = await this.grammarStyleService.analyzePageContent(args);
+
+    if (analysis.chapterAnalysis) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Chapter Grammar Analysis:
+
+${analysis.chapterAnalysis
+                .map(
+                  (pageAnalysis) =>
+                    `**${pageAnalysis.pageTitle} (Page ${pageAnalysis.pageNumber}):**
+- Issues: ${pageAnalysis.analysis.summary.totalIssues}
+- Readability: ${pageAnalysis.analysis.readabilityScore?.level || 'Not analyzed'}
+`,
+                )
+                .join('\n')}
+
+Use analyze_text_grammar with specific page content for detailed analysis.`,
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Page Grammar Analysis for "${analysis.pageTitle}":
+
+**Page:** ${analysis.pageNumber} in Chapter
+**Issues Found:** ${analysis.analysis.summary.totalIssues}
+**Readability:** ${analysis.analysis.readabilityScore?.level || 'Not analyzed'}
+
+${analysis.analysis.issues.length > 0
+              ? `**Top Issues:**\n${analysis.analysis.issues
+                .slice(0, 5)
+                .map((issue) => `- ${issue.message}`)
+                .join('\n')}`
+              : 'No significant issues found!'
+            }`,
+        },
+      ],
+    };
+  }
+
+  async handleAnalyzeStyleConsistency(args) {
+    const analysis = await this.grammarStyleService.analyzeStyleConsistency(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Style Consistency Analysis for "${analysis.bookTitle}":
+
+**Overall Consistency:** ${analysis.overallConsistency.consistency} (${analysis.overallConsistency.averageScore}/100)
+**Pages Analyzed:** ${analysis.overallConsistency.pagesAnalyzed}
+**Total Issues:** ${analysis.overallConsistency.issueCount}
+
+**Expected Style:**
+- Tone: ${analysis.expectedStyle.tone}
+- Voice: ${analysis.expectedStyle.voice}
+- Vocabulary: ${analysis.expectedStyle.vocabulary}
+
+**Recommendations:**
+${analysis.recommendations
+              .map((rec) => `- ${rec.suggestion} (Priority: ${rec.priority})`)
+              .join('\n')}
+
+**Page-by-Page Analysis:**
+${analysis.pageAnalysis
+              .slice(0, 10)
+              .map(
+                (page) =>
+                  `- ${page.pageTitle}: ${page.styleScore}/100 ${page.deviations.length > 0 ? `(${page.deviations.length} deviations)` : ''}`,
+              )
+              .join('\n')}`,
+        },
+      ],
+    };
+  }
+
+  async handleProofreadContent(args) {
+    const result = await this.grammarStyleService.proofreadContent(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Proofreading Results:
+
+**Summary:**
+- Total Issues: ${result.summary.totalIssues}
+- Auto-Fixed: ${result.summary.autoFixed}
+- Needs Review: ${result.summary.needsReview}
+
+**Corrected Text:**
+${result.correctedText}
+
+**Applied Corrections:**
+${result.appliedCorrections
+              .map(
+                (corr) =>
+                  `- "${corr.original}" → "${corr.suggestion}" (${Math.round(corr.confidence * 100)}% confidence)`,
+              )
+              .join('\n')}
+
+**Manual Review Needed:**
+${result.manualReviewNeeded
+              .map(
+                (corr) =>
+                  `- "${corr.original}" → "${corr.suggestion}" (${Math.round(corr.confidence * 100)}% confidence) - ${corr.type}`,
+              )
+              .join('\n')}`,
+        },
+      ],
+    };
+  }
+
+  // Collaboration Tool Handlers
+  async handleAddCollaborator(args) {
+    const result = await this.collaborationService.addCollaborator(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ ${result.message}
+
+**Collaborator Details:**
+- User ID: ${result.collaborator.userId}
+- Role: ${result.collaborator.role}
+- Status: ${result.collaborator.status}
+- Added: ${result.collaborator.addedAt}
+
+**Permissions:**
+${Object.entries(result.collaborator.permissions)
+              .filter(([, value]) => value === true)
+              .map(([key]) => `- ${key}`)
+              .join('\n')}`,
+        },
+      ],
+    };
+  }
+
+  async handleListCollaborators(args) {
+    const result = await this.collaborationService.listCollaborators(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Collaborators for "${result.bookTitle}":
+
+**Owner:** ${result.owner.userId} (since ${result.owner.joinedAt})
+
+**Collaborators (${result.collaborators.length}):**
+${result.collaborators
+              .map(
+                (collab) =>
+                  `- ${collab.userId} (${collab.role}) - ${collab.status} ${collab.lastActiveAt ? `- Last active: ${collab.lastActiveAt}` : ''}`,
+              )
+              .join('\n')}
+
+**Total:** ${result.totalCollaborators} people`,
+        },
+      ],
+    };
+  }
+
+  async handleAcceptCollaborationInvite(args) {
+    const result = await this.collaborationService.acceptInvitation(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ ${result.message}
+
+**Your Permissions:**
+${Object.entries(result.permissions)
+              .filter(([, value]) => value === true)
+              .map(([key]) => `- ${key}`)
+              .join('\n')}`,
+        },
+      ],
+    };
+  }
+
+  async handleAddComment(args) {
+    const result = await this.collaborationService.addComment(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ ${result.message}
+
+**Comment Details:**
+- Type: ${result.comment.commentType}
+- Target: ${result.comment.targetType} (${result.comment.targetId})
+- Created: ${result.comment.createdAt}
+${result.comment.selection ? `- Text Selection: "${result.comment.selection.text}"` : ''}
+
+**Content:**
+${result.comment.content}`,
+        },
+      ],
+    };
+  }
+
+  async handleListComments(args) {
+    const result = await this.collaborationService.listComments(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Comments for ${result.targetType}: ${result.targetId}
+
+**Summary:**
+- Total Comments: ${result.totalComments}
+- Unresolved: ${result.unresolvedCount}
+
+**Comments:**
+${result.comments
+              .map(
+                (comment) =>
+                  `**${comment.userId} (${comment.userRole})** - ${comment.createdAt}
+Type: ${comment.commentType} ${comment.isResolved ? '✅ Resolved' : '⏳ Open'}
+${comment.selection ? `Selection: "${comment.selection.text}"` : ''}
+Content: ${comment.content}
+${comment.replyCount > 0 ? `Replies: ${comment.replyCount}` : ''}
+---`,
+              )
+              .join('\n\n')}`,
+        },
+      ],
+    };
+  }
+
+  async handleCreateVersion(args) {
+    const result = await this.collaborationService.createVersion(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ ${result.message}
+
+**Version Details:**
+- Name: ${result.version.name}
+- ID: ${result.version.id}
+- Type: ${result.version.versionType}
+- Created: ${result.version.createdAt}
+- Created by: ${result.version.userId}
+
+**Statistics:**
+- Chapters: ${result.version.stats.totalChapters}
+- Pages: ${result.version.stats.totalPages}
+- Words: ${result.version.stats.wordCount}
+
+${result.version.description ? `**Description:** ${result.version.description}` : ''}`,
+        },
+      ],
+    };
+  }
+
+  async handleListVersions(args) {
+    const result = await this.collaborationService.listVersions(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Version History for Book ${result.bookId}:
+
+**Total Versions:** ${result.pagination.total}
+**Showing:** ${result.versions.length} versions
+
+${result.versions
+              .map(
+                (version) =>
+                  `**${version.name}** (${version.versionType})
+- Created: ${version.createdAt} by ${version.userId}
+- ${version.restorable ? '✅ Restorable' : '❌ Not restorable'}
+${version.description ? `- Description: ${version.description}` : ''}
+---`,
+              )
+              .join('\n\n')}
+
+${result.pagination.hasMore ? `\nUse offset ${result.pagination.offset + result.pagination.limit} to see more versions.` : ''}`,
+        },
+      ],
+    };
+  }
+
+  async handleGetCollaborationAnalytics(args) {
+    const result = await this.collaborationService.getCollaborationAnalytics(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Collaboration Analytics for Book ${result.bookId}:
+
+**Time Period:** ${result.timeRange} (${result.period.from} to ${result.period.to})
+
+**Collaborators:**
+- Total: ${result.collaborators.total}
+- Active: ${result.collaborators.active}
+- Pending Invites: ${result.collaborators.pending}
+
+**Activity:**
+- Total Actions: ${result.activity.totalActions}
+- Most Active Users:
+${result.activity.mostActiveUsers
+              .map((user) => `  - ${user.userId}: ${user.total} actions`)
+              .join('\n')}
+
+**Comments:**
+- Total: ${result.comments.totalComments}
+- Unresolved: ${result.comments.unresolvedComments}
+
+**Daily Activity:**
+${Object.entries(result.activity.activityByDay)
+              .slice(-7)
+              .map(([date, count]) => `- ${date}: ${count} actions`)
+              .join('\n')}`,
+        },
+      ],
+    };
+  }
+
+  // Character Management Handlers
+  async handleCreateCharacter(args) {
+    // Convert UUID bookId to MongoDB ObjectId
+    const characterData = {
+      ...args,
+      bookId: new mongoose.Types.ObjectId(args.bookId),
+    };
+    const result = await this.worldBuildingService.createCharacter(characterData);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ Character "${result.name}" created successfully!
+
+**Character Details:**
+- ID: ${result._id}
+- Role: ${result.role}
+- Importance: ${result.importance}
+- Age: ${result.physicalDescription?.age || 'Not specified'}
+- Occupation: ${result.background?.occupation || 'Not specified'}
+
+**Personality Traits:**
+${result.personality?.traits?.map((trait) => `- ${trait}`).join('\n') || 'None added yet'}
+
+**Description:** ${result.description || 'No description provided'}
+
+${result.importance === 'main' ? '🎭 A character arc has been automatically created for this main character.' : ''}`,
+        },
+      ],
+    };
+  }
+
+  async handleGetCharacter(args) {
+    const result = await this.worldBuildingService.getCharacter(args.characterId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `📖 Character: **${result.name}**
+
+**Basic Information:**
+- Role: ${result.role}
+- Importance: ${result.importance}
+- Age: ${result.physicalDescription?.age || 'Not specified'}
+- Occupation: ${result.background?.occupation || 'Not specified'}
+- Status: ${result.status || 'Active'}
+
+**Physical Appearance:**
+${result.physicalDescription
+              ? Object.entries(result.physicalDescription)
+                .filter(([key, value]) => value)
+                .map(([key, value]) => `- ${key}: ${value}`)
+                .join('\n') || 'Not described'
+              : 'Not described'
+            }
+
+**Personality Traits:**
+${result.personality?.traits?.map((trait) => `- ${trait}`).join('\n') || 'None defined'}
+
+**Motivations:**
+${result.personality?.motivations?.map((m) => `- ${m}`).join('\n') || 'None defined'}
+
+**Fears:**
+${result.personality?.fears?.map((f) => `- ${f}`).join('\n') || 'None defined'}
+
+**Backstory:**
+${result.background?.backstory || 'Not provided'}
+
+**Relationships:** ${result.relationships?.length || 0} relationships
+**Character Arc:** ${result.characterArc ? 'Available' : 'Not created'}
+
+**Description:**
+${result.description || 'No description provided'}`,
+        },
+      ],
+    };
+  }
+
+  async handleListCharacters(args) {
+    const result = await this.worldBuildingService.listCharacters(args.bookId, {
+      importance: args.importance,
+      search: args.search,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `📚 Characters in Book
+
+**Total Characters:** ${result.length}
+
+${result
+              .map(
+                (char) => `**${char.name}** (${char.role})
+- Importance: ${char.importance}
+- Occupation: ${char.background?.occupation || 'Not specified'}
+- Status: ${char.status || 'Active'}
+- ID: ${char._id}`,
+              )
+              .join('\n\n') || 'No characters found'
+            }`,
+        },
+      ],
+    };
+  }
+
+  async handleUpdateCharacter(args) {
+    const result = await this.worldBuildingService.updateCharacter(args.characterId, args.updates);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ Character "${result.name}" updated successfully!
+
+**Updated Fields:** ${Object.keys(args.updates).join(', ')}
+
+**Character Updated Successfully**
+- Role: ${result.role}
+- Importance: ${result.importance}`,
+        },
+      ],
+    };
+  }
+
+  async handleDeleteCharacter(args) {
+    await this.worldBuildingService.deleteCharacter(args.characterId, args.authorId);
+    const result = { message: `Character deleted successfully` };
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ ${result.message}
+
+⚠️ All related relationships and character arc data have also been removed.`,
+        },
+      ],
+    };
+  }
+
+  async handleCreateCharacterRelationship(args) {
+    const result = await this.worldBuildingService.createRelationship(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ Relationship created between "${result.character1Name}" and "${result.character2Name}"
+
+**Relationship Details:**
+- Type: ${result.relationshipType}
+- Strength: ${result.strength}/10
+- Status: ${result.status}
+- Description: ${result.description || 'No description provided'}
+
+**Dynamics:**
+- Power Balance: ${result.dynamics.powerBalance}
+- Communication: ${result.dynamics.communicationStyle}
+- Trust Level: ${result.dynamics.trustLevel}/10
+- Conflict Level: ${result.dynamics.conflictLevel}/10`,
+        },
+      ],
+    };
+  }
+
+  async handleGetCharacterRelationships(args) {
+    const result = await this.worldBuildingService.getRelationships(args.characterId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `🤝 Character Relationships
+
+**Total Relationships:** ${result.length}
+
+${result
+              .map(
+                (rel) => `**${rel.character1Name} ↔ ${rel.character2Name}**
+- Type: ${rel.relationshipType}
+- Strength: ${rel.strength}/10
+- Status: ${rel.status}
+- Conflicts: ${rel.conflicts.length}
+- Key Moments: ${rel.keyMoments.length}
+- Stability Score: ${rel.analytics.stabilityScore.toFixed(1)}/10`,
+              )
+              .join('\n\n') || 'No relationships found'
+            }`,
+        },
+      ],
+    };
+  }
+
+  async handleCreateCharacterArc(args) {
+    const result = await this.worldBuildingService.createCharacterArc(args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ Character arc created for "${result.characterName}"!
+
+**Arc Details:**
+- Type: ${result.arcType}
+- Title: ${result.arcTitle || 'Untitled'}
+- Status: ${result.status}
+
+**Starting State:**
+${result.startingState
+              ? Object.entries(result.startingState)
+                .filter(([key, value]) => value)
+                .map(([key, value]) => `- ${key}: ${value}`)
+                .join('\n') || 'Not defined'
+              : 'Not defined'
+            }
+
+**Ending State:**
+${result.endingState
+              ? Object.entries(result.endingState)
+                .filter(([key, value]) => value)
+                .map(([key, value]) => `- ${key}: ${value}`)
+                .join('\n') || 'Not defined'
+              : 'Not defined'
+            }
+
+**Metrics:**
+- Completeness: ${result.arcMetrics.completeness}/100
+- Consistency: ${result.arcMetrics.consistency}/100
+- Overall Score: ${result.arcMetrics.overallScore.toFixed(1)}/100`,
+        },
+      ],
+    };
+  }
+
+  async handleGetCharacterArc(args) {
+    const result = await this.worldBuildingService.getCharacterArc(args.characterId);
+
+    if (!result) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ No character arc found for this character. Use create_character_arc to create one.`,
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `🎭 Character Arc: **${result.characterName}**
+
+**Arc Type:** ${result.arcType}
+**Status:** ${result.status}
+**Progress:** ${result.arcProgress.toFixed(1)}%
+
+**Milestones:** ${result.milestones.length}
+**Internal Conflicts:** ${result.internalConflicts.length} (${result.unresolvedConflicts.length} unresolved)
+**Major Decisions:** ${result.majorDecisions.length}
+
+**Metrics:**
+- Completeness: ${result.arcMetrics.completeness}/100
+- Consistency: ${result.arcMetrics.consistency}/100
+- Believability: ${result.arcMetrics.believability}/100
+- Engagement: ${result.arcMetrics.engagement}/100
+- Overall Score: ${result.arcMetrics.overallScore.toFixed(1)}/100
+
+**Recent Milestones:**
+${result.milestones
+              .slice(-3)
+              .map((m) => `- ${m.title} (${m.milestoneType})`)
+              .join('\n') || 'None yet'
+            }`,
+        },
+      ],
+    };
+  }
+
+  async handleAddCharacterMilestone(args) {
+    const result = await this.worldBuildingService.addArcMilestone(args.characterId, args);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ Milestone "${args.title}" added to character arc!
+
+**Milestone Details:**
+- Type: ${args.milestoneType}
+- Change Intensity: ${args.changeIntensity || 5}/10
+- Chapter: ${args.chapterId || 'Not specified'}
+- Page: ${args.pageId || 'Not specified'}
+
+**Updated Arc Metrics:**
+- Completeness: ${result.arcMetrics.completeness}/100
+- Overall Score: ${result.arcMetrics.overallScore.toFixed(1)}/100`,
+        },
+      ],
+    };
+  }
+
+  async handleAnalyzeCharacterConsistency(args) {
+    const result = await this.worldBuildingService.analyzeCharacterConsistency(args.characterId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `🔍 Character Consistency Analysis: **${result.characterName}**
+
+**Overall Consistency Score:** ${result.consistencyScore}/100
+
+**Issues Found:**
+${result.issues
+              .map(
+                (issue) => `**${issue.type}** (${issue.count} items)
+${issue.details.map((detail) => `- ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`).join('\n')}`,
+              )
+              .join('\n\n') || 'No issues found'
+            }
+
+**Decision Consistency:**
+${result.decisionConsistency ? `Score: ${result.decisionConsistency.score.toFixed(1)}/100` : 'No decision data available'}
+
+**Recommendations:**
+${result.recommendations.map((rec) => `- ${rec}`).join('\n') || 'Character appears consistent'}`,
+        },
+      ],
+    };
+  }
+
+  async handleGenerateCharacterDevelopmentSuggestions(args) {
+    const result = await this.worldBuildingService.generateCharacterDevelopmentSuggestions(
+      args.characterId,
+    );
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `💡 Development Suggestions for **${result.characterName}**
+
+**Current Development Score:** ${result.developmentScore}/100
+
+**Suggestions:**
+${result.suggestions
+              .map(
+                (sugg) => `**${sugg.category.toUpperCase()}** (${sugg.priority} priority)
+${sugg.suggestion}
+Action: ${sugg.action}`,
+              )
+              .join('\n\n') || 'Character is well developed'
+            }
+
+**Next Steps:**
+1. Focus on high-priority suggestions first
+2. Consider adding character relationships for depth
+3. Develop internal conflicts for complexity
+4. Track character growth through milestones`,
+        },
+      ],
+    };
+  }
+
+  async handleGetCharacterNetwork(args) {
+    const result = await this.worldBuildingService.getCharacterNetwork(args.bookId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `🕸️ Character Relationship Network
+
+**Characters:** ${result.characters.length}
+**Total Relationships:** ${result.relationships.reduce((sum, rel) => sum + rel.count, 0)}
+
+**Character List:**
+${result.characters.map((char) => `- **${char.name}** (${char.importance}, ${char.characterType})`).join('\n')}
+
+**Relationship Types:**
+${result.relationships.map((rel) => `**${rel._id}:** ${rel.count} relationships (avg strength: ${rel.averageStrength.toFixed(1)}/10)`).join('\n')}`,
+        },
+      ],
+    };
+  }
+
+  async handleGetCharacterStatistics(args) {
+    const result = await this.worldBuildingService.getCharacterStatistics(args.bookId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `📊 Character Statistics
+
+**Character Overview:**
+- Total Characters: ${result.characters.totalCharacters || 0}
+- Fictional: ${result.characters.fictionalCount || 0}
+- Non-fictional: ${result.characters.nonFictionalCount || 0}
+- Main Characters: ${result.characters.mainCharacterCount || 0}
+
+**Development Metrics:**
+- Average Development Score: ${result.characters.averageDevelopmentScore ? result.characters.averageDevelopmentScore.toFixed(1) : 'N/A'}/100
+- Average Consistency Score: ${result.characters.averageConsistencyScore ? result.characters.averageConsistencyScore.toFixed(1) : 'N/A'}/100
+
+**Relationships:**
+- Total Relationships: ${result.relationships.totalRelationships || 0}
+- Average Strength: ${result.relationships.averageStrength ? result.relationships.averageStrength.toFixed(1) : 'N/A'}/10
+- Active Relationships: ${result.relationships.activeRelationships || 0}
+
+**Character Arcs:**
+- Total Arcs: ${result.arcs.totalArcs || 0}
+- Complete Arcs: ${result.arcs.completeArcs || 0}
+- Average Arc Score: ${result.arcs.averageScore ? result.arcs.averageScore.toFixed(1) : 'N/A'}/100`,
+        },
+      ],
+    };
+  }
+
+  async handleSuggestCharacterArchetype(args) {
+    const result = await this.worldBuildingService.suggestCharacterArchetype(
+      args.characterData,
+      args.characterType,
+    );
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `🎭 Character Archetype Suggestions
+
+**Recommended Archetypes:**
+${result.suggested.map((archetype) => `- **${archetype}**`).join('\n')}
+
+**All Available Archetypes:**
+${result.allArchetypes.map((archetype) => `- ${archetype}`).join('\n')}
+
+💡 **Tip:** Choose an archetype that matches your character's role in the story and personality traits.`,
+        },
+      ],
+    };
+  }
+
+  async handleGenerateCharacterTemplate(args) {
+    const result = await this.worldBuildingService.generateCharacterTemplate(
+      args.templateType,
+      args.characterType,
+    );
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `📋 Character Template: **${args.templateType}** (${args.characterType || 'fictional'})
+
+**Template Structure:**
+\`\`\`json
+${JSON.stringify(result.template, null, 2)}
+\`\`\`
+
+**Available Templates:**
+${result.availableTemplates.map((template) => `- ${template}`).join('\n')}
+
+💡 **Usage:** Copy this template and modify it to create your character using create_character.`,
+        },
+      ],
+    };
+  }
+
+  async handleAnalyzeCharacterVoice(args) {
+    const result = await this.worldBuildingService.analyzeCharacterVoice(args.characterId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `🗣️ Character Voice Analysis: **${result.characterName}**
+
+**Voice Profile:**
+- Vocabulary: ${result.voiceProfile.vocabulary || 'Not defined'}
+- Tone: ${result.voiceProfile.tone || 'Not defined'}
+- Accent: ${result.voiceProfile.accent || 'Not defined'}
+
+**Dialogue Analysis:**
+${result.dialogueCount
+              ? `- Total Dialogue Quotes: ${result.dialogueCount}
+- Average Quote Length: ${result.averageQuoteLength.toFixed(1)} characters
+- Complexity Score: ${result.complexityScore ? result.complexityScore.toFixed(1) : 'N/A'}%`
+              : 'No dialogue found'
+            }
+
+**Recommendations:**
+${result.recommendations.map((rec) => `- ${rec}`).join('\n') || 'Voice profile is complete'}
+
+💡 **Tip:** Add more dialogue quotes to improve voice analysis accuracy.`,
+        },
+      ],
+    };
+  }
+
   setupErrorHandling() {
     this.server.onerror = (error) => {
       console.error('[MCP Error]', error);
@@ -3232,6 +5208,239 @@ class BookCreationServer {
       await this.server.close();
       process.exit(0);
     });
+  }
+
+  // Image Generation Tool Handlers
+  async handleGenerateContextualImage(args) {
+    try {
+      const image = await this.imageService.generateContextualImage(args);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ **Image Generated Successfully**
+
+**Image Details:**
+- Image ID: ${image._id}
+- Book ID: ${image.bookId}
+- Chapter ID: ${image.chapterId}
+- Target Page: ${image.targetPageNumber}
+- Style: ${image.style}
+- Status: ${image.status}
+
+**Placement Analysis:**
+- Position: ${image.placement.position}
+- Reason: ${image.placement.reason}
+- Confidence: ${(image.placement.confidence * 100).toFixed(1)}%
+
+**Content Analysis:**
+- Themes: ${image.contextAnalysis.themes.join(', ') || 'None detected'}
+- Characters: ${image.contextAnalysis.characters.join(', ') || 'None detected'}
+- Setting: ${image.contextAnalysis.setting}
+- Mood: ${image.contextAnalysis.mood}
+- Story Beat: ${image.contextAnalysis.storyBeat}
+
+**Prompt:**
+- Original: ${image.prompt.original}
+- Enhanced: ${image.prompt.enhanced.substring(0, 200)}${image.prompt.enhanced.length > 200 ? '...' : ''}
+
+The image has been generated and will appear at the optimal position when the book is exported to HTML, PDF, TXT, or DOCX formats.`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ **Failed to generate image:** ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  async handleGetBookImages(args) {
+    try {
+      const images = await this.imageService.getBookImages(args.bookId, {
+        chapterId: args.chapterId,
+        status: args.status,
+      });
+
+      if (images.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `📷 **No images found** for the specified criteria.`,
+            },
+          ],
+        };
+      }
+
+      const imageList = images
+        .map((image) => {
+          return `**Image ${image._id.substring(0, 8)}...**
+- Chapter: ${image.chapterId}
+- Page: ${image.targetPageNumber}
+- Position: ${image.placement.position}
+- Status: ${image.status}
+- Prompt: ${image.prompt.original.substring(0, 100)}${image.prompt.original.length > 100 ? '...' : ''}
+- Generated: ${new Date(image.createdAt).toLocaleDateString()}`;
+        })
+        .join('\n\n');
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `📷 **Book Images (${images.length} found)**
+
+${imageList}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ **Failed to get images:** ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  async handleApproveImage(args) {
+    try {
+      const image = await this.imageService.approveImage(args.imageId, args.authorId);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ **Image Approved**
+
+Image ${args.imageId.substring(0, 8)}... has been approved for publication.
+- Status: ${image.status}
+- Approved at: ${new Date(image.approvedAt).toLocaleString()}
+
+The image will now be included in book exports.`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ **Failed to approve image:** ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  async handleUpdateImagePlacement(args) {
+    try {
+      const image = await this.imageService.updateImagePlacement(
+        args.imageId,
+        args.placement,
+        args.authorId,
+      );
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ **Image Placement Updated**
+
+Image ${args.imageId.substring(0, 8)}... placement has been updated.
+- New position: ${image.placement.position}
+- Reason: ${image.placement.reason || 'User specified'}
+- Confidence: ${(image.placement.confidence * 100).toFixed(1)}%
+
+The updated placement will be reflected in future exports.`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ **Failed to update image placement:** ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  async handleRegenerateImage(args) {
+    try {
+      const image = await this.imageService.regenerateImage(
+        args.imageId,
+        args.newPrompt,
+        args.authorId,
+      );
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ **Image Regenerated**
+
+Image ${args.imageId.substring(0, 8)}... has been regenerated with a new prompt.
+- New prompt: ${image.prompt.original}
+- Enhanced prompt: ${image.prompt.enhanced.substring(0, 200)}${image.prompt.enhanced.length > 200 ? '...' : ''}
+- Status: ${image.status}
+- Updated context analysis: ${image.contextAnalysis.themes.join(', ')}
+
+The placement and style remain the same, but the image content has been updated.`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ **Failed to regenerate image:** ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  async handleDeleteImage(args) {
+    try {
+      const result = await this.imageService.deleteImage(args.imageId, args.authorId);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `✅ **Image Deleted**
+
+Image ${args.imageId.substring(0, 8)}... has been successfully deleted.
+- Deleted at: ${new Date(result.deletedAt).toLocaleString()}
+
+The image has been removed from the book and will no longer appear in exports.`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ **Failed to delete image:** ${error.message}`,
+          },
+        ],
+      };
+    }
   }
 
   async run() {

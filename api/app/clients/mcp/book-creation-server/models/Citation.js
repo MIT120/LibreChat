@@ -126,7 +126,7 @@ citationSchema.index({ bookId: 1, authorId: 1 });
 citationSchema.index({ type: 1 });
 citationSchema.index({ 'authors.lastName': 1 });
 citationSchema.index({ 'publicationInfo.year': -1 });
-citationSchema.index({ citationKey: 1 });
+// citationKey index is automatically created by unique: true constraint
 citationSchema.index({ tags: 1 });
 
 // Virtual for formatted author names

@@ -46,6 +46,55 @@ const PageSchema = new mongoose.Schema(
       enum: ['draft', 'review', 'approved', 'published'],
       default: 'draft',
     },
+    images: [
+      {
+        id: {
+          type: String,
+          required: true,
+        },
+        url: {
+          type: String,
+          required: true,
+        },
+        localPath: {
+          type: String,
+          required: true,
+        },
+        placement: {
+          position: {
+            type: String,
+            enum: ['before', 'after', 'between'],
+            default: 'between',
+          },
+          reason: String,
+          confidence: {
+            type: Number,
+            min: 0,
+            max: 1,
+            default: 0.8,
+          },
+        },
+        prompt: String,
+        style: String,
+        contextAnalysis: {
+          themes: [String],
+          characters: [String],
+          setting: String,
+          mood: String,
+          actionLevel: String,
+          storyBeat: String,
+        },
+        generatedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        status: {
+          type: String,
+          enum: ['generating', 'generated', 'failed', 'approved'],
+          default: 'generated',
+        },
+      },
+    ],
   },
   { timestamps: true },
 );

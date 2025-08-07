@@ -15,7 +15,11 @@
         "mongoose": "^8.0.0",
         "pdfkit": "^0.15.0",
         "uuid": "^10.0.0",
-        "zod": "^3.22.0"
+        "zod": "^3.22.0",
+        "openai": "^4.0.0",
+        "axios": "^1.6.0",
+        "sharp": "^0.32.0",
+        "pdfkit": "^0.14.0"
     },
     "devDependencies": {
         "@types/jest": "^29.5.0",

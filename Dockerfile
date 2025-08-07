@@ -24,7 +24,9 @@ RUN \
     # Allow mounting of these files, which have no default
     touch .env ; \
     # Create directories for the volumes to inherit the correct permissions
-    mkdir -p /app/client/public/images /app/api/logs ; \
+    mkdir -p /app/client/public/images /app/api/logs /app/exports/images ; \
+    # Fix npm cache permissions
+    mkdir -p /app/.npm && npm config set cache /app/.npm ; \
     npm config set fetch-retry-maxtimeout 600000 ; \
     npm config set fetch-retries 5 ; \
     npm config set fetch-retry-mintimeout 15000 ; \
@@ -34,7 +36,7 @@ RUN \
     npm prune --production; \
     npm cache clean --force
 
-RUN mkdir -p /app/client/public/images /app/api/logs
+RUN mkdir -p /app/client/public/images /app/api/logs /app/exports/images
 
 # Node API setup
 EXPOSE 3080

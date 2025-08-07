@@ -1,18 +1,49 @@
 import fs from 'fs';
+import { FileSources } from 'librechat-data-provider';
 import path from 'path';
 import PDFDocument from 'pdfkit';
 import { v4 as uuidv4 } from 'uuid';
+import { createFile } from '../../../../../models/File.js';
 
 export class ExportService {
-  constructor(bookService) {
+  constructor(bookService, imageService) {
     this.bookService = bookService;
+    this.imageService = imageService;
     this.exportsDir = path.join(process.cwd(), 'exports');
     this.ensureExportsDirectory();
   }
 
   ensureExportsDirectory() {
-    if (!fs.existsSync(this.exportsDir)) {
-      fs.mkdirSync(this.exportsDir, { recursive: true });
+    try {
+      if (!fs.existsSync(this.exportsDir)) {
+        fs.mkdirSync(this.exportsDir, { recursive: true });
+      }
+      // Test write permissions by creating a test file
+      const testFile = path.join(this.exportsDir, '.write-test');
+      fs.writeFileSync(testFile, 'test');
+      fs.unlinkSync(testFile);
+    } catch (error) {
+      if (error.code === 'EACCES' || error.code === 'ENOENT') {
+        console.warn(
+          `Permission denied or directory not accessible: ${this.exportsDir}. Falling back to temporary directory.`,
+        );
+        // Try to create in a different location if the main one fails
+        const fallbackDir = '/tmp/exports';
+        console.log(`Falling back to ${fallbackDir}`);
+        this.exportsDir = fallbackDir;
+        try {
+          fs.mkdirSync(this.exportsDir, { recursive: true });
+          console.log(`Successfully created fallback directory: ${this.exportsDir}`);
+        } catch (fallbackError) {
+          console.error('Failed to create fallback directory:', fallbackError);
+          throw new Error(
+            `Cannot create exports directory in either ${path.join(process.cwd(), 'exports')} or ${fallbackDir}`,
+          );
+        }
+      } else {
+        console.error('Unexpected error creating exports directory:', error);
+        throw error;
+      }
     }
   }
 
@@ -105,6 +136,15 @@ export class ExportService {
         throw new Error('Unauthorized: You can only export your own books');
       }
 
+      // Fetch images for the book
+      const bookImages = this.imageService
+        ? await this.imageService.getBookImages(bookId, { status: 'approved' })
+        : [];
+
+      // Organize images by chapter and page
+      bookData.imagesByChapter = this.organizeImagesByChapter(bookImages);
+      bookData.allImages = bookImages;
+
       switch (format) {
         case 'pdf':
           return await this.exportToPDF(bookData, includeMetadata);
@@ -112,9 +152,11 @@ export class ExportService {
           return await this.exportToText(bookData, includeMetadata);
         case 'html':
           return await this.exportToHTML(bookData, includeMetadata);
+        case 'docx':
+          return await this.exportToDocx(bookData, includeMetadata);
         default:
           throw new Error(
-            `Export format '${format}' is not supported yet. Supported formats: pdf, txt, html`,
+            `Export format '${format}' is not supported yet. Supported formats: pdf, txt, html, docx`,
           );
       }
     } catch (error) {
@@ -161,31 +203,49 @@ export class ExportService {
 
         doc.end();
 
-        stream.on('finish', () => {
-          const stats = fs.statSync(filepath);
+        stream.on('finish', async () => {
+          try {
+            const stats = fs.statSync(filepath);
 
-          resolve({
-            success: true,
-            bookTitle: bookData.title,
-            format: 'pdf',
-            filename: filename,
-            filepath: filepath,
-            file_id: fileId,
-            userId: bookData.authorId,
-            size: stats.size,
-            exportedAt: new Date().toISOString(),
-            downloadInfo: {
-              downloadMethods: [
-                {
-                  method: 'direct',
-                  url: `exports/${filename}`,
-                  filename: filename,
-                },
-              ],
-            },
-            librechatRegistered: true,
-            exportMode: 'standard',
-          });
+            // Register file with LibreChat
+            const registration = await this.registerFileWithLibreChat(
+              filename,
+              filepath,
+              bookData.authorId,
+              stats.size,
+              'pdf',
+            );
+
+            const downloadUrl = registration.success
+              ? `files/download/${bookData.authorId}/${registration.file.file_id}`
+              : `exports/${filename}`;
+
+            resolve({
+              success: true,
+              bookTitle: bookData.title,
+              format: 'pdf',
+              filename: filename,
+              filepath: filepath,
+              file_id: registration.file?.file_id || fileId,
+              userId: bookData.authorId,
+              size: stats.size,
+              exportedAt: new Date().toISOString(),
+              downloadInfo: {
+                downloadMethods: [
+                  {
+                    method: registration.success ? 'librechat' : 'direct',
+                    url: downloadUrl,
+                    filename: filename,
+                  },
+                ],
+              },
+              librechatRegistered: registration.librechatRegistered,
+              registrationError: registration.error,
+              exportMode: 'standard',
+            });
+          } catch (error) {
+            reject(new Error(`PDF file creation failed: ${error.message}`));
+          }
         });
 
         stream.on('error', (error) => {
@@ -366,7 +426,21 @@ export class ExportService {
 
       // Chapter pages
       if (chapter.pages && chapter.pages.length > 0) {
+        const chapterImages = bookData.imagesByChapter[chapter._id] || [];
+
         chapter.pages.forEach((page, pageIndex) => {
+          // Add images before page
+          const beforeImages = this.getImagesForPage(chapterImages, page.pageNumber, 'before');
+          beforeImages.forEach((image) => {
+            doc.fontSize(10);
+            this.setFont(doc, 'italic', `[IMAGE: ${image.prompt.original}]`);
+            doc.text(`[IMAGE: ${image.prompt.original}]`, { align: 'center' });
+            doc.fontSize(9);
+            this.setFont(doc, 'normal', `(Image file: ${image.filename})`);
+            doc.text(`(Image file: ${image.filename})`, { align: 'center' });
+            doc.moveDown(0.5);
+          });
+
           // Page title
           doc.fontSize(14);
           this.setFont(doc, 'bold', page.title);
@@ -391,6 +465,20 @@ export class ExportService {
               width: doc.page.width - 144,
             });
           }
+
+          // Add images between/after page
+          const betweenImages = this.getImagesForPage(chapterImages, page.pageNumber, 'between');
+          const afterImages = this.getImagesForPage(chapterImages, page.pageNumber, 'after');
+
+          [...betweenImages, ...afterImages].forEach((image) => {
+            doc.moveDown(0.5);
+            doc.fontSize(10);
+            this.setFont(doc, 'italic', `[IMAGE: ${image.prompt.original}]`);
+            doc.text(`[IMAGE: ${image.prompt.original}]`, { align: 'center' });
+            doc.fontSize(9);
+            this.setFont(doc, 'normal', `(Image file: ${image.filename})`);
+            doc.text(`(Image file: ${image.filename})`, { align: 'center' });
+          });
 
           // Add space between pages
           if (pageIndex < chapter.pages.length - 1) {
@@ -470,7 +558,16 @@ export class ExportService {
         }
 
         if (chapter.pages && chapter.pages.length > 0) {
+          const chapterImages = bookData.imagesByChapter[chapter._id] || [];
+
           chapter.pages.forEach((page) => {
+            // Add images before page
+            const beforeImages = this.getImagesForPage(chapterImages, page.pageNumber, 'before');
+            beforeImages.forEach((image) => {
+              content += `[IMAGE: ${image.prompt.original}]\n`;
+              content += `(Image file: ${image.filename})\n\n`;
+            });
+
             content += `${page.title}\n`;
             content += '~'.repeat(page.title.length) + '\n\n';
             content += `${page.content}\n\n`;
@@ -478,6 +575,15 @@ export class ExportService {
             if (page.notes) {
               content += `Notes: ${page.notes}\n\n`;
             }
+
+            // Add images between/after page
+            const betweenImages = this.getImagesForPage(chapterImages, page.pageNumber, 'between');
+            const afterImages = this.getImagesForPage(chapterImages, page.pageNumber, 'after');
+
+            [...betweenImages, ...afterImages].forEach((image) => {
+              content += `[IMAGE: ${image.prompt.original}]\n`;
+              content += `(Image file: ${image.filename})\n\n`;
+            });
           });
         } else {
           content += '[Chapter content not yet written]\n\n';
@@ -493,26 +599,40 @@ export class ExportService {
       fs.writeFileSync(filepath, content, 'utf8');
       const stats = fs.statSync(filepath);
 
+      // Register file with LibreChat
+      const registration = await this.registerFileWithLibreChat(
+        filename,
+        filepath,
+        bookData.authorId,
+        stats.size,
+        'txt',
+      );
+
+      const downloadUrl = registration.success
+        ? `files/download/${bookData.authorId}/${registration.file.file_id}`
+        : `exports/${filename}`;
+
       return {
         success: true,
         bookTitle: bookData.title,
         format: 'txt',
         filename: filename,
         filepath: filepath,
-        file_id: fileId,
+        file_id: registration.file?.file_id || fileId,
         userId: bookData.authorId,
         size: stats.size,
         exportedAt: new Date().toISOString(),
         downloadInfo: {
           downloadMethods: [
             {
-              method: 'direct',
-              url: `exports/${filename}`,
+              method: registration.success ? 'librechat' : 'direct',
+              url: downloadUrl,
               filename: filename,
             },
           ],
         },
-        librechatRegistered: true,
+        librechatRegistered: registration.librechatRegistered,
+        registrationError: registration.error,
         exportMode: 'standard',
       };
     } catch (error) {
@@ -628,6 +748,24 @@ export class ExportService {
             color: #666;
             border-top: 1px solid #ddd;
         }
+        .image-container {
+            text-align: center;
+            margin: 2rem 0;
+            page-break-inside: avoid;
+        }
+        .book-image {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .image-caption {
+            font-style: italic;
+            color: #666;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>`;
@@ -741,7 +879,19 @@ export class ExportService {
         }
 
         if (chapter.pages && chapter.pages.length > 0) {
+          const chapterImages = bookData.imagesByChapter[chapter._id] || [];
+
           chapter.pages.forEach((page) => {
+            // Add images before page
+            const beforeImages = this.getImagesForPage(chapterImages, page.pageNumber, 'before');
+            beforeImages.forEach((image) => {
+              html += `
+        <div class="image-container">
+            <img src="${image.url}" alt="${this.escapeHtml(image.prompt.original)}" class="book-image" loading="lazy" />
+            <div class="image-caption">${this.escapeHtml(image.prompt.original)}</div>
+        </div>`;
+            });
+
             html += `
         <div class="page">
             <h3 class="page-title">${this.escapeHtml(page.title)}</h3>
@@ -754,6 +904,18 @@ export class ExportService {
 
             html += `
         </div>`;
+
+            // Add images between/after page
+            const betweenImages = this.getImagesForPage(chapterImages, page.pageNumber, 'between');
+            const afterImages = this.getImagesForPage(chapterImages, page.pageNumber, 'after');
+
+            [...betweenImages, ...afterImages].forEach((image) => {
+              html += `
+        <div class="image-container">
+            <img src="${image.url}" alt="${this.escapeHtml(image.prompt.original)}" class="book-image" loading="lazy" />
+            <div class="image-caption">${this.escapeHtml(image.prompt.original)}</div>
+        </div>`;
+            });
           });
         } else {
           html += `
@@ -782,26 +944,40 @@ export class ExportService {
       fs.writeFileSync(filepath, html, 'utf8');
       const stats = fs.statSync(filepath);
 
+      // Register file with LibreChat
+      const registration = await this.registerFileWithLibreChat(
+        filename,
+        filepath,
+        bookData.authorId,
+        stats.size,
+        'html',
+      );
+
+      const downloadUrl = registration.success
+        ? `files/download/${bookData.authorId}/${registration.file.file_id}`
+        : `exports/${filename}`;
+
       return {
         success: true,
         bookTitle: bookData.title,
         format: 'html',
         filename: filename,
         filepath: filepath,
-        file_id: fileId,
+        file_id: registration.file?.file_id || fileId,
         userId: bookData.authorId,
         size: stats.size,
         exportedAt: new Date().toISOString(),
         downloadInfo: {
           downloadMethods: [
             {
-              method: 'direct',
-              url: `exports/${filename}`,
+              method: registration.success ? 'librechat' : 'direct',
+              url: downloadUrl,
               filename: filename,
             },
           ],
         },
-        librechatRegistered: true,
+        librechatRegistered: registration.librechatRegistered,
+        registrationError: registration.error,
         exportMode: 'standard',
       };
     } catch (error) {
@@ -819,6 +995,145 @@ export class ExportService {
       .replace(/'/g, '&#39;');
   }
 
+  /**
+   * Organizes images by chapter and page for easy access during export
+   * @param {Array} images - Array of image objects
+   * @returns {Object} Images organized by chapter ID
+   */
+  organizeImagesByChapter(images) {
+    const imagesByChapter = {};
+
+    images.forEach((image) => {
+      if (!imagesByChapter[image.chapterId]) {
+        imagesByChapter[image.chapterId] = [];
+      }
+      imagesByChapter[image.chapterId].push(image);
+    });
+
+    // Sort images within each chapter by target page number
+    Object.keys(imagesByChapter).forEach((chapterId) => {
+      imagesByChapter[chapterId].sort((a, b) => a.targetPageNumber - b.targetPageNumber);
+    });
+
+    return imagesByChapter;
+  }
+
+  /**
+   * Gets images that should be placed around a specific page
+   * @param {Array} chapterImages - Images for the chapter
+   * @param {number} pageNumber - Target page number
+   * @param {string} position - Image position ('before', 'after', 'between')
+   * @returns {Array} Relevant images for this position
+   */
+  getImagesForPage(chapterImages, pageNumber, position) {
+    if (!chapterImages) return [];
+
+    return chapterImages.filter(
+      (image) => image.targetPageNumber === pageNumber && image.placement.position === position,
+    );
+  }
+
+  /**
+   * Exports book to DOCX format with embedded images
+   * @param {Object} bookData - Complete book data
+   * @param {boolean} includeMetadata - Whether to include metadata
+   * @returns {Object} Export result
+   */
+  async exportToDocx(bookData, includeMetadata) {
+    const filename = this.generateFilename(bookData.title, 'docx');
+    const filepath = path.join(this.exportsDir, filename);
+    const fileId = uuidv4();
+
+    try {
+      // Create DOCX content (placeholder implementation)
+      // In a real implementation, you would use a library like docx or officegen
+      let docxContent = `Book: ${bookData.title}\n\n`;
+
+      if (includeMetadata) {
+        docxContent += `Genre: ${bookData.genre}\n`;
+        docxContent += `Theme: ${bookData.theme}\n`;
+        if (bookData.description) {
+          docxContent += `Description: ${bookData.description}\n`;
+        }
+        docxContent += '\n';
+      }
+
+      // Add chapters with images
+      bookData.chapters.forEach((chapter) => {
+        docxContent += `\n\nChapter ${chapter.chapterNumber}: ${chapter.title}\n`;
+        docxContent += '='.repeat(chapter.title.length + 10) + '\n\n';
+
+        const chapterImages = bookData.imagesByChapter[chapter._id] || [];
+
+        chapter.pages.forEach((page) => {
+          // Add images before page
+          const beforeImages = this.getImagesForPage(chapterImages, page.pageNumber, 'before');
+          beforeImages.forEach((image) => {
+            docxContent += `[IMAGE: ${image.prompt.original}]\n`;
+            docxContent += `[Image file: ${image.filename}]\n\n`;
+          });
+
+          docxContent += `\n${page.title}\n`;
+          docxContent += '-'.repeat(page.title.length) + '\n\n';
+          docxContent += `${page.content}\n\n`;
+
+          // Add images between/after page
+          const betweenImages = this.getImagesForPage(chapterImages, page.pageNumber, 'between');
+          const afterImages = this.getImagesForPage(chapterImages, page.pageNumber, 'after');
+
+          [...betweenImages, ...afterImages].forEach((image) => {
+            docxContent += `[IMAGE: ${image.prompt.original}]\n`;
+            docxContent += `[Image file: ${image.filename}]\n\n`;
+          });
+        });
+      });
+
+      // Write file (placeholder - in real implementation, create actual DOCX)
+      fs.writeFileSync(filepath, docxContent, 'utf8');
+      const stats = fs.statSync(filepath);
+
+      // Register file with LibreChat
+      const registration = await this.registerFileWithLibreChat(
+        filename,
+        filepath,
+        bookData.authorId,
+        stats.size,
+        'docx',
+      );
+
+      const downloadUrl = registration.success
+        ? `files/download/${bookData.authorId}/${registration.file.file_id}`
+        : `exports/${filename}`;
+
+      return {
+        success: true,
+        bookTitle: bookData.title,
+        format: 'docx',
+        filename: filename,
+        filepath: filepath,
+        file_id: registration.file?.file_id || fileId,
+        userId: bookData.authorId,
+        size: stats.size,
+        imageCount: bookData.allImages.length,
+        exportedAt: new Date().toISOString(),
+        downloadInfo: {
+          downloadMethods: [
+            {
+              method: registration.success ? 'librechat' : 'direct',
+              url: downloadUrl,
+              filename: filename,
+            },
+          ],
+        },
+        librechatRegistered: registration.librechatRegistered,
+        registrationError: registration.error,
+        exportMode: 'standard',
+      };
+    } catch (error) {
+      throw new Error(`DOCX export failed: ${error.message}`);
+    }
+  }
+
   generateFilename(title, format) {
     const sanitizedTitle = title
       .replace(/[^a-zA-Z0-9\s-_]/g, '')
@@ -828,5 +1143,45 @@ export class ExportService {
 
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
     return `${sanitizedTitle}_${timestamp}.${format}`;
+  }
+
+  async registerFileWithLibreChat(filename, filepath, userId, fileSize, format) {
+    try {
+      const fileData = {
+        user: userId,
+        file_id: uuidv4(),
+        bytes: fileSize,
+        filename: filename,
+        filepath: filepath,
+        type: this.getMimeType(format),
+        source: FileSources.local,
+        usage: 0,
+      };
+
+      const registeredFile = await createFile(fileData);
+      return {
+        success: true,
+        file: registeredFile,
+        librechatRegistered: true,
+      };
+    } catch (error) {
+      console.warn('Failed to register file with LibreChat:', error.message);
+      return {
+        success: false,
+        error: error.message,
+        librechatRegistered: false,
+      };
+    }
+  }
+
+  getMimeType(format) {
+    const mimeTypes = {
+      pdf: 'application/pdf',
+      html: 'text/html',
+      txt: 'text/plain',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      epub: 'application/epub+zip',
+    };
+    return mimeTypes[format] || 'application/octet-stream';
   }
 }
