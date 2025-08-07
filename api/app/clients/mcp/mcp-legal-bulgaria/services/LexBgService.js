@@ -10,6 +10,7 @@ import { RagIntegrationService } from './RagIntegrationService.js';
 export class LexBgService {
   constructor() {
     this.baseUrl = 'https://lex.bg';
+    this.cache = new Map(); // Cache for scraped content
     this.apiUrl = 'https://lex.bg/api';
     this.searchEndpoint = '/search';
     this.documentsEndpoint = '/documents';
@@ -91,11 +92,25 @@ export class LexBgService {
         results.filter((r) => r.status === 'fulfilled').map((r) => r.value),
       );
 
+      // Perform deep content analysis if requested
+      let finalResults = combinedResults.slice(0, limit);
+      if (searchCriteria.deepAnalysis !== false && searchCriteria.legalArticle) {
+        console.log(
+          `🔍 Performing deep content analysis on ${finalResults.length} lex.bg results...`,
+        );
+        const enhancedResults = await this.performDeepContentAnalysis(finalResults, searchCriteria);
+        console.log(`✅ Deep analysis completed: ${enhancedResults.length} relevant results found`);
+        finalResults = enhancedResults;
+      }
+
       return {
         success: true,
-        results: combinedResults.slice(0, limit),
-        total: combinedResults.length,
+        results: finalResults,
+        total: finalResults.length,
+        originalTotal: combinedResults.length,
         source: 'lex.bg',
+        deepAnalysisPerformed: searchCriteria.deepAnalysis !== false && searchCriteria.legalArticle,
+        contentAnalyzed: finalResults.filter((r) => r.legalAnalysis).length,
         searchStrategies: results.map((r, i) => ({
           strategy: Math.floor(i / Math.max(processedQueries.length, 1)) + 1,
           query: processedQueries[i % processedQueries.length] || query,
@@ -907,5 +922,419 @@ export class LexBgService {
         message: error.message,
       };
     }
+  }
+
+  /**
+   * Deep content analysis - scrape full content from lex.bg URLs
+   */
+  async performDeepContentAnalysis(results, searchCriteria) {
+    const enhancedResults = [];
+
+    for (const result of results) {
+      try {
+        // Check if it's a relevant legal document URL
+        if (this.isLegalDocumentUrl(result.url)) {
+          const fullContent = await this.scrapeFullContent(result.url);
+
+          if (fullContent) {
+            const analyzedContent = this.analyzeLegalContent(fullContent, searchCriteria);
+
+            // Only include if it meets our legal criteria
+            if (analyzedContent.relevanceScore > 70) {
+              enhancedResults.push({
+                ...result,
+                fullContent: fullContent.text,
+                legalAnalysis: analyzedContent,
+                contentType: fullContent.contentType,
+                extractedCitations: fullContent.citations,
+                partyAnalysis: fullContent.partyAnalysis,
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.log(`Failed to analyze content for ${result.url}: ${error.message}`);
+        // Include original result if scraping fails
+        enhancedResults.push(result);
+      }
+    }
+
+    return enhancedResults;
+  }
+
+  /**
+   * Check if URL points to actual legal document vs news article
+   */
+  isLegalDocumentUrl(url) {
+    const legalIndicators = [
+      '/document/',
+      '/decision/',
+      '/ruling/',
+      '/case/',
+      '/judgment/',
+      'съдебно-решение',
+      'решение',
+      'постановление',
+      'определение',
+    ];
+
+    return legalIndicators.some((indicator) => url.toLowerCase().includes(indicator));
+  }
+
+  /**
+   * Scrape full content from lex.bg page
+   */
+  async scrapeFullContent(url) {
+    // Check cache first
+    if (this.cache.has(url)) {
+      return this.cache.get(url);
+    }
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'bg,en;q=0.9',
+        },
+        timeout: 15000,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const html = await response.text();
+      const $ = cheerio.load(html);
+
+      const scrapedContent = this.extractLegalContent($);
+
+      // Cache the result
+      this.cache.set(url, scrapedContent);
+
+      return scrapedContent;
+    } catch (error) {
+      console.log(`Error scraping ${url}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Extract legal content from lex.bg page HTML
+   */
+  extractLegalContent($) {
+    const content = {
+      text: '',
+      contentType: 'unknown',
+      citations: [],
+      partyAnalysis: {},
+      caseDetails: {},
+    };
+
+    // Try different selectors for content extraction
+    const contentSelectors = [
+      '.document-content',
+      '.article-content',
+      '.decision-text',
+      '.legal-text',
+      '.main-content',
+      '#content',
+      '.content',
+      'article',
+      '.post-content',
+    ];
+
+    let mainText = '';
+    for (const selector of contentSelectors) {
+      const element = $(selector);
+      if (element.length > 0 && element.text().trim().length > 100) {
+        mainText = element.text().trim();
+        break;
+      }
+    }
+
+    if (!mainText) {
+      // Fallback - get all paragraph text
+      mainText = $('p')
+        .map((i, el) => $(el).text())
+        .get()
+        .join('\n')
+        .trim();
+    }
+
+    content.text = mainText;
+
+    // Determine content type
+    content.contentType = this.determineContentType(mainText, $);
+
+    // Extract legal citations
+    content.citations = this.extractCitations(mainText);
+
+    // Analyze parties involved
+    content.partyAnalysis = this.analyzeParties(mainText);
+
+    // Extract case details
+    content.caseDetails = this.extractCaseDetails(mainText, $);
+
+    return content;
+  }
+
+  /**
+   * Determine if content is a court decision, law, regulation, etc.
+   */
+  determineContentType(text, $) {
+    const textLower = text.toLowerCase();
+
+    // Check for court decision indicators
+    const courtIndicators = [
+      'съдебно решение',
+      'решение',
+      'постановление',
+      'определение',
+      'касационно решение',
+      'тълкувателно решение',
+      'обединително решение',
+      'върховен касационен съд',
+      'вкс',
+      'апелативен съд',
+      'районен съд',
+      'административен съд',
+      'специализиран наказателен съд',
+    ];
+
+    const lawIndicators = ['закон', 'кодекс', 'наредба', 'правилник', 'устав'];
+
+    const regulationIndicators = [
+      'постановление на министерския съвет',
+      'пмс',
+      'наредба',
+      'правила',
+    ];
+
+    if (courtIndicators.some((indicator) => textLower.includes(indicator))) {
+      return 'court_decision';
+    } else if (lawIndicators.some((indicator) => textLower.includes(indicator))) {
+      return 'legislation';
+    } else if (regulationIndicators.some((indicator) => textLower.includes(indicator))) {
+      return 'regulation';
+    }
+
+    return 'other';
+  }
+
+  /**
+   * Extract legal citations from text
+   */
+  extractCitations(text) {
+    const citations = [];
+
+    // Bulgarian legal citation patterns
+    const patterns = [
+      /чл\.\s*\d+[а-я]?\s*(?:,\s*ал\.\s*\d+)?\s*(?:от|на)\s*([А-Я][а-я\s]+(?:кодекс|закон))/gi,
+      /член\s*\d+[а-я]?\s*(?:,\s*алинея\s*\d+)?\s*(?:от|на)\s*([А-Я][а-я\s]+(?:кодекс|закон))/gi,
+      /§\s*\d+\s*(?:от|на)\s*([А-Я][а-я\s]+)/gi,
+      /(ГК|ТЗ|НК|ГПК|НПК|КТ|ЗЗД)\s*-?\s*чл\.\s*\d+/gi,
+    ];
+
+    patterns.forEach((pattern) => {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        citations.push(match[0].trim());
+      }
+    });
+
+    return [...new Set(citations)]; // Remove duplicates
+  }
+
+  /**
+   * Analyze parties involved and liability
+   */
+  analyzeParties(text) {
+    const analysis = {
+      parties: [],
+      liability: 'unknown',
+      outcome: 'unknown',
+    };
+
+    const textLower = text.toLowerCase();
+
+    // Extract party types
+    const partyPatterns = [
+      { type: 'seller', patterns: ['продавач', 'продавача'] },
+      { type: 'buyer', patterns: ['купувач', 'купувача', 'покупател'] },
+      { type: 'plaintiff', patterns: ['ищец', 'ищеца'] },
+      { type: 'defendant', patterns: ['ответник', 'ответника'] },
+      { type: 'contractor', patterns: ['изпълнител', 'подизпълнител'] },
+      { type: 'client', patterns: ['възложител', 'клиент'] },
+    ];
+
+    partyPatterns.forEach(({ type, patterns }) => {
+      if (patterns.some((pattern) => textLower.includes(pattern))) {
+        analysis.parties.push(type);
+      }
+    });
+
+    // Determine liability
+    const liabilityPatterns = {
+      seller_liable: [
+        'продавач.*отговор',
+        'продавач.*виновен',
+        'продавач.*задължен',
+        'продавач.*възстанов',
+        'продавач.*обезщет',
+      ],
+      buyer_liable: ['купувач.*отговор', 'купувач.*виновен', 'купувач.*задължен'],
+      plaintiff_wins: ['иск.*уважен', 'в полза на ищеца', 'присъди.*иск'],
+      defendant_wins: ['иск.*отхвърлен', 'ответник.*оправдан', 'неоснователен.*иск'],
+    };
+
+    Object.entries(liabilityPatterns).forEach(([liability, patterns]) => {
+      if (patterns.some((pattern) => new RegExp(pattern, 'i').test(textLower))) {
+        analysis.liability = liability;
+      }
+    });
+
+    return analysis;
+  }
+
+  /**
+   * Extract case details like court, date, case number
+   */
+  extractCaseDetails(text, $) {
+    const details = {};
+
+    // Extract case number
+    const caseNumberPatterns = [
+      /№\s*\d+\/\d{4}/g,
+      /дело\s*№\s*\d+\/\d{4}/gi,
+      /дд\s*№\s*\d+\/\d{4}/gi,
+    ];
+
+    caseNumberPatterns.forEach((pattern) => {
+      const matches = text.match(pattern);
+      if (matches) {
+        details.caseNumber = matches[0];
+      }
+    });
+
+    // Extract court name
+    const courtPatterns = [
+      /върховен\s+касационен\s+съд/gi,
+      /апелативен\s+съд\s+[а-я\s]+/gi,
+      /районен\s+съд\s+[а-я\s]+/gi,
+      /административен\s+съд\s+[а-я\s]+/gi,
+    ];
+
+    courtPatterns.forEach((pattern) => {
+      const matches = text.match(pattern);
+      if (matches) {
+        details.court = matches[0];
+      }
+    });
+
+    // Extract date
+    const datePatterns = [/\d{1,2}\.\d{1,2}\.\d{4}/g, /\d{4}-\d{1,2}-\d{1,2}/g];
+
+    datePatterns.forEach((pattern) => {
+      const matches = text.match(pattern);
+      if (matches) {
+        details.date = matches[0];
+      }
+    });
+
+    return details;
+  }
+
+  /**
+   * Analyze legal content for relevance to search criteria
+   */
+  analyzeLegalContent(content, searchCriteria) {
+    const analysis = {
+      relevanceScore: 0,
+      matchedCriteria: [],
+      extractedInfo: {},
+    };
+
+    const text = content.text.toLowerCase();
+
+    // Check legal article match
+    if (searchCriteria.legalArticle) {
+      const variations = this.generateArticleVariations(searchCriteria.legalArticle);
+      if (variations.some((variant) => text.includes(variant.toLowerCase()))) {
+        analysis.relevanceScore += 30;
+        analysis.matchedCriteria.push('legal_article');
+      }
+    }
+
+    // Check party liability
+    if (
+      searchCriteria.partyLiability &&
+      content.partyAnalysis.liability === searchCriteria.partyLiability
+    ) {
+      analysis.relevanceScore += 25;
+      analysis.matchedCriteria.push('party_liability');
+    }
+
+    // Check contract clause
+    if (
+      searchCriteria.contractClause &&
+      text.includes(searchCriteria.contractClause.toLowerCase())
+    ) {
+      analysis.relevanceScore += 20;
+      analysis.matchedCriteria.push('contract_clause');
+    }
+
+    // Check for VKS decisions
+    if (text.includes('върховен касационен съд') || text.includes('вкс')) {
+      analysis.relevanceScore += 15;
+      analysis.matchedCriteria.push('vks_decision');
+    }
+
+    // Check content type
+    if (content.contentType === 'court_decision') {
+      analysis.relevanceScore += 10;
+      analysis.matchedCriteria.push('court_decision');
+    }
+
+    analysis.extractedInfo = {
+      contentType: content.contentType,
+      parties: content.partyAnalysis.parties,
+      liability: content.partyAnalysis.liability,
+      citations: content.citations,
+      caseDetails: content.caseDetails,
+    };
+
+    return analysis;
+  }
+
+  /**
+   * Generate article variations for matching
+   */
+  generateArticleVariations(article) {
+    const variations = [article];
+
+    if (article.includes('чл.')) {
+      variations.push(article.replace('чл.', 'член'));
+      variations.push(article.replace('чл.', 'чл'));
+    }
+
+    // Add law expansions
+    const lawExpansions = {
+      ГК: ['Гражданския кодекс', 'граждански кодекс'],
+      ТЗ: ['Търговския закон', 'търговски закон'],
+      НК: ['Наказателния кодекс', 'наказателен кодекс'],
+      ЗЗД: ['Закона за защита на данните'],
+    };
+
+    Object.entries(lawExpansions).forEach(([abbrev, expansions]) => {
+      if (article.includes(abbrev)) {
+        expansions.forEach((expansion) => {
+          variations.push(article.replace(abbrev, expansion));
+        });
+      }
+    });
+
+    return variations;
   }
 }

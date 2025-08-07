@@ -240,6 +240,31 @@ class BulgarianLegalServer {
                   description: 'Language for response',
                   default: 'bulgarian',
                 },
+                partyLiability: {
+                  type: 'string',
+                  enum: [
+                    'seller_liable',
+                    'buyer_liable',
+                    'plaintiff_wins',
+                    'defendant_wins',
+                    'partial_liability',
+                    'any',
+                  ],
+                  description: 'Party liability outcome (critical for lawyer queries)',
+                  default: 'any',
+                },
+                contractClause: {
+                  type: 'string',
+                  description:
+                    'Specific contract clause to verify presence (e.g., "гаранционен срок")',
+                  maxLength: 200,
+                },
+                legalOutcome: {
+                  type: 'string',
+                  enum: ['upheld', 'overturned', 'remanded', 'settled', 'any'],
+                  description: 'How the case was ultimately decided',
+                  default: 'any',
+                },
               },
               required: ['query'],
             },

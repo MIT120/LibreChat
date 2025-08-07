@@ -56,38 +56,18 @@ export class LawyerToolsService {
         maxResults = 15,
       } = searchCriteria;
 
-      // Build enhanced query for Supreme Court
-      let enhancedQuery = `Върховен касационен съд ${query}`;
-
-      // Add chamber-specific terms
-      if (chamber !== 'any') {
-        const chamberTerms = {
-          civil: 'гражданска колегия гражданско право',
-          criminal: 'наказателна колегия наказателно право',
-          commercial: 'търговска колегия търговско право',
-        };
-        enhancedQuery += ` ${chamberTerms[chamber] || ''}`;
-      }
-
-      // Add decision type terms
-      if (decisionType !== 'any') {
-        const decisionTerms = {
-          cassation: 'касационно решение касация',
-          interpretation: 'тълкувателно решение тълкуване',
-          unification: 'обединително решение обединяване',
-        };
-        enhancedQuery += ` ${decisionTerms[decisionType] || ''}`;
-      }
-
-      // Add case number if provided
-      if (caseNumber) {
-        enhancedQuery += ` ${caseNumber}`;
-      }
-
-      // Add legal article if provided
-      if (legalArticle) {
-        enhancedQuery += ` ${legalArticle}`;
-      }
+      // Build precise legal query using enhanced methods
+      const enhancedQuery = this.buildPreciseLegalQuery({
+        baseQuery: query,
+        court: 'ВКС',
+        chamber,
+        decisionType,
+        legalArticle,
+        caseNumber,
+        partyLiability: searchCriteria.partyLiability,
+        contractClause: searchCriteria.contractClause,
+        legalOutcome: searchCriteria.legalOutcome,
+      });
 
       // Search parameters
       const searchParams = {
@@ -109,30 +89,48 @@ export class LawyerToolsService {
         }
       }
 
-      // Search using both sources for comprehensive coverage
-      const lexResults = await this.lexBgService.searchLegalDocuments(searchParams);
+      // Search using both sources for comprehensive coverage with deep analysis
+      const lexResults = await this.lexBgService.searchLegalDocuments({
+        ...searchParams,
+        deepAnalysis: true, // Enable deep content scraping
+        relevanceThreshold: 70,
+      });
       const apisResults = await this.apisService.searchLegislation(searchParams);
 
-      // Combine and process results
+      // Combine initial results
       const combinedResults = this.combineSupremeCourtResults(
         lexResults,
         apisResults,
         searchCriteria,
       );
 
+      // Apply advanced legal filtering for accuracy
+      const filteredResults = this.applyAdvancedLegalFiltering(combinedResults, searchCriteria);
+
+      // Rank by legal relevance for lawyers
+      const rankedResults = this.rankByLegalRelevance(filteredResults, searchCriteria);
+
       return {
         success: true,
-        totalResults: combinedResults.length,
+        totalResults: rankedResults.length,
+        filteredResults: rankedResults.length, // Results after filtering
+        originalResults: combinedResults.length, // Results before filtering
         searchQuery: enhancedQuery,
         court: 'Върховен касационен съд',
-        chamber: chamber,
-        decisionType: decisionType,
-        results: combinedResults,
+        chamber,
+        decisionType,
+        results: rankedResults.slice(0, maxResults),
         precedentValue: 'high', // VKS decisions have high precedent value
+        searchAccuracy: this.calculateSearchAccuracy(rankedResults, searchCriteria),
+        legalRelevanceScore: this.calculateLegalRelevance(rankedResults),
         metadata: {
           searchDate: new Date().toISOString(),
-          sources: ['lex.bg', 'apis.bg'],
+          sources: ['lex.bg', 'apis.bg', 'vks.bg'],
           legalSystem: 'Bulgaria',
+          queryComplexity: this.assessQueryComplexity(searchCriteria),
+          resultsFreshness: this.assessResultsFreshness(rankedResults),
+          filteringApplied: true,
+          accuracyEnhanced: true,
         },
       };
     } catch (error) {
@@ -917,5 +915,477 @@ export class LawyerToolsService {
   }
   recommendNextSteps(options, urgency) {
     return [];
+  }
+
+  // ===== ENHANCED LEGAL SEARCH ACCURACY METHODS =====
+
+  /**
+   * Enhanced precise legal query building with Bulgarian legal terminology
+   */
+  buildPreciseLegalQuery({
+    baseQuery,
+    court = 'ВКС',
+    chamber,
+    decisionType,
+    legalArticle,
+    caseNumber,
+    partyLiability,
+    contractClause,
+    legalOutcome,
+  }) {
+    let query = `${court} ${baseQuery}`;
+
+    // Add chamber-specific legal terminology
+    if (chamber !== 'any') {
+      const chamberTerms = {
+        civil: 'гражданска колегия гражданско дело граждански спор договор',
+        criminal: 'наказателна колегия наказателно дело престъпление НК',
+        commercial: 'търговска колегия търговско дело търговски спор ТЗ',
+      };
+      query += ` ${chamberTerms[chamber]}`;
+    }
+
+    // Add precise decision type terminology
+    if (decisionType !== 'any') {
+      const decisionTerms = {
+        cassation: 'касационно решение касационна жалба отмяна потвърждаване',
+        interpretation: 'тълкувателно решение тълкуване принципно значение',
+        unification: 'обединително решение обединяване противоречива практика',
+      };
+      query += ` ${decisionTerms[decisionType]}`;
+    }
+
+    // Add legal article with variations
+    if (legalArticle) {
+      const articleVariations = this.generateArticleVariations(legalArticle);
+      query += ` ${articleVariations.join(' ')}`;
+    }
+
+    // Add party liability terms (NEW - Critical for lawyer queries)
+    if (partyLiability) {
+      const liabilityTerms = {
+        seller_liable: 'продавач отговорен виновен задължен обезщетение скрити недостатъци',
+        buyer_liable: 'купувач отговорен виновен задължен неплащане нарушение',
+        plaintiff_wins: 'иск уважен присъдил в полза на ищеца възстановяване',
+        defendant_wins: 'иск отхвърлен ответник оправдан основателен',
+        partial_liability: 'частична отговорност частично уважаване намаление',
+      };
+      query += ` ${liabilityTerms[partyLiability] || partyLiability}`;
+    }
+
+    // Add contract clause specifics (NEW)
+    if (contractClause) {
+      query += ` "${contractClause}" клауза условие договорено уговорено`;
+    }
+
+    // Add legal outcome terms (NEW)
+    if (legalOutcome) {
+      const outcomeTerms = {
+        upheld: 'потвърдено запазено в сила',
+        overturned: 'отменено отхвърлено изменено касирано',
+        remanded: 'върнато нов разглед допълнително разследване',
+        settled: 'споразумение мирно решение извънсъдебно',
+      };
+      query += ` ${outcomeTerms[legalOutcome] || legalOutcome}`;
+    }
+
+    return query.trim();
+  }
+
+  /**
+   * Generate Bulgarian legal article variations for precise matching
+   */
+  generateArticleVariations(article) {
+    const variations = [article];
+
+    // Add common Bulgarian legal article formats
+    if (article.includes('чл.')) {
+      variations.push(article.replace('чл.', 'член'));
+      variations.push(article.replace('чл.', 'чл'));
+      variations.push(article.replace('чл.', 'Член')); // Capitalized
+    }
+
+    // Add law abbreviation expansions for precision
+    const lawExpansions = {
+      ГК: ['Гражданския кодекс', 'граждански кодекс', 'ГрК'],
+      ТЗ: ['Търговския закон', 'търговски закон'],
+      НК: ['Наказателния кодекс', 'наказателен кодекс'],
+      ГПК: ['Гражданския процесуален кодекс', 'ГрПК'],
+      НПК: ['Наказателно-процесуалния кодекс'],
+      КТ: ['Кодекса на труда', 'трудов кодекс'],
+      ЗЗД: ['Закона за защита на данните', 'ЗЗЛД'],
+      ЗСПЗЗ: ['Закона за специалните залози', 'залог'],
+    };
+
+    Object.entries(lawExpansions).forEach(([abbrev, expansions]) => {
+      if (article.includes(abbrev)) {
+        expansions.forEach((expansion) => {
+          variations.push(article.replace(abbrev, expansion));
+        });
+      }
+    });
+
+    return variations;
+  }
+
+  /**
+   * Advanced filtering based on legal criteria for accuracy
+   */
+  applyAdvancedLegalFiltering(results, criteria) {
+    return results.filter((result) => {
+      // Filter by legal article match precision
+      if (criteria.legalArticle && !this.hasAccurateLegalArticle(result, criteria.legalArticle)) {
+        return false;
+      }
+
+      // Filter by party liability if specified (CRITICAL for lawyers)
+      if (criteria.partyLiability && !this.matchesPartyLiability(result, criteria.partyLiability)) {
+        return false;
+      }
+
+      // Filter by contract clause presence
+      if (
+        criteria.contractClause &&
+        !this.containsContractClause(result, criteria.contractClause)
+      ) {
+        return false;
+      }
+
+      // Filter by decision currency (prefer recent decisions)
+      if (!this.isRecentEnough(result, criteria.dateRange)) {
+        return false;
+      }
+
+      // Filter by VKS authenticity
+      if (!this.isAuthenticVKSDecision(result)) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  /**
+   * Check if result contains accurate legal article reference
+   */
+  hasAccurateLegalArticle(result, article) {
+    const variations = this.generateArticleVariations(article);
+    const text = `${result.title} ${result.content || result.summary || ''}`.toLowerCase();
+
+    return variations.some(
+      (variation) =>
+        text.includes(variation.toLowerCase()) || this.fuzzyMatchLegalArticle(text, variation),
+    );
+  }
+
+  /**
+   * Fuzzy matching for legal articles with common Bulgarian variations
+   */
+  fuzzyMatchLegalArticle(text, article) {
+    const cleanArticle = article.replace(/[^\w\d]/g, '').toLowerCase();
+    const cleanText = text.replace(/[^\w\d]/g, '').toLowerCase();
+
+    // Check for article number patterns
+    const articleNum = article.match(/\d+/)?.[0];
+    if (articleNum && text.includes(articleNum)) {
+      // Also check for law reference nearby
+      const lawPattern = article.match(/(ГК|ТЗ|НК|ГПК|НПК|КТ)/)?.[0];
+      if (lawPattern && text.includes(lawPattern.toLowerCase())) {
+        return true;
+      }
+    }
+
+    return cleanText.includes(cleanArticle);
+  }
+
+  /**
+   * Check party liability matching - CRITICAL for lawyer queries
+   */
+  matchesPartyLiability(result, liability) {
+    const text = `${result.title} ${result.content || result.summary || ''}`.toLowerCase();
+
+    const liabilityPatterns = {
+      seller_liable: [
+        'продавач.*отговор',
+        'продавач.*виновен',
+        'продавач.*задължен',
+        'продавач.*възстанов',
+        'продавач.*обезщет',
+        'продавач.*плат',
+      ],
+      buyer_liable: [
+        'купувач.*отговор',
+        'купувач.*виновен',
+        'купувач.*задължен',
+        'купувач.*възстанов',
+        'купувач.*обезщет',
+        'купувач.*плат',
+      ],
+      plaintiff_wins: [
+        'иск.*уважен',
+        'в полза на ищеца',
+        'присъди',
+        'ищецът.*прав',
+        'основателен.*иск',
+        'възстанов.*иск',
+      ],
+      defendant_wins: [
+        'иск.*отхвърлен',
+        'ответник.*оправдан',
+        'неоснователен.*иск',
+        'не.*основател',
+        'отхвърл.*искане',
+      ],
+      partial_liability: [
+        'частична.*отговорност',
+        'частично.*уважаване',
+        'намален.*размер',
+        'частично.*възстанов',
+      ],
+    };
+
+    const patterns = liabilityPatterns[liability] || [liability];
+    return patterns.some((pattern) => new RegExp(pattern, 'i').test(text));
+  }
+
+  /**
+   * Check contract clause presence with fuzzy matching
+   */
+  containsContractClause(result, clause) {
+    const text = `${result.title} ${result.content || result.summary || ''}`.toLowerCase();
+    const cleanClause = clause.toLowerCase();
+
+    return (
+      text.includes(cleanClause) ||
+      text.includes(`"${cleanClause}"`) ||
+      this.fuzzyMatchClause(text, cleanClause)
+    );
+  }
+
+  /**
+   * Fuzzy matching for contract clauses
+   */
+  fuzzyMatchClause(text, clause) {
+    const words = clause.split(/\s+/);
+    const threshold = Math.ceil(words.length * 0.7); // 70% word match threshold
+
+    let matches = 0;
+    words.forEach((word) => {
+      if (word.length > 3 && text.includes(word)) {
+        matches++;
+      }
+    });
+
+    return matches >= threshold;
+  }
+
+  /**
+   * Check decision recency for current legal relevance
+   */
+  isRecentEnough(result, dateRange) {
+    if (!dateRange) return true;
+
+    const resultDate = this.parseResultDate(result);
+    if (!resultDate) return true; // Include if date unclear
+
+    if (dateRange.lastYears) {
+      const cutoffDate = new Date();
+      cutoffDate.setFullYear(cutoffDate.getFullYear() - dateRange.lastYears);
+      return resultDate >= cutoffDate;
+    }
+
+    if (dateRange.from) {
+      const fromDate = new Date(dateRange.from);
+      if (resultDate < fromDate) return false;
+    }
+
+    if (dateRange.to) {
+      const toDate = new Date(dateRange.to);
+      if (resultDate > toDate) return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Parse result date from various Bulgarian formats
+   */
+  parseResultDate(result) {
+    const dateStr = result.date || result.datePublished || '';
+    if (!dateStr) return null;
+
+    // Handle Bulgarian date formats
+    const bgDatePattern = /(\d{1,2})\.(\d{1,2})\.(\d{4})/;
+    const isoDatePattern = /(\d{4})-(\d{1,2})-(\d{1,2})/;
+
+    let match = dateStr.match(bgDatePattern);
+    if (match) {
+      return new Date(match[3], match[2] - 1, match[1]); // Bulgarian: DD.MM.YYYY
+    }
+
+    match = dateStr.match(isoDatePattern);
+    if (match) {
+      return new Date(match[1], match[2] - 1, match[3]); // ISO: YYYY-MM-DD
+    }
+
+    return new Date(dateStr); // Fallback to standard parsing
+  }
+
+  /**
+   * Verify authentic VKS decision
+   */
+  isAuthenticVKSDecision(result) {
+    const indicators = [
+      'върховен касационен съд',
+      'вкс',
+      'касационно решение',
+      'тълкувателно решение',
+      'обединително решение',
+      'гражданска колегия',
+      'наказателна колегия',
+      'търговска колегия',
+    ];
+
+    const text = `${result.title} ${result.source || ''} ${result.summary || ''}`.toLowerCase();
+
+    return (
+      indicators.some((indicator) => text.includes(indicator)) ||
+      this.isFromOfficialVKSSource(result)
+    );
+  }
+
+  /**
+   * Check if result is from official VKS sources
+   */
+  isFromOfficialVKSSource(result) {
+    const officialSources = ['vks.bg', 'lex.bg', 'apis.bg', 'dv.parliament.bg'];
+
+    return officialSources.some(
+      (source) => result.url?.includes(source) || result.source?.toLowerCase().includes(source),
+    );
+  }
+
+  /**
+   * Rank results by legal relevance for lawyers
+   */
+  rankByLegalRelevance(results, criteria) {
+    return results.sort((a, b) => {
+      let scoreA = this.calculateLegalRelevanceScore(a, criteria);
+      let scoreB = this.calculateLegalRelevanceScore(b, criteria);
+
+      return scoreB - scoreA; // Higher score first
+    });
+  }
+
+  /**
+   * Calculate legal relevance score based on multiple factors
+   */
+  calculateLegalRelevanceScore(result, criteria) {
+    let score = 0;
+
+    // Legal article accuracy (30%)
+    if (criteria.legalArticle && this.hasAccurateLegalArticle(result, criteria.legalArticle)) {
+      score += 30;
+    }
+
+    // Party liability match (25%) - CRITICAL for lawyers
+    if (criteria.partyLiability && this.matchesPartyLiability(result, criteria.partyLiability)) {
+      score += 25;
+    }
+
+    // Court authenticity (20%)
+    if (this.isAuthenticVKSDecision(result)) {
+      score += 20;
+    }
+
+    // Precedent value (15%)
+    if (result.precedentValue === 'binding') {
+      score += 15;
+    } else if (result.precedentValue === 'persuasive_high') {
+      score += 10;
+    } else if (result.precedentValue === 'persuasive') {
+      score += 5;
+    }
+
+    // Recency bonus (10%)
+    const resultDate = this.parseResultDate(result);
+    if (resultDate) {
+      const daysSince = (new Date() - resultDate) / (1000 * 60 * 60 * 24);
+      if (daysSince < 365)
+        score += 10; // Last year
+      else if (daysSince < 365 * 3) score += 5; // Last 3 years
+    }
+
+    return score;
+  }
+
+  /**
+   * Calculate overall search accuracy for quality assessment
+   */
+  calculateSearchAccuracy(results, criteria) {
+    if (results.length === 0) return 0;
+
+    let totalScore = 0;
+    results.forEach((result) => {
+      totalScore += this.calculateLegalRelevanceScore(result, criteria);
+    });
+
+    const averageScore = totalScore / results.length;
+    return Math.round(averageScore); // Return as percentage
+  }
+
+  /**
+   * Calculate legal relevance for the entire result set
+   */
+  calculateLegalRelevance(results) {
+    if (results.length === 0) return 0;
+
+    const highQualityResults = results.filter(
+      (result) =>
+        this.isAuthenticVKSDecision(result) &&
+        (result.precedentValue === 'binding' || result.precedentValue === 'persuasive_high'),
+    );
+
+    return Math.round((highQualityResults.length / results.length) * 100);
+  }
+
+  /**
+   * Assess query complexity for search optimization
+   */
+  assessQueryComplexity(criteria) {
+    let complexity = 'simple';
+    let factors = 0;
+
+    if (criteria.legalArticle) factors++;
+    if (criteria.partyLiability) factors++;
+    if (criteria.contractClause) factors++;
+    if (criteria.dateRange) factors++;
+    if (criteria.chamber !== 'any') factors++;
+    if (criteria.decisionType !== 'any') factors++;
+
+    if (factors >= 4) complexity = 'complex';
+    else if (factors >= 2) complexity = 'moderate';
+
+    return complexity;
+  }
+
+  /**
+   * Assess results freshness for legal currency
+   */
+  assessResultsFreshness(results) {
+    if (results.length === 0) return 'no_data';
+
+    const currentYear = new Date().getFullYear();
+    const recentResults = results.filter((result) => {
+      const resultDate = this.parseResultDate(result);
+      return resultDate && resultDate.getFullYear() >= currentYear - 2;
+    });
+
+    const freshnessPct = (recentResults.length / results.length) * 100;
+
+    if (freshnessPct >= 70) return 'very_fresh';
+    if (freshnessPct >= 40) return 'fresh';
+    if (freshnessPct >= 20) return 'moderate';
+    return 'dated';
   }
 }
