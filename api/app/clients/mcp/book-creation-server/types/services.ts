@@ -14,7 +14,10 @@ import {
   BookStatistics,
   ContentSuggestion,
   GetBookOptions,
-  ListBooksOptions
+  ListBooksOptions,
+  ContentGenerationOptions,
+  PageGenerationOptions,
+  ContentImprovementOptions
 } from './book.js';
 import { PaginatedResponse } from './index.js';
 
@@ -78,29 +81,7 @@ export interface IContentService {
   improveContent(contentId: string, options: ContentImprovementOptions): Promise<string>;
 }
 
-// Content generation options
-export interface ContentGenerationOptions {
-  contentType?: 'full_chapter' | 'opening' | 'continuation' | 'conclusion';
-  wordCount?: number;
-  prompt?: string;
-  includeDialogue?: boolean;
-  mood?: 'dramatic' | 'suspenseful' | 'romantic' | 'humorous' | 'melancholic' | 'inspiring' | 'mysterious' | 'action-packed';
-}
-
-export interface PageGenerationOptions {
-  pageTitle: string;
-  contentPrompt: string;
-  wordCount?: number;
-  continuePrevious?: boolean;
-  pageNumber?: number;
-}
-
-export interface ContentImprovementOptions {
-  contentType?: 'page' | 'chapter';
-  improvementType?: 'grammar' | 'style' | 'flow' | 'clarity' | 'engagement' | 'comprehensive';
-  preserveLength?: boolean;
-  specificInstructions?: string;
-}
+// Content generation options are defined in book.ts to avoid duplication
 
 // Export service interface
 export interface IExportService {

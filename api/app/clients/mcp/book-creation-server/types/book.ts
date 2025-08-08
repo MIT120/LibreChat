@@ -122,6 +122,8 @@ export interface IBook extends IEntity {
   publishingInfo?: IPublishingInfo;
   metadata: IBookMetadata;
   settings: IBookSettings;
+  /** Optional spec-driven plan that governs narrative/world/style and image consistency */
+  spec?: IBookSpec;
 }
 
 // Chapter interface
@@ -174,6 +176,7 @@ export interface UpdateBookRequest {
   targetWordCount?: number;
   estimatedPages?: number;
   status?: BookStatus;
+  spec?: Partial<IBookSpec>;
 }
 
 export interface CreateChapterRequest {
@@ -190,6 +193,7 @@ export interface UpdateChapterRequest {
   description?: string;
   outline?: string;
   targetWordCount?: number;
+  chapterNumber?: number;
   status?: ChapterStatus;
   notes?: string;
 }
@@ -207,11 +211,12 @@ export interface UpdatePageRequest {
   content?: string;
   notes?: string;
   status?: PageStatus;
+  wordCount?: number;
 }
 
 export interface GetBookOptions {
-  includeChapters?: boolean;
-  includePages?: boolean;
+  includeChapters?: boolean | undefined;
+  includePages?: boolean | undefined;
 }
 
 export interface ListBooksOptions {
@@ -231,7 +236,7 @@ export interface ChapterResponse extends IChapter {
   pages?: PageResponse[];
 }
 
-export interface PageResponse extends IPage {}
+export interface PageResponse extends IPage { }
 
 export interface BookStatistics {
   bookInfo: {
@@ -266,12 +271,12 @@ export interface ContentSuggestion {
     theme: string;
     genre: string;
     writingStyle: IWritingStyle;
-    targetAudience?: string;
+    targetAudience?: string | undefined;
   };
   chapterContext: {
     title: string;
-    description?: string;
-    outline?: string;
+    description?: string | undefined;
+    outline?: string | undefined;
     chapterNumber: number;
   };
   existingContent: Array<{
@@ -284,4 +289,69 @@ export interface ContentSuggestion {
     recommendedWordCount: number;
     writingPrompt: string;
   };
+}
+
+// Content generation options
+export interface ContentGenerationOptions {
+  contentType?: 'full_chapter' | 'opening' | 'continuation' | 'conclusion';
+  wordCount?: number;
+  prompt?: string;
+  includeDialogue?: boolean;
+  mood?: 'dramatic' | 'suspenseful' | 'romantic' | 'humorous' | 'melancholic' | 'inspiring' | 'mysterious' | 'action-packed';
+}
+
+export interface PageGenerationOptions {
+  pageTitle: string;
+  contentPrompt: string;
+  wordCount?: number;
+  continuePrevious?: boolean;
+  pageNumber?: number;
+}
+
+export interface ContentImprovementOptions {
+  contentType?: 'page' | 'chapter';
+  improvementType?: 'grammar' | 'style' | 'flow' | 'clarity' | 'engagement' | 'comprehensive';
+  preserveLength?: boolean;
+  specificInstructions?: string;
+}
+
+// Spec-driven plan: characters, world, palette, rules and image consistency
+export interface IColorPalette {
+  primary: string;
+  secondary?: string;
+  accents?: string[];
+  mood?: string; // e.g., "warm, pastel", "noir, muted"
+}
+
+export interface ICharacterSpec {
+  id: string; // stable handle used in prompts
+  name: string;
+  role: string; // e.g., protagonist, mentor
+  description: string; // stable visual/narrative descriptors
+  visualTraits?: string[]; // hair, clothing, colors
+  narrativeTraits?: string[]; // personality, goals
+}
+
+export interface IWorldSpec {
+  setting: string; // time/place
+  rules: string[]; // magic/science/social rules
+  themes: string[];
+  toneGuide?: string; // reinforces writingStyle tone
+}
+
+export interface IImageStyleSpec {
+  style: string; // e.g., "children's book illustration", "studio ghibli-inspired"
+  camera?: string; // lens, framing
+  rendering?: string; // flat shading, watercolor, line art
+  negativeCues?: string[]; // what to avoid for consistency
+}
+
+export interface IBookSpec {
+  colorPalette?: IColorPalette;
+  characters?: ICharacterSpec[];
+  world?: IWorldSpec;
+  imageStyle?: IImageStyleSpec;
+  narrativeRules?: string[]; // do/don't for plot progression and POV
+  contextBracketFormat?: boolean; // when true, generate bracketed context sections
+  planMarkdown?: string; // optional human-readable plan to guide chapters/pages
 }

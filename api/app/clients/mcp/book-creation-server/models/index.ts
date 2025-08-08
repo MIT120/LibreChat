@@ -1,24 +1,8 @@
-// Export all models
-export { Book, type IBookDocument } from './Book.js';
-export { Chapter, type IChapterDocument } from './Chapter.js';
-export { Page, type IPageDocument, type IPageImage, type IImagePlacement, type IContextAnalysis, type IPageWithImages } from './Page.js';
+/**
+ * Models index - exports all Mongoose models
+ */
 
-// Re-export types for convenience
-export type {
-  IBook,
-  IChapter,
-  IPage,
-  IWritingStyle,
-  IPublishingInfo,
-  IBookMetadata,
-  IBookSettings,
-  BookStatus,
-  ChapterStatus,
-  PageStatus,
-  WritingTone,
-  WritingVoice,
-  VocabularyLevel,
-  SentenceStructure,
-  ExportFormat,
-  BackupFrequency
-} from '../types/book.js';
+export { Book } from './Book.js';
+export { Chapter } from './Chapter.js';
+export { Page } from './Page.js';
+

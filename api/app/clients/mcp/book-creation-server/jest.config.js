@@ -1,17 +1,37 @@
 export default {
   testEnvironment: 'node',
-  preset: 'jest',
-  transform: {},
-  extensionsToTreatAsEsm: ['.js'],
+  preset: 'ts-jest/presets/default-esm',
+  transform: {
+    '^.+\\.ts$': [
+      'ts-jest',
+      {
+        useESM: true,
+        tsconfig: {
+          module: 'ESNext',
+          target: 'ES2022',
+        },
+      },
+    ],
+  },
+  extensionsToTreatAsEsm: ['.ts'],
   globals: {
-    jest: true,
+    'ts-jest': {
+      useESM: true,
+    },
   },
   moduleNameMapping: {
     '^~/(.*)$': '<rootDir>/$1',
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
-  testMatch: ['<rootDir>/tests/**/*.test.js'],
-  collectCoverageFrom: ['services/**/*.js', 'models/**/*.js', '!**/node_modules/**'],
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  testMatch: ['<rootDir>/src/**/*.test.ts', '<rootDir>/src/__tests__/**/*.test.ts'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.test.ts',
+    '!src/__tests__/**',
+    '!**/node_modules/**',
+    '!dist/**',
+  ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
 };

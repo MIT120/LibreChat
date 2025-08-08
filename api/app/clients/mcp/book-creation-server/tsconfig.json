@@ -5,7 +5,7 @@
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false,
     "outDir": "./dist",
     "rootDir": "./",
@@ -32,10 +32,7 @@
     "incremental": true,
     "tsBuildInfoFile": "./dist/.tsbuildinfo"
   },
-  "include": [
-    "**/*.ts",
-    "**/*.js"
-  ],
+  "include": ["./src/**/*.ts", "./types/**/*.ts", "./models/**/*.ts"],
   "exclude": [
     "node_modules",
     "dist",
@@ -43,7 +40,8 @@
     "**/*.test.ts",
     "**/*.test.js",
     "**/*.spec.ts",
-    "**/*.spec.js"
+    "**/*.spec.js",
+    "**/*.js"
   ],
   "ts-node": {
     "esm": true,

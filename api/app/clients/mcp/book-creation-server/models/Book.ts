@@ -1,216 +1,218 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import {
-  IBook,
-  IWritingStyle,
-  IPublishingInfo,
-  IBookMetadata,
-  IBookSettings,
-  BookStatus,
-  WritingTone,
-  WritingVoice,
-  VocabularyLevel,
-  SentenceStructure,
-  ExportFormat,
-  BackupFrequency
-} from '../types/book.js';
+/**
+ * Book Model - Mongoose schema for books
+ */
 
-// Document interfaces for Mongoose
-export interface IBookDocument extends IBook, Document {}
+import mongoose from 'mongoose';
+import { IBook } from '../types/book.js';
 
-// Writing style sub-schema
-const WritingStyleSchema = new Schema<IWritingStyle>({
-  tone: {
-    type: String,
-    enum: Object.values(WritingTone),
-    required: true,
-  },
-  voice: {
-    type: String,
-    enum: Object.values(WritingVoice),
-    required: true,
-  },
-  perspective: {
-    type: String,
-    maxlength: 500,
-    trim: true,
-  },
-  vocabulary: {
-    type: String,
-    enum: Object.values(VocabularyLevel),
-    required: true,
-  },
-  sentenceStructure: {
-    type: String,
-    enum: Object.values(SentenceStructure),
-    required: true,
-  },
-  specialInstructions: {
-    type: String,
-    maxlength: 1000,
-    trim: true,
-  },
+const writingStyleSchema = new mongoose.Schema({
+    tone: {
+        type: String,
+        enum: ['formal', 'informal', 'academic', 'conversational', 'humorous', 'serious', 'inspirational'],
+        required: true,
+    },
+    voice: {
+        type: String,
+        enum: ['first_person', 'second_person', 'third_person'],
+        required: true,
+    },
+    perspective: {
+        type: String,
+        maxlength: 500,
+    },
+    vocabulary: {
+        type: String,
+        enum: ['simple', 'intermediate', 'advanced', 'technical'],
+        required: true,
+    },
+    sentenceStructure: {
+        type: String,
+        enum: ['simple', 'complex', 'varied'],
+        required: true,
+    },
+    specialInstructions: {
+        type: String,
+        maxlength: 1000,
+    },
 }, { _id: false });
 
-// Publishing info sub-schema
-const PublishingInfoSchema = new Schema<IPublishingInfo>({
-  isbn: {
-    type: String,
-    trim: true,
-  },
-  publisher: {
-    type: String,
-    trim: true,
-  },
-  publicationDate: {
-    type: Date,
-  },
-  copyright: {
-    type: String,
-    trim: true,
-  },
-  edition: {
-    type: String,
-    trim: true,
-  },
+const publishingInfoSchema = new mongoose.Schema({
+    isbn: String,
+    publisher: String,
+    publicationDate: Date,
+    copyright: String,
+    edition: String,
 }, { _id: false });
 
-// Metadata sub-schema
-const MetadataSchema = new Schema<IBookMetadata>({
-  keywords: {
-    type: [String],
-    default: [],
-  },
-  language: {
-    type: String,
-    default: 'en',
-  },
-  category: {
-    type: String,
-    trim: true,
-  },
-  tags: {
-    type: [String],
-    default: [],
-  },
+const metadataSchema = new mongoose.Schema({
+    keywords: [String],
+    language: {
+        type: String,
+        default: 'en',
+    },
+    category: String,
+    tags: [String],
 }, { _id: false });
 
-// Settings sub-schema
-const SettingsSchema = new Schema<IBookSettings>({
-  autoSave: {
-    type: Boolean,
-    default: true,
-  },
-  backupFrequency: {
-    type: String,
-    enum: Object.values(BackupFrequency),
-    default: BackupFrequency.DAILY,
-  },
-  collaborationEnabled: {
-    type: Boolean,
-    default: false,
-  },
-  exportFormats: {
-    type: [String],
-    enum: Object.values(ExportFormat),
-    default: [ExportFormat.PDF],
-  },
+// Spec schema for narrative/world/style and image consistency
+const specSchema = new mongoose.Schema({
+    colorPalette: {
+        primary: String,
+        secondary: String,
+        accents: [String],
+        mood: String,
+    },
+    characters: [
+        new mongoose.Schema({
+            id: { type: String, required: true },
+            name: { type: String, required: true },
+            role: String,
+            description: String,
+            visualTraits: [String],
+            narrativeTraits: [String],
+        }, { _id: false })
+    ],
+    world: {
+        setting: String,
+        rules: [String],
+        themes: [String],
+        toneGuide: String,
+    },
+    imageStyle: {
+        style: String,
+        camera: String,
+        rendering: String,
+        negativeCues: [String],
+    },
+    narrativeRules: [String],
+    contextBracketFormat: { type: Boolean, default: false },
+    planMarkdown: String,
 }, { _id: false });
 
-// Book schema
-const BookSchema = new Schema<IBookDocument>({
-  _id: {
-    type: String,
-    required: true,
-  },
-  title: {
-    type: String,
-    required: true,
-    maxlength: 300,
-    trim: true,
-  },
-  subtitle: {
-    type: String,
-    maxlength: 500,
-    trim: true,
-  },
-  theme: {
-    type: String,
-    required: true,
-    maxlength: 200,
-    trim: true,
-  },
-  genre: {
-    type: String,
-    required: true,
-    maxlength: 100,
-    trim: true,
-  },
-  targetAudience: {
-    type: String,
-    maxlength: 500,
-    trim: true,
-  },
-  writingStyle: {
-    type: WritingStyleSchema,
-    required: true,
-  },
-  description: {
-    type: String,
-    maxlength: 2000,
-    trim: true,
-  },
-  targetWordCount: {
-    type: Number,
-    min: 0,
-  },
-  currentWordCount: {
-    type: Number,
-    default: 0,
-    min: 0,
-  },
-  estimatedPages: {
-    type: Number,
-    min: 0,
-  },
-  status: {
-    type: String,
-    enum: Object.values(BookStatus),
-    default: BookStatus.PLANNING,
-  },
-  authorId: {
-    type: String,
-    required: true,
-    ref: 'User',
-  },
-  publishingInfo: {
-    type: PublishingInfoSchema,
-  },
-  metadata: {
-    type: MetadataSchema,
-    default: () => ({
-      keywords: [],
-      language: 'en',
-      tags: [],
-    }),
-  },
-  settings: {
-    type: SettingsSchema,
-    default: () => ({
-      autoSave: true,
-      backupFrequency: BackupFrequency.DAILY,
-      collaborationEnabled: false,
-      exportFormats: [ExportFormat.PDF],
-    }),
-  },
-}, { 
-  timestamps: true,
-  collection: 'books'
+const settingsSchema = new mongoose.Schema({
+    autoSave: {
+        type: Boolean,
+        default: true,
+    },
+    backupFrequency: {
+        type: String,
+        enum: ['hourly', 'daily', 'weekly'],
+        default: 'daily',
+    },
+    collaborationEnabled: {
+        type: Boolean,
+        default: false,
+    },
+    exportFormats: [{
+        type: String,
+        enum: ['pdf', 'epub', 'docx', 'html', 'txt'],
+    }],
+}, { _id: false });
+
+const bookSchema = new mongoose.Schema({
+    _id: {
+        type: String,
+        required: true,
+    },
+    title: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 300,
+    },
+    subtitle: {
+        type: String,
+        trim: true,
+        maxlength: 500,
+    },
+    theme: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 200,
+    },
+    genre: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 100,
+    },
+    targetAudience: {
+        type: String,
+        trim: true,
+        maxlength: 500,
+    },
+    writingStyle: {
+        type: writingStyleSchema,
+        required: true,
+    },
+    description: {
+        type: String,
+        trim: true,
+        maxlength: 2000,
+    },
+    targetWordCount: {
+        type: Number,
+        min: 0,
+    },
+    currentWordCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    estimatedPages: {
+        type: Number,
+        min: 0,
+    },
+    status: {
+        type: String,
+        enum: ['planning', 'outlining', 'writing', 'editing', 'review', 'completed', 'published'],
+        default: 'planning',
+    },
+    authorId: {
+        type: String,
+        required: true,
+        index: true,
+    },
+    publishingInfo: publishingInfoSchema,
+    metadata: {
+        type: metadataSchema,
+        default: () => ({
+            keywords: [],
+            language: 'en',
+            tags: [],
+        }),
+    },
+    spec: { type: specSchema, default: undefined },
+    settings: {
+        type: settingsSchema,
+        default: () => ({
+            autoSave: true,
+            backupFrequency: 'daily',
+            collaborationEnabled: false,
+            exportFormats: ['pdf', 'html'],
+        }),
+    },
+}, {
+    _id: false,
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
 });
 
-// Indexes for better performance
-BookSchema.index({ authorId: 1, status: 1 });
-BookSchema.index({ theme: 1, genre: 1 });
-BookSchema.index({ 'metadata.tags': 1 });
+// Indexes
+bookSchema.index({ authorId: 1, status: 1 });
+bookSchema.index({ genre: 1 });
+bookSchema.index({ 'metadata.tags': 1 });
+bookSchema.index({ createdAt: -1 });
 
-// Export the model
-export const Book = mongoose.model<IBookDocument>('Book', BookSchema);
+// Virtual for completion percentage
+bookSchema.virtual('completionPercentage').get(function () {
+    if (!this.targetWordCount || this.targetWordCount === 0) {
+        return 0;
+    }
+    return Math.min(100, Math.round((this.currentWordCount / this.targetWordCount) * 100));
+});
+
+export const Book = mongoose.model<IBook>('Book', bookSchema);
+export default Book;
