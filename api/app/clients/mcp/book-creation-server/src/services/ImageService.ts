@@ -4,8 +4,11 @@
 
 import { Chapter } from '../../models/Chapter.js';
 import { Page } from '../../models/Page.js';
+import { Book } from '../../models/Book.js';
 import { BaseService, ServiceHealth, ServiceHealthStatus } from '../core/BaseService.js';
 import { ILogger } from '../core/Logger.js';
+import ImageStyleAnalyzer, { StyleAnalysisResult } from './ImageStyleAnalyzer.js';
+import ImageStyleConfig from './ImageStyleConfig.js';
 
 export interface ImageRecord {
     id?: string;
@@ -20,16 +23,23 @@ export interface ImageRecord {
 }
 
 export class ImageService extends BaseService {
+    private styleAnalyzer: ImageStyleAnalyzer;
+    private styleConfig: ImageStyleConfig;
+    
     constructor(logger: ILogger) {
         super(logger);
+        this.styleAnalyzer = new ImageStyleAnalyzer(logger);
+        this.styleConfig = new ImageStyleConfig(logger);
     }
 
     protected async onInitialize(): Promise<void> {
-        // No-op for now
+        await this.styleAnalyzer.initialize();
+        await this.styleConfig.initialize();
     }
 
     protected async onDispose(): Promise<void> {
-        // No-op for now
+        await this.styleAnalyzer.dispose();
+        await this.styleConfig.dispose();
     }
 
     protected async performHealthCheck(): Promise<ServiceHealth> {
@@ -89,17 +99,106 @@ export class ImageService extends BaseService {
         bookId: string;
         chapterId: string;
         pageId?: string;
-        pageNumber?: string | number;
+        pageNumber?: string;
         prompt: string;
         style?: string;
-    }): Promise<{ imageUrl: string; imageBase64?: string; attachedToPageId?: string }>{
+        userStylePreference?: string; // User-provided style when auto-detection is not confident
+        forceUserPrompt?: boolean; // Force user to choose style regardless of confidence
+        userId?: string; // User ID for applying preferences
+    }): Promise<{ 
+        imageUrl: string; 
+        imageBase64?: string; 
+        attachedToPageId?: string;
+        styleAnalysis?: StyleAnalysisResult;
+        needsUserStyleInput?: boolean;
+        availableStyles?: Array<{ name: string; description: string; ageRating: string }>;
+    }>{
         return this.executeWithLogging('generateContextualImage', async () => {
             const openaiApiKey = process.env.OPENAI_API_KEY;
             if (!openaiApiKey) {
                 throw new Error('OPENAI_API_KEY not configured');
             }
 
-            const dallePrompt = this.buildDallePrompt(args.prompt, args.style);
+            // Get book information for context analysis
+            const book = await Book.findById(args.bookId);
+            if (!book) {
+                throw new Error(`Book not found: ${args.bookId}`);
+            }
+
+            // Analyze book context to determine appropriate style
+            const styleAnalysis = await this.styleAnalyzer.analyzeBookForImageStyle(book);
+
+            // Apply user preferences if userId provided
+            let adjustedStyle = styleAnalysis.primaryStyle;
+            let adjustedConfidenceThreshold = styleAnalysis.confidenceScore;
+            
+            if (args.userId) {
+                adjustedStyle = this.styleConfig.applyUserPreferences(
+                    args.userId, 
+                    styleAnalysis.primaryStyle, 
+                    book.genre, 
+                    book.targetAudience
+                );
+                
+                // Get user's confidence threshold
+                const confidenceThreshold = this.styleConfig.getConfidenceThreshold(args.userId);
+                adjustedConfidenceThreshold = Math.max(styleAnalysis.confidenceScore, confidenceThreshold);
+            }
+
+            // Check if we need user input for style selection
+            const needsUserInput = (
+                styleAnalysis.fallbackToUserPrompt || 
+                args.forceUserPrompt || 
+                adjustedConfidenceThreshold < 0.5 ||
+                !adjustedStyle // Style was filtered out by user preferences
+            ) && !args.userStylePreference;
+
+            if (needsUserInput) {
+                // Return early requesting user style input
+                return {
+                    imageUrl: '', // Will be empty as we need user input first
+                    needsUserStyleInput: true,
+                    styleAnalysis,
+                    availableStyles: this.styleAnalyzer.getAvailableStyles()
+                };
+            }
+
+            // Determine final style to use
+            let finalStyle = args.style; // Explicit style parameter takes precedence
+            if (!finalStyle) {
+                finalStyle = args.userStylePreference || adjustedStyle;
+            }
+
+            // Validate that final style is allowed for user
+            if (args.userId && !this.styleConfig.isStyleAllowedForUser(args.userId, finalStyle)) {
+                this.logger.warn('Requested style is not allowed for user, using default', {
+                    userId: args.userId,
+                    requestedStyle: finalStyle,
+                    bookId: args.bookId
+                });
+                finalStyle = 'children_book_illustration'; // Safe default
+            }
+
+            // Check content appropriateness for the chosen style
+            if (!styleAnalysis.appropriateForAudience) {
+                this.logger.warn('Style may not be appropriate for target audience', {
+                    bookId: args.bookId,
+                    style: finalStyle,
+                    targetAudience: book.targetAudience,
+                    reasoning: styleAnalysis.reasoning
+                });
+            }
+
+            // Validate content appropriateness for the image prompt
+            if (!this.styleAnalyzer.analyzeContentAppropriatenesss(args.prompt, finalStyle)) {
+                this.logger.warn('Image prompt may contain content inappropriate for chosen style', {
+                    bookId: args.bookId,
+                    style: finalStyle,
+                    prompt: args.prompt.substring(0, 100) + '...'
+                });
+            }
+
+            const dallePrompt = this.buildDallePrompt(args.prompt, finalStyle, styleAnalysis.styleModifiers);
 
             // Generate image URL
             const imageUrl = await this.requestDalleImageUrl(openaiApiKey, dallePrompt);
@@ -136,13 +235,79 @@ export class ImageService extends BaseService {
                 });
             }
 
-            return { imageUrl, imageBase64, attachedToPageId };
+            return { 
+                imageUrl, 
+                imageBase64, 
+                attachedToPageId,
+                styleAnalysis,
+                needsUserStyleInput: false
+            };
         }, { bookId: args.bookId, chapterId: args.chapterId });
     }
 
-    private buildDallePrompt(prompt: string, style?: string): string {
-        const baseStyle = style || 'book_illustration';
-        return `Children's book illustration: ${prompt}. Style: cartoon illustration, bright colors, kid-friendly, professional book quality. Category: ${baseStyle}`;
+    /**
+     * Get available image styles for user selection
+     */
+    async getAvailableStyles(): Promise<Array<{ name: string; description: string; ageRating: string }>> {
+        return this.styleAnalyzer.getAvailableStyles();
+    }
+
+    /**
+     * Analyze a book's context to suggest appropriate image styles
+     */
+    async analyzeBookForImageStyle(bookId: string): Promise<StyleAnalysisResult> {
+        return this.executeWithLogging('analyzeBookForImageStyle', async () => {
+            const book = await Book.findById(bookId);
+            if (!book) {
+                throw new Error(`Book not found: ${bookId}`);
+            }
+            
+            return this.styleAnalyzer.analyzeBookForImageStyle(book);
+        }, { bookId });
+    }
+
+    /**
+     * Get user's style preferences
+     */
+    async getUserStylePreferences(userId: string) {
+        return this.styleConfig.getUserStylePreferences(userId);
+    }
+
+    /**
+     * Update user's style preferences
+     */
+    async updateUserStylePreferences(userId: string, updates: any) {
+        return this.styleConfig.updateUserStylePreferences(userId, updates);
+    }
+
+    /**
+     * Get system configuration
+     */
+    getSystemStyleConfig() {
+        return this.styleConfig.getSystemConfig();
+    }
+
+    /**
+     * Update system configuration (admin only)
+     */
+    async updateSystemStyleConfig(updates: any) {
+        return this.styleConfig.updateSystemConfig(updates);
+    }
+
+    private buildDallePrompt(prompt: string, style?: string, styleModifiers: string[] = []): string {
+        const styleName = style || 'children_book_illustration';
+        
+        // Get the base DALL-E prompt for this style from the style config
+        const styleConfig = this.styleAnalyzer['styleConfig']?.styles[styleName];
+        let basePrompt = styleConfig?.dallePrompt || 'professional illustration, high quality, detailed artwork';
+        
+        // Add style modifiers if any
+        if (styleModifiers.length > 0) {
+            basePrompt += `, ${styleModifiers.join(', ')}`;
+        }
+        
+        // Combine user prompt with style directives
+        return `${prompt}. ${basePrompt}`;
     }
 
     private async requestDalleImageUrl(apiKey: string, prompt: string): Promise<string> {
