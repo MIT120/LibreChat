@@ -5,6 +5,7 @@
 
 import * as cheerio from 'cheerio';
 import fetch from 'node-fetch';
+import { LexBgTreeScraperService } from './LexBgTreeScraperService.js';
 import { RagIntegrationService } from './RagIntegrationService.js';
 
 export class LexBgService {
@@ -18,6 +19,9 @@ export class LexBgService {
 
     // Initialize RAG integration
     this.ragService = new RagIntegrationService();
+
+    // Initialize enhanced tree scraper
+    this.treeScraperService = new LexBgTreeScraperService();
 
     // Request headers to mimic browser behavior
     this.headers = {
@@ -35,7 +39,37 @@ export class LexBgService {
    * Search for legal documents on lex.bg with RAG integration
    */
   async searchLegalDocuments(searchCriteria) {
-    const { useRag = true, storeResults = true } = searchCriteria;
+    const { useRag = true, storeResults = true, useTreeSearch = true } = searchCriteria;
+
+    // If tree search is enabled and criteria indicate law research, use enhanced tree search
+    if (useTreeSearch && this.shouldUseTreeSearch(searchCriteria)) {
+      console.log('🌳 Using enhanced law tree search...');
+
+      const treeResults = await this.treeScraperService.searchLawTree({
+        ...searchCriteria,
+        maxResults: searchCriteria.limit || 20,
+        relevanceThreshold: searchCriteria.relevanceThreshold || 60,
+      });
+
+      if (treeResults.success && treeResults.results.length > 0) {
+        console.log(`🌳 Tree search found ${treeResults.results.length} laws`);
+
+        // Combine tree results with regular search for comprehensive coverage
+        const regularResults = await this.performLiveSearch({
+          ...searchCriteria,
+          limit: Math.max(5, (searchCriteria.limit || 20) - treeResults.results.length),
+        });
+
+        const combinedResults = this.combineTreeAndRegularResults(treeResults, regularResults);
+
+        return {
+          ...combinedResults,
+          treeSearchUsed: true,
+          treeResultsCount: treeResults.results.length,
+          regularResultsCount: regularResults.success ? regularResults.results.length : 0,
+        };
+      }
+    }
 
     if (useRag && process.env.RAG_API_URL) {
       return await this.ragService.enhancedLegalSearch(
@@ -47,6 +81,103 @@ export class LexBgService {
 
     // Fallback to regular search if RAG is disabled
     return await this.performLiveSearch(searchCriteria);
+  }
+
+  /**
+   * Determine if tree search should be used based on search criteria
+   */
+  shouldUseTreeSearch(criteria) {
+    const { query = '', documentType = '', institution = '' } = criteria;
+    const queryLower = query.toLowerCase();
+
+    // Use tree search for law-specific queries
+    const lawKeywords = [
+      'закон',
+      'кодекс',
+      'наредба',
+      'правилник',
+      'конституция',
+      'чл.',
+      'член',
+      'параграф',
+      'алинея',
+      'текст',
+      'закона',
+    ];
+
+    const hasLawKeywords = lawKeywords.some((keyword) => queryLower.includes(keyword));
+
+    // Use tree search for specific legal areas
+    const legalAreas = [
+      'гражданско право',
+      'наказателно право',
+      'търговско право',
+      'трудово право',
+      'административно право',
+      'данъчно право',
+    ];
+
+    const hasLegalArea = legalAreas.some((area) => queryLower.includes(area));
+
+    // Use tree search for document type requests
+    const isDocumentTypeRequest =
+      documentType &&
+      ['закон', 'кодекс', 'наредба', 'правилник'].includes(documentType.toLowerCase());
+
+    return (
+      hasLawKeywords ||
+      hasLegalArea ||
+      isDocumentTypeRequest ||
+      queryLower.includes('право') ||
+      queryLower.includes('правен')
+    );
+  }
+
+  /**
+   * Combine tree search results with regular search results
+   */
+  combineTreeAndRegularResults(treeResults, regularResults) {
+    const combinedResults = [...(treeResults.results || [])];
+    const seenTitles = new Set(combinedResults.map((r) => r.title.toLowerCase().trim()));
+
+    // Add regular results that aren't duplicates
+    if (regularResults.success && regularResults.results) {
+      for (const result of regularResults.results) {
+        const titleKey = result.title.toLowerCase().trim();
+        if (!seenTitles.has(titleKey)) {
+          seenTitles.add(titleKey);
+          combinedResults.push({
+            ...result,
+            sourceMethod: 'regular_search',
+          });
+        }
+      }
+    }
+
+    // Mark tree results for identification
+    combinedResults.forEach((result, index) => {
+      if (index < (treeResults.results || []).length) {
+        result.sourceMethod = 'tree_search';
+        result.isLawDocument = true;
+      }
+    });
+
+    return {
+      success: true,
+      results: combinedResults,
+      total: combinedResults.length,
+      source: 'lex.bg',
+      searchMethod: 'enhanced_tree_and_regular',
+      metadata: {
+        treeResults: treeResults.results?.length || 0,
+        regularResults: regularResults.success ? regularResults.results?.length || 0 : 0,
+        duplicatesRemoved:
+          (treeResults.results?.length || 0) +
+          (regularResults.success ? regularResults.results?.length || 0 : 0) -
+          combinedResults.length,
+        searchDate: new Date().toISOString(),
+      },
+    };
   }
 
   /**
@@ -1336,5 +1467,85 @@ export class LexBgService {
     });
 
     return variations;
+  }
+
+  /**
+   * Enhanced search specifically for laws and legal documents
+   */
+  async searchLaws(searchCriteria) {
+    console.log('📚 Performing enhanced law search...');
+
+    // Force tree search for law-specific searches
+    return await this.searchLegalDocuments({
+      ...searchCriteria,
+      useTreeSearch: true,
+      relevanceThreshold: searchCriteria.relevanceThreshold || 70,
+      includeFullContent: true,
+    });
+  }
+
+  /**
+   * Search for specific law by name or article
+   */
+  async findSpecificLaw(lawName, articleNumber = null) {
+    console.log(
+      `📖 Finding specific law: ${lawName}${articleNumber ? ` article ${articleNumber}` : ''}`,
+    );
+
+    const searchQuery = articleNumber ? `${lawName} чл. ${articleNumber}` : lawName;
+
+    return await this.treeScraperService.searchLawTree({
+      query: searchQuery,
+      maxResults: 10,
+      includeFullContent: true,
+      relevanceThreshold: 80,
+    });
+  }
+
+  /**
+   * Get laws by category
+   */
+  async getLawsByCategory(category, maxResults = 15) {
+    console.log(`🏛️ Getting laws by category: ${category}`);
+
+    return await this.treeScraperService.searchLawTree({
+      query: '',
+      legalArea: category,
+      maxResults,
+      includeFullContent: false,
+      relevanceThreshold: 50,
+    });
+  }
+
+  /**
+   * Cleanup method to properly close browser resources
+   */
+  async cleanup() {
+    try {
+      if (this.treeScraperService) {
+        await this.treeScraperService.cleanup();
+      }
+      console.log('✅ LexBgService cleanup completed');
+    } catch (error) {
+      console.error('❌ Error during LexBgService cleanup:', error);
+    }
+  }
+
+  /**
+   * Get service status for monitoring
+   */
+  getStatus() {
+    return {
+      service: 'LexBgService',
+      baseUrl: this.baseUrl,
+      cacheSize: this.cache.size,
+      treeScraperStatus: this.treeScraperService?.getStatus() || 'not_initialized',
+      features: {
+        ragIntegration: !!this.ragService,
+        treeSearch: !!this.treeScraperService,
+        deepAnalysis: true,
+        multiStrategy: true,
+      },
+    };
   }
 }

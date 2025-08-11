@@ -7,12 +7,14 @@
 import { ApisService } from './ApisService.js';
 import { LexBgService } from './LexBgService.js';
 import { RagIntegrationService } from './RagIntegrationService.js';
+import { VKSScraperService } from './VKSScraperService.js';
 
 export class LawyerToolsService {
   constructor() {
     this.lexBgService = new LexBgService();
     this.apisService = new ApisService();
     this.ragService = new RagIntegrationService();
+    this.vksScraperService = new VKSScraperService();
 
     // Common Bulgarian legal abbreviations
     this.legalAbbreviations = {
@@ -89,18 +91,38 @@ export class LawyerToolsService {
         }
       }
 
-      // Search using both sources for comprehensive coverage with deep analysis
-      const lexResults = await this.lexBgService.searchLegalDocuments({
-        ...searchParams,
-        deepAnalysis: true, // Enable deep content scraping
-        relevanceThreshold: 70,
-      });
-      const apisResults = await this.apisService.searchLegislation(searchParams);
+      // Search using multiple sources for comprehensive coverage with deep analysis
+      const [lexResults, apisResults, vksResults] = await Promise.allSettled([
+        this.lexBgService.searchLegalDocuments({
+          ...searchParams,
+          deepAnalysis: true, // Enable deep content scraping
+          relevanceThreshold: 70,
+          useTreeSearch: true, // Enable enhanced law tree search
+        }),
+        this.apisService.searchLegislation(searchParams),
+        this.vksScraperService.searchVKSDecisions({
+          query: enhancedQuery,
+          chamber,
+          decisionType,
+          dateRange,
+          caseNumber,
+          maxResults,
+        }),
+      ]);
+
+      // Extract successful results
+      const successfulLexResults =
+        lexResults.status === 'fulfilled' ? lexResults.value : { results: [] };
+      const successfulApisResults =
+        apisResults.status === 'fulfilled' ? apisResults.value : { results: [] };
+      const successfulVksResults =
+        vksResults.status === 'fulfilled' ? vksResults.value : { results: [] };
 
       // Combine initial results
       const combinedResults = this.combineSupremeCourtResults(
-        lexResults,
-        apisResults,
+        successfulLexResults,
+        successfulApisResults,
+        successfulVksResults,
         searchCriteria,
       );
 
@@ -126,6 +148,7 @@ export class LawyerToolsService {
         metadata: {
           searchDate: new Date().toISOString(),
           sources: ['lex.bg', 'apis.bg', 'vks.bg'],
+          vksDirectResults: successfulVksResults.results?.length || 0,
           legalSystem: 'Bulgaria',
           queryComplexity: this.assessQueryComplexity(searchCriteria),
           resultsFreshness: this.assessResultsFreshness(rankedResults),
@@ -146,7 +169,7 @@ export class LawyerToolsService {
   /**
    * Combine and deduplicate Supreme Court results from multiple sources
    */
-  combineSupremeCourtResults(lexResults, apisResults, originalCriteria) {
+  combineSupremeCourtResults(lexResults, apisResults, vksResults, originalCriteria) {
     const combinedResults = [];
     const seenTitles = new Set();
 
@@ -182,11 +205,42 @@ export class LawyerToolsService {
       }
     }
 
+    // Process VKS direct results (highest priority)
+    if (vksResults && vksResults.results) {
+      for (const result of vksResults.results) {
+        if (!seenTitles.has(result.title)) {
+          seenTitles.add(result.title);
+          combinedResults.push({
+            ...result,
+            source: 'vks.bg',
+            court: 'Върховен касационен съд',
+            precedentValue:
+              result.precedentValue || this.assessPrecedentValue(result, originalCriteria),
+            legalSignificance: this.assessLegalSignificance(result),
+            relevanceScore: result.relevanceScore || 0,
+            legalClassification: result.legalClassification || 'legal_document',
+            isDirectVKSResult: true, // Mark as direct VKS result for higher priority
+          });
+        }
+      }
+    }
+
     // Sort by relevance and precedent value
     return combinedResults.sort((a, b) => {
-      // Prioritize interpretative decisions (highest precedent value)
+      // Prioritize direct VKS results
+      if (a.isDirectVKSResult && !b.isDirectVKSResult) return -1;
+      if (b.isDirectVKSResult && !a.isDirectVKSResult) return 1;
+
+      // Then prioritize interpretative decisions (highest precedent value)
       if (a.precedentValue === 'binding' && b.precedentValue !== 'binding') return -1;
       if (b.precedentValue === 'binding' && a.precedentValue !== 'binding') return 1;
+
+      // Then by relevance score (for VKS results)
+      if (a.relevanceScore && b.relevanceScore) {
+        if (a.relevanceScore !== b.relevanceScore) {
+          return b.relevanceScore - a.relevanceScore;
+        }
+      }
 
       // Then by legal significance
       if (a.legalSignificance !== b.legalSignificance) {
@@ -389,7 +443,7 @@ export class LawyerToolsService {
   /**
    * Analyze legal document for compliance and risks
    */
-  async analyzeLegalDocument(documentText, analysisType = 'general') {
+  async analyzeLegalDocument(documentText, _analysisType = 'general') {
     try {
       const analysis = {
         documentType: this.identifyDocumentType(documentText),
@@ -1387,5 +1441,41 @@ export class LawyerToolsService {
     if (freshnessPct >= 40) return 'fresh';
     if (freshnessPct >= 20) return 'moderate';
     return 'dated';
+  }
+
+  /**
+   * Cleanup method to properly close browser resources
+   */
+  async cleanup() {
+    try {
+      if (this.vksScraperService) {
+        await this.vksScraperService.cleanup();
+      }
+      if (this.lexBgService) {
+        await this.lexBgService.cleanup();
+      }
+      console.log('✅ LawyerToolsService cleanup completed');
+    } catch (error) {
+      console.error('❌ Error during LawyerToolsService cleanup:', error);
+    }
+  }
+
+  /**
+   * Get service status for monitoring
+   */
+  getStatus() {
+    return {
+      service: 'LawyerToolsService',
+      vksScraperStatus: this.vksScraperService?.getStatus() || 'not_initialized',
+      lexBgStatus: this.lexBgService?.getStatus() || 'not_initialized',
+      legalAbbreviations: Object.keys(this.legalAbbreviations).length,
+      courtTypes: Object.keys(this.courtTypes).length,
+      enhancedFeatures: {
+        vksDirectSearch: !!this.vksScraperService,
+        lexBgTreeSearch: !!this.lexBgService?.treeScraperService,
+        deepAnalysis: true,
+        ragIntegration: true,
+      },
+    };
   }
 }
