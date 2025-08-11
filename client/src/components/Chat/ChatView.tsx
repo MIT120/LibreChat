@@ -1,23 +1,25 @@
-import { memo, useCallback } from 'react';
-import { useRecoilValue } from 'recoil';
+import type { TMessage } from 'librechat-data-provider';
+import { Constants } from 'librechat-data-provider';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useParams } from 'react-router-dom';
-import { Constants } from 'librechat-data-provider';
-import type { TMessage } from 'librechat-data-provider';
+import { useRecoilValue } from 'recoil';
 import type { ChatFormValues } from '~/common';
-import { ChatContext, AddedChatContext, useFileMapContext, ChatFormProvider } from '~/Providers';
-import { useChatHelpers, useAddedResponse, useSSE } from '~/hooks';
-import ConversationStarters from './Input/ConversationStarters';
-import { useGetMessagesByConvoId } from '~/data-provider';
-import MessagesView from './Messages/MessagesView';
 import { Spinner } from '~/components/svg';
-import Presentation from './Presentation';
-import { buildTree, cn } from '~/utils';
-import ChatForm from './Input/ChatForm';
-import Landing from './Landing';
-import Header from './Header';
-import Footer from './Footer';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/Tabs';
+import { useGetMessagesByConvoId } from '~/data-provider';
+import { useAddedResponse, useChatHelpers, useLocalize, useSSE } from '~/hooks';
+import { AddedChatContext, ChatContext, ChatFormProvider, useFileMapContext } from '~/Providers';
 import store from '~/store';
+import { buildTree, cn } from '~/utils';
+import BookCenter from './BookCenter';
+import Footer from './Footer';
+import Header from './Header';
+import ChatForm from './Input/ChatForm';
+import ConversationStarters from './Input/ConversationStarters';
+import Landing from './Landing';
+import MessagesView from './Messages/MessagesView';
+import Presentation from './Presentation';
 
 function LoadingSpinner() {
   return (
@@ -30,6 +32,7 @@ function LoadingSpinner() {
 }
 
 function ChatView({ index = 0 }: { index?: number }) {
+  const localize = useLocalize();
   const { conversationId } = useParams();
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
   const addedSubmission = useRecoilValue(store.submissionByIndex(index + 1));
@@ -50,6 +53,14 @@ function ChatView({ index = 0 }: { index?: number }) {
 
   const chatHelpers = useChatHelpers(index, conversationId);
   const addedChatHelpers = useAddedResponse({ rootIndex: index });
+  const { conversation } = store.useCreateConversationAtom(index);
+  const isSubmitting = useRecoilValue(store.isSubmittingFamily(index));
+  const [bookRefreshKey, setBookRefreshKey] = useState(0);
+  useEffect(() => {
+    if (isSubmitting === false) {
+      setBookRefreshKey((k) => k + 1);
+    }
+  }, [isSubmitting]);
 
   useSSE(rootSubmission, chatHelpers, false);
   useSSE(addedSubmission, addedChatHelpers, true);
@@ -69,40 +80,85 @@ function ChatView({ index = 0 }: { index?: number }) {
   } else if ((isLoading || isNavigating) && !isLandingPage) {
     content = <LoadingSpinner />;
   } else if (!isLandingPage) {
-    content = <MessagesView messagesTree={messagesTree} />;
+    // Center book viewer with messages stacked above when needed
+    content = (
+      <div className="flex h-full w-full flex-col overflow-hidden">
+        <div className="h-10 shrink-0 border-b border-border-light bg-surface-primary px-3 py-2 text-sm font-medium text-text-secondary">
+          {/* Editor title intentionally blank to avoid literal string & missing key */}
+        </div>
+        <div className="flex h-full w-full overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            <BookCenter
+              className="h-full"
+              title={conversation?.title ?? ''}
+              refreshKey={bookRefreshKey}
+            />
+          </div>
+        </div>
+      </div>
+    );
   } else {
     content = <Landing centerFormOnLanding={centerFormOnLanding} />;
   }
+
+  const RightPanel = (
+    <div className="flex h-full w-full flex-col">
+      <Tabs defaultValue="chat" className="flex h-full w-full flex-col">
+        <div className="border-b border-border-light bg-surface-primary px-2 pt-2">
+          <TabsList className="flex w-full justify-start gap-1 overflow-x-auto">
+            <TabsTrigger value="chat">{localize('com_ui_chat')}</TabsTrigger>
+            <TabsTrigger value="tools">{localize('com_ui_tools')}</TabsTrigger>
+            <TabsTrigger value="files">{localize('com_ui_files')}</TabsTrigger>
+            <TabsTrigger value="history">{localize('com_ui_chat_history')}</TabsTrigger>
+          </TabsList>
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden p-2">
+          <TabsContent value="chat" className="mt-0 h-full rounded-none p-0">
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex-1 overflow-auto">
+                {isLoading && conversationId !== Constants.NEW_CONVO ? (
+                  <LoadingSpinner />
+                ) : !isLandingPage ? (
+                  <MessagesView messagesTree={messagesTree} />
+                ) : null}
+              </div>
+              <div className="w-full shrink-0 pt-2">
+                <ChatForm index={index} />
+              </div>
+              {isLandingPage ? <ConversationStarters /> : <Footer />}
+            </div>
+          </TabsContent>
+          <TabsContent value="tools" className="mt-0 h-full rounded-none p-0">
+            <div className="h-full overflow-auto p-2 text-text-secondary">
+              {localize('com_ui_tools')}
+            </div>
+          </TabsContent>
+          <TabsContent value="files" className="mt-0 h-full rounded-none p-0">
+            <div className="h-full overflow-auto p-2 text-text-secondary">
+              {localize('com_ui_files')}
+            </div>
+          </TabsContent>
+          <TabsContent value="history" className="mt-0 h-full rounded-none p-0">
+            <div className="h-full overflow-auto p-2 text-text-secondary">
+              {localize('com_ui_chat_history')}
+            </div>
+          </TabsContent>
+        </div>
+      </Tabs>
+    </div>
+  );
 
   return (
     <ChatFormProvider {...methods}>
       <ChatContext.Provider value={chatHelpers}>
         <AddedChatContext.Provider value={addedChatHelpers}>
-          <Presentation>
+          <Presentation rightPanel={RightPanel}>
             <div className="flex h-full w-full flex-col">
               {!isLoading && <Header />}
-              <>
-                <div
-                  className={cn(
-                    'flex flex-col',
-                    isLandingPage
-                      ? 'flex-1 items-center justify-end sm:justify-center'
-                      : 'h-full overflow-y-auto',
-                  )}
-                >
-                  {content}
-                  <div
-                    className={cn(
-                      'w-full',
-                      isLandingPage && 'max-w-3xl transition-all duration-200 xl:max-w-4xl',
-                    )}
-                  >
-                    <ChatForm index={index} />
-                    {isLandingPage ? <ConversationStarters /> : <Footer />}
-                  </div>
-                </div>
-                {isLandingPage && <Footer />}
-              </>
+              <div className={cn('flex h-full flex-col overflow-hidden')}>
+                {/* Center book/editor view */}
+                <div className={cn('flex-1 overflow-hidden')}>{content}</div>
+              </div>
             </div>
           </Presentation>
         </AddedChatContext.Provider>

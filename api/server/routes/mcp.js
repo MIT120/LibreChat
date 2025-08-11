@@ -12,6 +12,118 @@ const { getLogStores } = require('~/cache');
 const router = Router();
 
 /**
+ * List configured MCP servers with basic metadata
+ * @route GET /api/mcp/servers
+ */
+router.get('/servers', requireJwtAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user?.id) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const printConfig = false;
+    const config = await loadCustomConfig(printConfig);
+    const mcpServers = config?.mcpServers || {};
+
+    const mcpManager = getMCPManager(user.id);
+    const oauthServers = mcpManager.getOAuthServers?.() || new Set();
+
+    const servers = Object.entries(mcpServers).map(([serverName, serverConfig]) => ({
+      name: serverName,
+      chatMenu: serverConfig?.chatMenu !== false,
+      requiresOAuth: oauthServers.has(serverName),
+      customUserVars: serverConfig?.customUserVars || {},
+    }));
+
+    return res.json({ success: true, servers });
+  } catch (error) {
+    logger.error('[MCP] Failed to list servers', error);
+    return res.status(500).json({ success: false, error: 'Failed to list MCP servers' });
+  }
+});
+
+/**
+ * List tools for a specific MCP server
+ * - Attempts user-scoped connection
+ * - If OAuth is required, returns oauthRequired flag and authorization URL
+ * @route GET /api/mcp/:serverName/tools
+ */
+router.get('/:serverName/tools', requireJwtAuth, async (req, res) => {
+  const { serverName } = req.params;
+  try {
+    const user = req.user;
+    if (!user?.id) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const flowsCache = getLogStores(CacheKeys.FLOWS);
+    const flowManager = getFlowStateManager(flowsCache);
+    const mcpManager = getMCPManager(user.id);
+
+    let oauthRequired = false;
+    let oauthUrl = null;
+    let tools = [];
+
+    try {
+      const connection = await mcpManager.getUserConnection({
+        user,
+        serverName,
+        flowManager,
+        tokenMethods: { findToken, updateToken, createToken, deleteTokens },
+        returnOnOAuth: true,
+        oauthStart: async (authURL) => {
+          oauthRequired = true;
+          oauthUrl = authURL;
+        },
+      });
+
+      if (!oauthRequired && (await connection.isConnected())) {
+        tools = await connection.fetchTools();
+      }
+    } catch (err) {
+      // If an OAuth flow was initiated, surface it gracefully
+      const isOAuthFlowInitiated = err?.message === 'OAuth flow initiated - return early';
+      if (!oauthRequired && !isOAuthFlowInitiated) {
+        logger.error(`[MCP] Error listing tools for ${serverName}`, err);
+        return res.status(500).json({ success: false, error: 'Failed to list tools' });
+      }
+      oauthRequired = true;
+    }
+
+    // Shape tool response
+    const toolList = Array.isArray(tools)
+      ? tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }))
+      : [];
+
+    return res.json({ success: true, serverName, oauthRequired, oauthUrl, tools: toolList });
+  } catch (error) {
+    logger.error('[MCP] Unexpected error listing tools', error);
+    return res.status(500).json({ success: false, error: 'Unexpected error' });
+  }
+});
+
+/**
+ * Get formatted instructions for a specific MCP server
+ * @route GET /api/mcp/:serverName/instructions
+ */
+router.get('/:serverName/instructions', requireJwtAuth, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user?.id) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    const { serverName } = req.params;
+    const mcpManager = getMCPManager(user.id);
+    const instructions = mcpManager.formatInstructionsForContext?.([serverName]) || '';
+    return res.json({ success: true, serverName, instructions });
+  } catch (error) {
+    logger.error('[MCP] Failed to get instructions', error);
+    return res.status(500).json({ success: false, error: 'Failed to get instructions' });
+  }
+});
+
+/**
  * Initiate OAuth flow
  * This endpoint is called when the user clicks the auth link in the UI
  */
@@ -202,6 +314,40 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
   } catch (error) {
     logger.error('[MCP OAuth] OAuth callback error', error);
     res.redirect('/oauth/error?error=callback_failed');
+  }
+});
+
+/**
+ * Call a specific MCP tool by name on a server
+ * @route POST /api/mcp/:serverName/tools/:toolName/call
+ * Body: { arguments?: object, customUserVars?: Record<string,string> }
+ */
+router.post('/:serverName/tools/:toolName/call', requireJwtAuth, async (req, res) => {
+  try {
+    const { serverName, toolName } = req.params;
+    const user = req.user;
+    const toolArguments = req.body?.arguments || {};
+    const customUserVars = req.body?.customUserVars;
+
+    const flowsCache = getLogStores(CacheKeys.FLOWS);
+    const flowManager = getFlowStateManager(flowsCache);
+    const mcpManager = getMCPManager(user.id);
+
+    const result = await mcpManager.callTool({
+      user,
+      serverName,
+      toolName,
+      provider: 'openai',
+      toolArguments,
+      flowManager,
+      tokenMethods: { findToken, updateToken, createToken, deleteTokens },
+      customUserVars,
+    });
+
+    res.json({ success: true, result });
+  } catch (error) {
+    logger.error('[MCP] Tool call failed', error);
+    res.status(500).json({ success: false, error: error?.message || 'Tool call failed' });
   }
 });
 

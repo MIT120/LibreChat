@@ -1,14 +1,14 @@
-import { z } from 'zod';
-import {
-  SSEOptionsSchema,
-  MCPOptionsSchema,
-  MCPServersSchema,
-  StdioOptionsSchema,
-  WebSocketOptionsSchema,
-  StreamableHTTPOptionsSchema,
-} from 'librechat-data-provider';
 import type * as t from '@modelcontextprotocol/sdk/types.js';
 import type { TPlugin } from 'librechat-data-provider';
+import {
+  MCPOptionsSchema,
+  MCPServersSchema,
+  SSEOptionsSchema,
+  StdioOptionsSchema,
+  StreamableHTTPOptionsSchema,
+  WebSocketOptionsSchema,
+} from 'librechat-data-provider';
+import { z } from 'zod';
 import type { JsonSchemaType } from '~/types/zod';
 
 export type StdioOptions = z.infer<typeof StdioOptionsSchema>;
@@ -56,43 +56,51 @@ export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'err
 export type MCPTool = z.infer<typeof t.ToolSchema>;
 export type MCPToolListResponse = z.infer<typeof t.ListToolsResultSchema>;
 export type ToolContentPart = t.TextContent | t.ImageContent | t.EmbeddedResource | t.AudioContent;
+
+export interface ResourceLink {
+  type: 'resource_link';
+  name?: string;
+  uri: string;
+}
+
+export type ExtendedToolContentPart = ToolContentPart | ResourceLink;
 export type ImageContent = Extract<ToolContentPart, { type: 'image' }>;
 export type MCPToolCallResponse =
   | undefined
   | {
-      _meta?: Record<string, unknown>;
-      content?: Array<ToolContentPart>;
-      isError?: boolean;
-    };
+    _meta?: Record<string, unknown>;
+    content?: Array<ToolContentPart | ResourceLink>;
+    isError?: boolean;
+  };
 
 export type Provider = 'google' | 'anthropic' | 'openAI';
 
 export type FormattedContent =
   | {
-      type: 'text';
-      text: string;
-    }
+    type: 'text';
+    text: string;
+  }
   | {
-      type: 'image';
-      inlineData: {
-        mimeType: string;
-        data: string;
-      };
-    }
-  | {
-      type: 'image';
-      source: {
-        type: 'base64';
-        media_type: string;
-        data: string;
-      };
-    }
-  | {
-      type: 'image_url';
-      image_url: {
-        url: string;
-      };
+    type: 'image';
+    inlineData: {
+      mimeType: string;
+      data: string;
     };
+  }
+  | {
+    type: 'image';
+    source: {
+      type: 'base64';
+      media_type: string;
+      data: string;
+    };
+  }
+  | {
+    type: 'image_url';
+    image_url: {
+      url: string;
+    };
+  };
 
 export type FormattedContentResult = [
   string | FormattedContent[],

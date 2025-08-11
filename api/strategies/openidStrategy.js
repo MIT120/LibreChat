@@ -325,7 +325,8 @@ async function setupOpenId() {
           if (!user) {
             user = await findUser({ email: claims.email });
             logger.info(
-              `[openidStrategy] user ${user ? 'found' : 'not found'} with email: ${claims.email
+              `[openidStrategy] user ${user ? 'found' : 'not found'} with email: ${
+                claims.email
               } for openidId: ${claims.sub}`,
             );
           }

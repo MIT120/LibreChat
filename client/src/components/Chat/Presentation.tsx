@@ -1,16 +1,22 @@
-import { useRecoilValue } from 'recoil';
-import { useEffect, useMemo } from 'react';
 import { FileSources, LocalStorageKeys } from 'librechat-data-provider';
+import { useEffect, useMemo } from 'react';
+import { useRecoilValue } from 'recoil';
 import type { ExtendedFile } from '~/common';
-import { useDeleteFilesMutation } from '~/data-provider';
-import DragDropWrapper from '~/components/Chat/Input/Files/DragDropWrapper';
-import { EditorProvider, SidePanelProvider } from '~/Providers';
 import Artifacts from '~/components/Artifacts/Artifacts';
+import DragDropWrapper from '~/components/Chat/Input/Files/DragDropWrapper';
 import { SidePanelGroup } from '~/components/SidePanel';
+import { useDeleteFilesMutation } from '~/data-provider';
 import { useSetFilesToDelete } from '~/hooks';
+import { EditorProvider, SidePanelProvider } from '~/Providers';
 import store from '~/store';
 
-export default function Presentation({ children }: { children: React.ReactNode }) {
+export default function Presentation({
+  children,
+  rightPanel,
+}: {
+  children: React.ReactNode;
+  rightPanel?: React.ReactNode;
+}) {
   const artifacts = useRecoilValue(store.artifactsState);
   const artifactsVisibility = useRecoilValue(store.artifactsVisibility);
 
@@ -64,13 +70,17 @@ export default function Presentation({ children }: { children: React.ReactNode }
           defaultLayout={defaultLayout}
           fullPanelCollapse={fullCollapse}
           defaultCollapsed={defaultCollapsed}
-          artifacts={
-            artifactsVisibility === true && Object.keys(artifacts ?? {}).length > 0 ? (
-              <EditorProvider>
-                <Artifacts />
-              </EditorProvider>
-            ) : null
-          }
+          artifacts={(() => {
+            if (rightPanel) return rightPanel;
+            if (artifactsVisibility === true && Object.keys(artifacts ?? {}).length > 0) {
+              return (
+                <EditorProvider>
+                  <Artifacts />
+                </EditorProvider>
+              );
+            }
+            return null;
+          })()}
         >
           <main className="flex h-full flex-col overflow-y-auto" role="main">
             {children}

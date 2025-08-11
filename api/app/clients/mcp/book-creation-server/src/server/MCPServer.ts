@@ -18,11 +18,13 @@ import { ServiceContainer } from '../core/ServiceContainer.js';
 import { IMCPServer, IToolHandler, SERVICE_TOKENS } from '../interfaces/index.js';
 
 // Tool handlers
+import AnalysisToolHandlers from './tools/AnalysisToolHandlers.js';
 import { BookToolHandlers } from './tools/BookToolHandlers.js';
 import { ChapterToolHandlers } from './tools/ChapterToolHandlers.js';
 import { ExportToolHandlers } from './tools/ExportToolHandlers.js';
 import { ImageToolHandlers } from './tools/ImageToolHandlers.js';
 import { PageToolHandlers } from './tools/PageToolHandlers.js';
+import PlanningToolHandlers from './tools/PlanningToolHandlers.js';
 
 export class MCPServer extends BaseService implements IMCPServer {
     private server: Server;
@@ -148,6 +150,14 @@ export class MCPServer extends BaseService implements IMCPServer {
             new PageToolHandlers(this.logger, bookService),
             new ImageToolHandlers(this.logger, imageService),
             new ExportToolHandlers(this.logger, exportService),
+            // New planning & analysis tools
+            new PlanningToolHandlers(this.logger, bookService),
+            new AnalysisToolHandlers(
+                this.logger,
+                this.serviceContainer.resolve(SERVICE_TOKENS.ANALYTICS_SERVICE) as any,
+                bookService,
+                this.serviceContainer.resolve(SERVICE_TOKENS.AI_CONTENT_SERVICE) as any
+            ),
         ];
 
         for (const handlerGroup of toolHandlerGroups) {
@@ -199,9 +209,19 @@ export class MCPServer extends BaseService implements IMCPServer {
                         ],
                     };
                 } else if (Array.isArray(result)) {
-                    // Result is already an array of MCP content objects (text, image_url, etc.)
+                    // Normalize result: convert legacy 'resource' objects with URI to 'resource_link'
+                    const normalized = result.map((part: any) => {
+                        if (part && part.type === 'resource' && part.resource && typeof part.resource.uri === 'string') {
+                            return {
+                                type: 'resource_link',
+                                name: part.resource.name || 'Resource',
+                                uri: part.resource.uri,
+                            };
+                        }
+                        return part;
+                    });
                     return {
-                        content: result,
+                        content: normalized,
                     };
                 } else {
                     // Object result - stringify it

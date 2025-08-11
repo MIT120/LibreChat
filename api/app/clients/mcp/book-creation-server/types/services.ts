@@ -1,23 +1,23 @@
 import {
+  BookResponse,
+  BookStatistics,
+  ChapterResponse,
+  ContentGenerationOptions,
+  ContentImprovementOptions,
+  ContentSuggestion,
+  CreateBookRequest,
+  CreateChapterRequest,
+  CreatePageRequest,
+  GetBookOptions,
   IBook,
   IChapter,
   IPage,
-  CreateBookRequest,
-  UpdateBookRequest,
-  CreateChapterRequest,
-  UpdateChapterRequest,
-  CreatePageRequest,
-  UpdatePageRequest,
-  BookResponse,
-  ChapterResponse,
-  PageResponse,
-  BookStatistics,
-  ContentSuggestion,
-  GetBookOptions,
   ListBooksOptions,
-  ContentGenerationOptions,
   PageGenerationOptions,
-  ContentImprovementOptions
+  PageResponse,
+  UpdateBookRequest,
+  UpdateChapterRequest,
+  UpdatePageRequest
 } from './book.js';
 import { PaginatedResponse } from './index.js';
 
@@ -91,6 +91,8 @@ export interface IExportService {
 export interface ExportOptions {
   includeMetadata?: boolean;
   authorId: string;
+  /** Optional additional filename to copy the export to (e.g., conversationId.html) */
+  aliasFilename?: string;
 }
 
 export interface ExportResult {

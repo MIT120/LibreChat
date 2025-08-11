@@ -272,11 +272,32 @@ function createToolEndCallback({ req, res, artifactPromises }) {
           continue;
         }
         const { url } = part.image_url;
+        const toDataUrlIfHttp = async (u) => {
+          try {
+            if (!u || typeof u !== 'string') {
+              return u;
+            }
+            if (!u.startsWith('http')) {
+              return u;
+            }
+            const resp = await fetch(u);
+            if (!resp.ok) {
+              return u;
+            }
+            const contentType = resp.headers.get('content-type') || 'image/png';
+            const buffer = await resp.arrayBuffer();
+            const b64 = Buffer.from(buffer).toString('base64');
+            return `data:${contentType};base64,${b64}`;
+          } catch (err) {
+            return u;
+          }
+        };
         artifactPromises.push(
           (async () => {
             const filename = `${output.name}_${output.tool_call_id}_img_${nanoid()}`;
             const file_id = output.artifact.file_ids?.[i];
-            const file = await saveBase64Image(url, {
+            const dataUrl = await toDataUrlIfHttp(url);
+            const file = await saveBase64Image(dataUrl, {
               req,
               file_id,
               filename,

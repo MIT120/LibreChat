@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { useRecoilValue } from 'recoil';
-import { CSSTransition } from 'react-transition-group';
 import type { TMessage } from 'librechat-data-provider';
-import { useScreenshot, useMessageScrolling, useLocalize } from '~/hooks';
+import { useState } from 'react';
+import { CSSTransition } from 'react-transition-group';
+import { useRecoilValue } from 'recoil';
 import ScrollToBottom from '~/components/Messages/ScrollToBottom';
-import MultiMessage from './MultiMessage';
-import { cn } from '~/utils';
+import { useLocalize, useMessageScrolling, useScreenshot } from '~/hooks';
 import store from '~/store';
+import { cn } from '~/utils';
+import MultiMessage from './MultiMessage';
 
 export default function MessagesView({
   messagesTree: _messagesTree,
@@ -32,7 +32,7 @@ export default function MessagesView({
 
   return (
     <>
-      <div className="relative flex-1 overflow-hidden overflow-y-auto">
+      <div className="relative h-full w-full overflow-hidden">
         <div className="relative h-full">
           <div
             className="scrollbar-gutter-stable"

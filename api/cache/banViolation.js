@@ -57,7 +57,8 @@ const banViolation = async (req, res, errorMessage) => {
 
   req.ip = removePorts(req);
   logger.info(
-    `[BAN] Banning user ${user_id} ${req.ip ? `@ ${req.ip} ` : ''}for ${duration / 1000 / 60
+    `[BAN] Banning user ${user_id} ${req.ip ? `@ ${req.ip} ` : ''}for ${
+      duration / 1000 / 60
     } minutes`,
   );
 

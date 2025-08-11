@@ -2,9 +2,11 @@
  * Chapter Tool Handlers - MCP tools for chapter management
  */
 
+import { z } from 'zod';
 import { CreateChapterRequest, UpdateChapterRequest } from '../../../types/book.js';
 import { ILogger } from '../../core/Logger.js';
 import { IChapterService, IToolHandler } from '../../interfaces/index.js';
+import { ToolExecutor } from '../ToolExecutor.js';
 
 export class ChapterToolHandlers {
     private logger: ILogger;
@@ -23,34 +25,35 @@ export class ChapterToolHandlers {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        bookId: {
-                            type: 'string',
-                            description: 'Book identifier',
-                        },
-                        title: {
-                            type: 'string',
-                            description: 'Chapter title',
-                        },
-                        description: {
-                            type: 'string',
-                            description: 'Chapter description (optional)',
-                        },
-                        outline: {
-                            type: 'string',
-                            description: 'Chapter outline (optional)',
-                        },
-                        targetWordCount: {
-                            type: 'number',
-                            description: 'Target word count for this chapter (optional)',
-                        },
-                        chapterNumber: {
-                            type: 'number',
-                            description: 'Chapter number (optional - will auto-increment if not provided)',
-                        },
+                        bookId: { type: 'string', description: 'Book identifier' },
+                        title: { type: 'string', description: 'Chapter title' },
+                        description: { type: 'string', description: 'Chapter description (optional)' },
+                        outline: { type: 'string', description: 'Chapter outline (optional)' },
+                        targetWordCount: { type: 'number', description: 'Target word count for this chapter (optional)' },
+                        chapterNumber: { type: 'number', description: 'Chapter number (optional - auto-increment if not provided)' },
                     },
                     required: ['bookId', 'title'],
                 },
-                handler: this.handleCreateChapter.bind(this),
+                handler: async (args: any) => {
+                    const schema = z.object({
+                        bookId: z.string().min(1),
+                        title: z.string().min(1),
+                        description: z.string().optional(),
+                        outline: z.string().optional(),
+                        targetWordCount: z.number().int().positive().optional(),
+                        chapterNumber: z.number().int().positive().optional(),
+                    });
+                    return ToolExecutor.run({
+                        name: 'create_chapter',
+                        logger: this.logger,
+                        schema,
+                        args,
+                        perform: (input) => this.chapterService.createChapter(input as CreateChapterRequest),
+                        format: (chapter) => {
+                            return `✅ Chapter created successfully!\n\n**Chapter Details:**\n- **ID:** ${chapter._id}\n- **Book ID:** ${chapter.bookId}\n- **Chapter Number:** ${chapter.chapterNumber}\n- **Title:** ${chapter.title}\n- **Description:** ${chapter.description || 'Not provided'}\n- **Target Word Count:** ${chapter.targetWordCount?.toLocaleString() || 'Not set'}\n- **Status:** ${chapter.status}\n- **Created:** ${new Date(chapter.createdAt).toLocaleDateString()}`;
+                        },
+                    });
+                },
             },
             {
                 name: 'get_chapter',

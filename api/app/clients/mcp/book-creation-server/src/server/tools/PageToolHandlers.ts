@@ -2,9 +2,11 @@
  * Page Tool Handlers - MCP tools for page management
  */
 
+import { z } from 'zod';
 import { CreatePageRequest, UpdatePageRequest } from '../../../types/book.js';
 import { ILogger } from '../../core/Logger.js';
 import { IPageService, IToolHandler } from '../../interfaces/index.js';
+import { ToolExecutor } from '../ToolExecutor.js';
 
 export class PageToolHandlers {
     private logger: ILogger;
@@ -23,30 +25,34 @@ export class PageToolHandlers {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        chapterId: {
-                            type: 'string',
-                            description: 'Chapter identifier',
-                        },
-                        title: {
-                            type: 'string',
-                            description: 'Page title',
-                        },
-                        content: {
-                            type: 'string',
-                            description: 'Page content',
-                        },
-                        notes: {
-                            type: 'string',
-                            description: 'Page notes (optional)',
-                        },
-                        pageNumber: {
-                            type: 'number',
-                            description: 'Page number (optional - will auto-increment if not provided)',
-                        },
+                        chapterId: { type: 'string', description: 'Chapter identifier' },
+                        title: { type: 'string', description: 'Page title' },
+                        content: { type: 'string', description: 'Page content' },
+                        notes: { type: 'string', description: 'Page notes (optional)' },
+                        pageNumber: { type: 'number', description: 'Page number (optional - will auto-increment if not provided)' },
                     },
                     required: ['chapterId', 'title', 'content'],
                 },
-                handler: this.handleCreatePage.bind(this),
+                handler: async (args: any) => {
+                    const schema = z.object({
+                        chapterId: z.string().min(1),
+                        title: z.string().min(1),
+                        content: z.string().min(1),
+                        notes: z.string().optional(),
+                        pageNumber: z.number().int().positive().optional(),
+                    });
+
+                    return ToolExecutor.run({
+                        name: 'create_page',
+                        logger: this.logger,
+                        schema,
+                        args,
+                        perform: (input) => this.pageService.createPage(input as CreatePageRequest),
+                        format: (page) => {
+                            return `✅ Page created successfully!\n\n**Page Details:**\n- **Page ID:** ${page.pageId}\n- **Chapter ID:** ${page.chapterId}\n- **Page Number:** ${page.pageNumber}\n- **Title:** ${page.title}\n- **Word Count:** ${page.wordCount.toLocaleString()}\n- **Status:** ${page.status}\n- **Created:** ${new Date(page.createdAt).toLocaleDateString()}\n\n**Content Preview:**\n${page.content.length > 200 ? page.content.substring(0, 200) + '...' : page.content}\n\n${page.notes ? `**Notes:** ${page.notes}` : ''}`;
+                        },
+                    });
+                },
             },
             {
                 name: 'get_page',

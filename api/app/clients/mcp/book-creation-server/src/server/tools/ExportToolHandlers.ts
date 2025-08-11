@@ -40,6 +40,10 @@ export class ExportToolHandlers {
                             description: 'Include book metadata in export (default: true)',
                             default: true,
                         },
+                        aliasFilename: {
+                            type: 'string',
+                            description: 'Optional alias filename to copy the export as (e.g., conversationId.html)',
+                        },
                     },
                     required: ['bookId', 'format', 'authorId'],
                 },
@@ -53,6 +57,7 @@ export class ExportToolHandlers {
         format: string;
         authorId: string;
         includeMetadata?: boolean;
+        aliasFilename?: string;
     }): Promise<string> {
         try {
             const startTime = Date.now();
@@ -62,10 +67,18 @@ export class ExportToolHandlers {
                 includeMetadata: args.includeMetadata
             });
 
-            const result = await this.exportService.exportBook(args.bookId, args.format, {
+            const exportOptions: any = {
                 authorId: args.authorId,
                 includeMetadata: args.includeMetadata ?? true,
-            });
+            };
+            if (typeof args.aliasFilename === 'string') {
+                exportOptions.aliasFilename = args.aliasFilename;
+            }
+            const result = await this.exportService.exportBook(
+                args.bookId,
+                args.format,
+                exportOptions,
+            );
 
             const exportTime = Date.now() - startTime;
             const fileSizeMB = (result.size / (1024 * 1024)).toFixed(2);

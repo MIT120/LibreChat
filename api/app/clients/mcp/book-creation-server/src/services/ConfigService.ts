@@ -46,12 +46,27 @@ export interface AIConfig {
     baseUrl?: string;
 }
 
+export interface ImageDalleConfig {
+    model: string;
+    size: string; // e.g., '1024x1024' | '512x512' | '2048x2048'
+    quality: 'standard' | 'hd';
+    style: 'vivid' | 'natural';
+}
+
+export interface ImageConfig {
+    enabled: boolean;
+    provider: 'openai' | 'local';
+    defaultContentStyle: string; // appended to prompts when book spec is missing
+    dalle: ImageDalleConfig;
+}
+
 export interface BookCreationConfig {
     database: DatabaseConfig;
     export: ExportConfig;
     limits: SystemLimits;
     features: FeatureFlags;
     ai: AIConfig;
+    image: ImageConfig;
     logging: {
         level: 'debug' | 'info' | 'warn' | 'error';
         format: 'json' | 'text';
@@ -167,7 +182,11 @@ export class ConfigService extends BaseService implements IConfigService {
                 },
             },
             export: {
-                outputDirectory: process.env.EXPORT_DIR || './exports',
+                // Prefer server-provided absolute exports dir so the client can fetch via /c/exports
+                outputDirectory:
+                    process.env.SERVER_EXPORTS_DIR ||
+                    process.env.EXPORT_DIR ||
+                    './exports',
                 maxFileSize: 52428800, // 50MB
                 allowedFormats: ['pdf', 'epub', 'docx', 'html', 'txt'],
                 compression: true,
@@ -190,6 +209,19 @@ export class ConfigService extends BaseService implements IConfigService {
                 enableAIContent: true,
                 enableResearch: true,
                 enableAnalytics: true,
+            },
+            image: {
+                enabled: true,
+                provider: 'openai',
+                defaultContentStyle:
+                    process.env.IMAGE_DEFAULT_CONTENT_STYLE ||
+                    'cartoon illustration, bright colors, kid-friendly, professional book quality',
+                dalle: {
+                    model: process.env.IMAGE_MODEL || 'dall-e-3',
+                    size: process.env.IMAGE_SIZE || '1024x1024',
+                    quality: (process.env.IMAGE_QUALITY as any) || 'standard',
+                    style: (process.env.IMAGE_RENDER_STYLE as any) || 'vivid',
+                },
             },
             ai: {
                 maxTokens: 4000,
@@ -247,6 +279,35 @@ export class ConfigService extends BaseService implements IConfigService {
             this.config.ai.baseUrl = process.env.OPENAI_BASE_URL;
         }
 
+        // Image overrides
+        if (process.env.IMAGE_ENABLED) {
+            this.config.image.enabled = process.env.IMAGE_ENABLED.toLowerCase() === 'true';
+        }
+        if (process.env.IMAGE_PROVIDER) {
+            this.config.image.provider = process.env.IMAGE_PROVIDER as any;
+        }
+        if (process.env.IMAGE_DEFAULT_CONTENT_STYLE) {
+            this.config.image.defaultContentStyle = process.env.IMAGE_DEFAULT_CONTENT_STYLE;
+        }
+        if (process.env.IMAGE_MODEL) {
+            this.config.image.dalle.model = process.env.IMAGE_MODEL;
+        }
+        if (process.env.IMAGE_SIZE) {
+            this.config.image.dalle.size = process.env.IMAGE_SIZE;
+        }
+        if (process.env.IMAGE_QUALITY) {
+            const val = process.env.IMAGE_QUALITY.toLowerCase();
+            if (val === 'standard' || val === 'hd') {
+                this.config.image.dalle.quality = val as 'standard' | 'hd';
+            }
+        }
+        if (process.env.IMAGE_RENDER_STYLE) {
+            const val = process.env.IMAGE_RENDER_STYLE.toLowerCase();
+            if (val === 'vivid' || val === 'natural') {
+                this.config.image.dalle.style = val as 'vivid' | 'natural';
+            }
+        }
+
         // Feature flags from environment
         const envFeatures = {
             ENABLE_EXPORT: 'enableExport',
@@ -296,6 +357,14 @@ export class ConfigService extends BaseService implements IConfigService {
         }
         if (limits.maxChaptersPerBook < 1) {
             errors.push('Maximum chapters per book must be at least 1');
+        }
+
+        // Validate image configuration
+        if (this.config.image.enabled && this.config.image.provider === 'openai') {
+            const sizePattern = /^\d+x\d+$/;
+            if (!sizePattern.test(this.config.image.dalle.size)) {
+                errors.push('IMAGE_SIZE must be in the form WIDTHxHEIGHT, e.g., 1024x1024');
+            }
         }
 
         if (errors.length > 0) {
@@ -382,6 +451,10 @@ export class ConfigService extends BaseService implements IConfigService {
 
     getAIConfig(): AIConfig {
         return this.config.ai;
+    }
+
+    getImageConfig(): ImageConfig {
+        return this.config.image;
     }
 
     isFeatureEnabled(feature: keyof FeatureFlags): boolean {

@@ -2,6 +2,7 @@
  * Book Tool Handlers - MCP tools for book management
  */
 
+import { z } from 'zod';
 import {
     CreateBookRequest,
     GetBookOptions,
@@ -11,6 +12,7 @@ import {
 } from '../../../types/book.js';
 import { ILogger } from '../../core/Logger.js';
 import { IBookService, IToolHandler } from '../../interfaces/index.js';
+import { ToolExecutor } from '../ToolExecutor.js';
 
 export class BookToolHandlers {
     private logger: ILogger;
@@ -29,81 +31,53 @@ export class BookToolHandlers {
                 inputSchema: {
                     type: 'object',
                     properties: {
-                        title: {
-                            type: 'string',
-                            description: 'Book title',
-                        },
-                        subtitle: {
-                            type: 'string',
-                            description: 'Book subtitle (optional)',
-                        },
-                        theme: {
-                            type: 'string',
-                            description: 'Main theme or subject matter',
-                        },
-                        genre: {
-                            type: 'string',
-                            description: 'Book genre',
-                        },
-                        targetAudience: {
-                            type: 'string',
-                            description: 'Target audience description (optional)',
-                        },
-                        writingStyle: {
-                            type: 'object',
-                            description: 'Writing style configuration',
-                            properties: {
-                                tone: {
-                                    type: 'string',
-                                    enum: ['formal', 'informal', 'academic', 'conversational', 'humorous', 'serious', 'inspirational'],
-                                    description: 'Writing tone',
-                                },
-                                voice: {
-                                    type: 'string',
-                                    enum: ['first_person', 'second_person', 'third_person'],
-                                    description: 'Narrative voice',
-                                },
-                                vocabulary: {
-                                    type: 'string',
-                                    enum: ['simple', 'intermediate', 'advanced', 'technical'],
-                                    description: 'Vocabulary level',
-                                },
-                                sentenceStructure: {
-                                    type: 'string',
-                                    enum: ['simple', 'complex', 'varied'],
-                                    description: 'Sentence structure style',
-                                },
-                                perspective: {
-                                    type: 'string',
-                                    description: 'Writing perspective (optional)',
-                                },
-                                specialInstructions: {
-                                    type: 'string',
-                                    description: 'Special writing instructions (optional)',
-                                },
-                            },
-                            required: ['tone', 'voice', 'vocabulary', 'sentenceStructure'],
-                        },
-                        description: {
-                            type: 'string',
-                            description: 'Book description (optional)',
-                        },
-                        targetWordCount: {
-                            type: 'number',
-                            description: 'Target word count (optional)',
-                        },
-                        estimatedPages: {
-                            type: 'number',
-                            description: 'Estimated page count (optional)',
-                        },
-                        authorId: {
-                            type: 'string',
-                            description: 'Author identifier',
-                        },
+                        title: { type: 'string', description: 'Book title' },
+                        subtitle: { type: 'string', description: 'Book subtitle (optional)' },
+                        theme: { type: 'string', description: 'Main theme or subject matter' },
+                        genre: { type: 'string', description: 'Book genre' },
+                        targetAudience: { type: 'string', description: 'Target audience description (optional)' },
+                        writingStyle: { type: 'object', description: 'Writing style configuration' },
+                        description: { type: 'string', description: 'Book description (optional)' },
+                        targetWordCount: { type: 'number', description: 'Target word count (optional)' },
+                        estimatedPages: { type: 'number', description: 'Estimated page count (optional)' },
+                        authorId: { type: 'string', description: 'Author identifier' },
                     },
                     required: ['title', 'theme', 'genre', 'writingStyle', 'authorId'],
                 },
-                handler: this.handleCreateBook.bind(this),
+                handler: async (args: any) => {
+                    const writingStyleSchema = z.object({
+                        tone: z.enum(['formal', 'informal', 'academic', 'conversational', 'humorous', 'serious', 'inspirational']),
+                        voice: z.enum(['first_person', 'second_person', 'third_person']),
+                        vocabulary: z.enum(['simple', 'intermediate', 'advanced', 'technical']),
+                        sentenceStructure: z.enum(['simple', 'complex', 'varied']),
+                        perspective: z.string().optional(),
+                        specialInstructions: z.string().optional(),
+                    });
+
+                    const schema = z.object({
+                        title: z.string().min(1),
+                        subtitle: z.string().optional(),
+                        theme: z.string().min(1),
+                        genre: z.string().min(1),
+                        targetAudience: z.string().optional(),
+                        writingStyle: writingStyleSchema,
+                        description: z.string().optional(),
+                        targetWordCount: z.number().int().positive().optional(),
+                        estimatedPages: z.number().int().positive().optional(),
+                        authorId: z.string().min(1),
+                    });
+
+                    return ToolExecutor.run({
+                        name: 'create_book',
+                        logger: this.logger,
+                        schema,
+                        args,
+                        perform: (input) => this.bookService.createBook(input as CreateBookRequest),
+                        format: (book) => {
+                            return `✅ Book created successfully!\n\n**Book Details:**\n- **ID:** ${book._id}\n- **Title:** ${book.title}${book.subtitle ? `\n- **Subtitle:** ${book.subtitle}` : ''}\n- **Theme:** ${book.theme}\n- **Genre:** ${book.genre}\n- **Target Audience:** ${book.targetAudience || 'Not specified'}\n- **Writing Style:** ${book.writingStyle.tone} tone, ${book.writingStyle.voice} voice\n- **Target Word Count:** ${book.targetWordCount?.toLocaleString() || 'Not set'}\n- **Status:** ${book.status}\n- **Created:** ${new Date(book.createdAt).toLocaleDateString()}\n\nThe book is ready for chapter creation and content development!`;
+                        },
+                    });
+                },
             },
             {
                 name: 'get_book',

@@ -59,6 +59,11 @@ const AppService = async (app) => {
   checkVariables();
   await checkHealth();
 
+  // Expose absolute exports directory to subprocesses (e.g., MCP servers)
+  // so they can write files where the backend serves `/c/exports`.
+  // Child processes inherit env via MCP stdio transport defaults.
+  process.env.SERVER_EXPORTS_DIR = paths.exports;
+
   if (fileStrategy === FileSources.firebase) {
     initializeFirebase();
   } else if (fileStrategy === FileSources.azure_blob) {

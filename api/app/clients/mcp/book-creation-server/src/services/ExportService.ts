@@ -157,6 +157,18 @@ export class ExportService extends BaseService implements IExportService {
             // Generate export based on format
             const result = await this.generateExport(bookData, format as ExportFormat, includeMetadata);
 
+            // Optional alias filename (e.g., copy to conversationId.html for immediate client fetch)
+            if (options && (options as any).aliasFilename) {
+                try {
+                    const exportConfig = this.configService.getExportConfig();
+                    const aliasPath = path.join(exportConfig.outputDirectory, String((options as any).aliasFilename));
+                    await fs.copyFile(result.filepath, aliasPath);
+                    this.logger.info('Export alias created', { alias: aliasPath });
+                } catch (aliasErr) {
+                    this.logger.warn('Failed to create export alias', { error: (aliasErr as Error).message });
+                }
+            }
+
             this.logger.info('Book export completed successfully', {
                 bookId,
                 format,

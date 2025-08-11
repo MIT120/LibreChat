@@ -56,7 +56,7 @@ const checkBalanceRecord = async function ({
     if (
       isInvalidDate(lastRefillDate) ||
       now >=
-      addIntervalToDate(lastRefillDate, record.refillIntervalValue, record.refillIntervalUnit)
+        addIntervalToDate(lastRefillDate, record.refillIntervalValue, record.refillIntervalUnit)
     ) {
       try {
         /** @type {{ rate: number, user: string, balance: number, transaction: import('@librechat/data-schemas').ITransaction}} */

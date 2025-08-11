@@ -17,6 +17,7 @@ import { DatabaseService } from './services/DatabaseService.js';
 import { ExportService } from './services/ExportService.js';
 import { ImageService } from './services/ImageService.js';
 import { ResearchService } from './services/ResearchService.js';
+import { WritingAnalyticsService } from './services/WritingAnalyticsService.js';
 
 // Import server
 import { MCPServer } from './server/MCPServer.js';
@@ -103,7 +104,7 @@ async function registerServices(logger: Logger): Promise<void> {
         container.registerSingleton(
             SERVICE_TOKENS.IMAGE_SERVICE,
             ImageService,
-            [SERVICE_TOKENS.LOGGER]
+            [SERVICE_TOKENS.LOGGER, SERVICE_TOKENS.CONFIG_SERVICE]
         );
 
         container.registerSingleton(
@@ -123,6 +124,13 @@ async function registerServices(logger: Logger): Promise<void> {
         container.registerSingleton(
             SERVICE_TOKENS.AI_CONTENT_SERVICE,
             AIContentService,
+            [SERVICE_TOKENS.LOGGER]
+        );
+
+        // Writing Analytics service
+        container.registerSingleton(
+            SERVICE_TOKENS.ANALYTICS_SERVICE as any,
+            WritingAnalyticsService,
             [SERVICE_TOKENS.LOGGER]
         );
 

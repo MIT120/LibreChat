@@ -836,9 +836,9 @@ ${args.lawReference ? `- Law Reference: ${args.lawReference}` : ''}
 
 **Key Findings:**
 ${results.cases
-        .slice(0, 5)
-        .map(
-          (case_, idx) => `
+  .slice(0, 5)
+  .map(
+    (case_, idx) => `
 ${idx + 1}. **${case_.title}**
    - Court: ${case_.court}
    - Date: ${case_.date}
@@ -847,8 +847,8 @@ ${idx + 1}. **${case_.title}**
    - Summary: ${case_.summary}
    - Reference: ${case_.reference}
 `,
-        )
-        .join('')}
+  )
+  .join('')}
 
 ${results.totalCount > 5 ? `\n*Showing 5 of ${results.totalCount} results. Use more specific filters to narrow down results.*` : ''}`;
 
@@ -879,26 +879,28 @@ ${results.totalCount > 5 ? `\n*Showing 5 of ${results.totalCount} results. Use m
 
       // If chamber is specified, add it to the query
       if (args.chamber && args.chamber !== 'any') {
-        searchParams.query += ` ${args.chamber === 'civil'
+        searchParams.query += ` ${
+          args.chamber === 'civil'
             ? 'гражданска колегия'
             : args.chamber === 'criminal'
               ? 'наказателна колегия'
               : args.chamber === 'commercial'
                 ? 'търговска колегия'
                 : ''
-          }`;
+        }`;
       }
 
       // If decision type is specified, add it to the query
       if (args.decisionType && args.decisionType !== 'any') {
-        searchParams.query += ` ${args.decisionType === 'cassation'
+        searchParams.query += ` ${
+          args.decisionType === 'cassation'
             ? 'касационно решение'
             : args.decisionType === 'interpretation'
               ? 'тълкувателно решение'
               : args.decisionType === 'unification'
                 ? 'обединително решение'
                 : ''
-          }`;
+        }`;
       }
 
       // Search using enhanced legal search for better results
@@ -947,22 +949,24 @@ ${results.totalCount > 5 ? `\n*Showing 5 of ${results.totalCount} results. Use m
 - Заявка: ${originalArgs.query}
 ${originalArgs.caseNumber ? `- Номер на делото: ${originalArgs.caseNumber}` : ''}
 ${originalArgs.legalArticle ? `- Правна разпоредба: ${originalArgs.legalArticle}` : ''}
-- Колегия: ${originalArgs.chamber === 'civil'
+- Колегия: ${
+      originalArgs.chamber === 'civil'
         ? 'Гражданска'
         : originalArgs.chamber === 'criminal'
           ? 'Наказателна'
           : originalArgs.chamber === 'commercial'
             ? 'Търговска'
             : 'Всички'
-      }
-- Тип решение: ${originalArgs.decisionType === 'cassation'
+    }
+- Тип решение: ${
+      originalArgs.decisionType === 'cassation'
         ? 'Касационно'
         : originalArgs.decisionType === 'interpretation'
           ? 'Тълкувателно'
           : originalArgs.decisionType === 'unification'
             ? 'Обединително'
             : 'Всички типове'
-      }
+    }
 ${originalArgs.legalArea && originalArgs.legalArea !== 'any' ? `- Правна област: ${originalArgs.legalArea}` : ''}
 
 `;
@@ -1001,16 +1005,16 @@ ${analysis.factPatternComparison}
 
 **Applicable Precedents:**
 ${analysis.applicablePrecedents
-              .map(
-                (p) => `
+  .map(
+    (p) => `
 - **${p.title}** (${p.court}, ${p.date})
   - Similarity Score: ${p.similarityScore}%
   - Key Legal Principle: ${p.legalPrinciple}
   - Reasoning: ${p.reasoning}
   - Applicability: ${p.applicability}
 `,
-              )
-              .join('')}
+  )
+  .join('')}
 
 **Legal Analysis:**
 ${analysis.legalAnalysis}
@@ -1042,21 +1046,21 @@ ${analysis.standardsChecked.map((s) => `✓ ${s}`).join('\n')}
 
 **Issues Identified:**
 ${analysis.issues
-              .map(
-                (issue) => `
+  .map(
+    (issue) => `
 **${issue.severity.toUpperCase()}: ${issue.title}**
 - **Legal Basis:** ${issue.legalBasis}
 - **Description:** ${issue.description}
 - **Recommendation:** ${issue.recommendation}
 - **Risk Level:** ${issue.riskLevel}
 `,
-              )
-              .join('')}
+  )
+  .join('')}
 
 **Compliance Summary by Area:**
 ${Object.entries(analysis.complianceByArea)
-              .map(([area, score]) => `- ${area}: ${score}/100`)
-              .join('\n')}
+  .map(([area, score]) => `- ${area}: ${score}/100`)
+  .join('\n')}
 
 **Recommended Actions:**
 ${analysis.recommendedActions.map((action, idx) => `${idx + 1}. ${action}`).join('\n')}
@@ -1085,8 +1089,8 @@ ${compliance.dataProcessingAssessment}
 
 **Compliance Issues:**
 ${compliance.issues
-              .map(
-                (issue) => `
+  .map(
+    (issue) => `
 **${issue.severity}: ${issue.category}**
 - **Issue:** ${issue.description}
 - **GDPR Article:** ${issue.gdprArticle}
@@ -1094,13 +1098,13 @@ ${compliance.issues
 - **Required Action:** ${issue.requiredAction}
 - **Priority:** ${issue.priority}
 `,
-              )
-              .join('')}
+  )
+  .join('')}
 
 **Rights Implementation Status:**
 ${Object.entries(compliance.rightsImplementation)
-              .map(([right, status]) => `- ${right}: ${status}`)
-              .join('\n')}
+  .map(([right, status]) => `- ${right}: ${status}`)
+  .join('\n')}
 
 **Recommendations:**
 ${compliance.recommendations.map((rec, idx) => `${idx + 1}. ${rec}`).join('\n')}
@@ -1181,17 +1185,19 @@ ${note.content.substring(0, 200)}${note.content.length > 200 ? '...' : ''}
 
 **Legal Context:** ${translation.legalContext}
 
-${translation.definition
-              ? `**Definition:**
+${
+  translation.definition
+    ? `**Definition:**
 ${translation.definition}`
-              : ''
-            }
+    : ''
+}
 
-${translation.usageExamples
-              ? `**Usage Examples:**
+${
+  translation.usageExamples
+    ? `**Usage Examples:**
 ${translation.usageExamples.map((ex) => `• ${ex}`).join('\n')}`
-              : ''
-            }
+    : ''
+}
 
 **Alternative Translations:**
 ${translation.alternatives.map((alt) => `- ${alt.term} (${alt.context})`).join('\n')}
@@ -1219,30 +1225,31 @@ ${translation.notes}`,
 
 **Key Trends Identified:**
 ${trends.keyTrends
-              .map(
-                (trend) => `
+  .map(
+    (trend) => `
 **${trend.title}**
 - **Trend Direction:** ${trend.direction}
 - **Confidence Level:** ${trend.confidence}%
 - **Description:** ${trend.description}
 - **Impact:** ${trend.impact}
 `,
-              )
-              .join('')}
+  )
+  .join('')}
 
 **Statistical Summary:**
 ${Object.entries(trends.statistics)
-              .map(([key, value]) => `- ${key}: ${value}`)
-              .join('\n')}
+  .map(([key, value]) => `- ${key}: ${value}`)
+  .join('\n')}
 
 **Strategic Insights:**
 ${trends.strategicInsights.map((insight) => `• ${insight}`).join('\n')}
 
-${trends.recommendations
-              ? `**Recommendations:**
+${
+  trends.recommendations
+    ? `**Recommendations:**
 ${trends.recommendations.map((rec) => `• ${rec}`).join('\n')}`
-              : ''
-            }`,
+    : ''
+}`,
         },
       ],
     };
@@ -1266,17 +1273,19 @@ ${result.workflowId ? `**Workflow ID:** ${result.workflowId}` : ''}
 **Details:**
 ${result.details}
 
-${result.upcomingDeadlines
-              ? `**Upcoming Deadlines:**
+${
+  result.upcomingDeadlines
+    ? `**Upcoming Deadlines:**
 ${result.upcomingDeadlines.map((deadline) => `• ${deadline.task} - Due: ${deadline.dueDate} (${deadline.responsible})`).join('\n')}`
-              : ''
-            }
+    : ''
+}
 
-${result.nextActions
-              ? `**Next Actions:**
+${
+  result.nextActions
+    ? `**Next Actions:**
 ${result.nextActions.map((action) => `• ${action}`).join('\n')}`
-              : ''
-            }`,
+    : ''
+}`,
         },
       ],
     };

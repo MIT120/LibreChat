@@ -201,37 +201,45 @@ export class ImageService extends BaseService {
             const dallePrompt = this.buildDallePrompt(args.prompt, finalStyle, styleAnalysis.styleModifiers);
 
             // Generate image URL
-            const imageUrl = await this.requestDalleImageUrl(openaiApiKey, dallePrompt);
+            const imageUrl = await this.requestDalleImageUrl(openaiApiKey, dallePrompt, {
+                model,
+                size,
+                quality,
+                style: renderStyle,
+            });
 
             // Attempt to download and convert to base64 (optional, best-effort)
             let imageBase64: string | undefined;
             try {
                 imageBase64 = await this.downloadImageAsBase64(imageUrl);
             } catch (error) {
-                this.logger.warn('Base64 conversion failed, proceeding with URL only', error as Error, {
+                this.logger.warn('Base64 conversion failed, proceeding with URL only', {
                     imageUrl: imageUrl.substring(0, 50) + '...',
+                    error: (error as Error).message,
                 });
             }
 
             // Attach to page if provided
             let attachedToPageId: string | undefined;
             try {
-                attachedToPageId = await this.storeImageInPage(
-                    {
-                        bookId: args.bookId,
-                        chapterId: args.chapterId,
-                        pageId: args.pageId,
-                        pageNumber: args.pageNumber,
-                    },
-                    imageUrl,
-                    dallePrompt
-                );
+                const ref: { bookId: string; chapterId: string; pageId?: string; pageNumber?: string | number } = {
+                    bookId: args.bookId,
+                    chapterId: args.chapterId,
+                };
+                if (typeof args.pageId === 'string') {
+                    ref.pageId = args.pageId;
+                }
+                if (args.pageNumber !== undefined && args.pageNumber !== null) {
+                    ref.pageNumber = args.pageNumber as string | number;
+                }
+                attachedToPageId = await this.storeImageInPage(ref, imageUrl, dallePrompt);
             } catch (error) {
-                this.logger.warn('Failed to store image on page', error as Error, {
+                this.logger.warn('Failed to store image on page', {
                     bookId: args.bookId,
                     chapterId: args.chapterId,
                     pageId: args.pageId,
                     pageNumber: args.pageNumber,
+                    error: (error as Error).message,
                 });
             }
 
@@ -318,12 +326,12 @@ export class ImageService extends BaseService {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'dall-e-3',
+                model: opts.model,
                 prompt,
                 n: 1,
-                size: '1024x1024',
-                quality: 'standard',
-                style: 'vivid',
+                size: opts.size,
+                quality: opts.quality,
+                style: opts.style,
             }),
         });
 
@@ -386,9 +394,9 @@ export class ImageService extends BaseService {
 
             // Find the page to update
             let pageToUpdate: any;
-            if (ref.pageId) {
+            if (typeof ref.pageId === 'string') {
                 pageToUpdate = await Page.findOne({ pageId: ref.pageId });
-            } else if (ref.pageNumber && ref.chapterId) {
+            } else if (ref.pageNumber !== undefined && ref.pageNumber !== null && ref.chapterId) {
                 pageToUpdate = await Page.findOne({
                     chapterId: ref.chapterId,
                     pageNumber: parseInt(String(ref.pageNumber), 10),

@@ -1,4 +1,5 @@
 import type * as t from './types';
+import type { ExtendedToolContentPart, ResourceLink } from './types';
 const RECOGNIZED_PROVIDERS = new Set([
   'google',
   'anthropic',
@@ -46,7 +47,7 @@ function parseAsString(result: t.MCPToolCallResponse): string {
   }
 
   const text = content
-    .map((item) => {
+    .map((item: ExtendedToolContentPart) => {
       if (item.type === 'text') {
         return item.text;
       }
@@ -68,6 +69,15 @@ function parseAsString(result: t.MCPToolCallResponse): string {
           resourceText.push(`Type: ${item.resource.mimeType}`);
         }
         return resourceText.join('\n');
+      }
+      if (item.type === 'resource_link') {
+        const link = item as ResourceLink;
+        return [
+          link.name ? `Resource: ${link.name}` : undefined,
+          link.uri ? `Resource URI: ${link.uri}` : undefined,
+        ]
+          .filter(Boolean)
+          .join('\n');
       }
       return JSON.stringify(item, null, 2);
     })
@@ -117,6 +127,7 @@ export function formatToolContent(
     text: (item: Extract<t.ToolContentPart, { type: 'text' }>) => void;
     image: (item: t.ToolContentPart) => void;
     resource: (item: Extract<t.ToolContentPart, { type: 'resource' }>) => void;
+    resource_link?: (item: ResourceLink) => void;
   } = {
     text: (item) => {
       currentTextBlock += (currentTextBlock ? '\n\n' : '') + item.text;
@@ -141,12 +152,24 @@ export function formatToolContent(
     },
 
     resource: (item) => {
-      const resourceText = [];
-      if (item.resource.text != null && item.resource.text) {
-        resourceText.push(item.resource.text);
+      // If the resource is an image or a direct URL/data URI, render it as an image_url artifact
+      const mime = item.resource.mimeType ?? '';
+      const uri = item.resource.uri ?? '';
+      if (mime.startsWith('image/') || uri.startsWith('http') || uri.startsWith('data:image')) {
+        imageUrls.push({
+          type: 'image_url',
+          image_url: { url: uri },
+        } as t.FormattedContent);
+        return;
       }
-      if (item.resource.uri.length) {
-        resourceText.push(`Resource URI: ${item.resource.uri}`);
+
+      // Otherwise, include a textual summary
+      const resourceText = [] as string[];
+      if (item.resource.text != null && item.resource.text) {
+        resourceText.push(String(item.resource.text));
+      }
+      if (uri) {
+        resourceText.push(`Resource URI: ${uri}`);
       }
       if (item.resource.name) {
         resourceText.push(`Resource: ${item.resource.name}`);
@@ -154,17 +177,36 @@ export function formatToolContent(
       if (item.resource.description) {
         resourceText.push(`Description: ${item.resource.description}`);
       }
-      if (item.resource.mimeType != null && item.resource.mimeType) {
-        resourceText.push(`Type: ${item.resource.mimeType}`);
+      if (mime) {
+        resourceText.push(`Type: ${mime}`);
       }
       currentTextBlock += (currentTextBlock ? '\n\n' : '') + resourceText.join('\n');
     },
+    resource_link: (item: ResourceLink) => {
+      if (!item?.uri) {
+        return;
+      }
+      // Render resource links as image_url if they look like images
+      if (item.uri.startsWith('http') || item.uri.startsWith('data:image')) {
+        imageUrls.push({
+          type: 'image_url',
+          image_url: { url: item.uri },
+        } as t.FormattedContent);
+        return;
+      }
+      const lines: string[] = [];
+      if (item.name) {
+        lines.push(`Resource: ${item.name}`);
+      }
+      lines.push(`Resource URI: ${item.uri}`);
+      currentTextBlock += (currentTextBlock ? '\n\n' : '') + lines.join('\n');
+    },
   };
 
-  for (const item of content) {
+  for (const item of content as ExtendedToolContentPart[]) {
     const handler = contentHandlers[item.type as keyof typeof contentHandlers] as ContentHandler;
     if (handler) {
-      handler(item as never);
+      handler(item as unknown as t.ToolContentPart);
     } else {
       const stringified = JSON.stringify(item, null, 2);
       currentTextBlock += (currentTextBlock ? '\n\n' : '') + stringified;

@@ -39,6 +39,10 @@ export const SERVICE_TOKENS = {
     CONTENT_ORGANIZATION_SERVICE: Symbol('ContentOrganizationService'),
     INFLUENCER_RESEARCH_SERVICE: Symbol('InfluencerResearchService'),
     WEB_SCOUTING_SERVICE: Symbol('WebScoutingService'),
+    // Repository services
+    BOOK_REPOSITORY: Symbol('BookRepository'),
+    CHAPTER_REPOSITORY: Symbol('ChapterRepository'),
+    PAGE_REPOSITORY: Symbol('PageRepository'),
 } as const;
 
 /**
