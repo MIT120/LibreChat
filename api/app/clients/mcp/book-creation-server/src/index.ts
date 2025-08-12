@@ -19,6 +19,11 @@ import { ImageService } from './services/ImageService.js';
 import { ResearchService } from './services/ResearchService.js';
 import { WritingAnalyticsService } from './services/WritingAnalyticsService.js';
 
+// Import new writing assistant services
+import { WritingAssistantService } from './services/WritingAssistantService.js';
+import { PlotAnalysisService } from './services/PlotAnalysisService.js';
+import { ContentEnhancementService } from './services/ContentEnhancementService.js';
+
 // Import server
 import { MCPServer } from './server/MCPServer.js';
 
@@ -131,6 +136,25 @@ async function registerServices(logger: Logger): Promise<void> {
         container.registerSingleton(
             SERVICE_TOKENS.ANALYTICS_SERVICE as any,
             WritingAnalyticsService,
+            [SERVICE_TOKENS.LOGGER]
+        );
+
+        // Writing Assistant Features
+        container.registerSingleton(
+            'WritingAssistantService',
+            WritingAssistantService,
+            [SERVICE_TOKENS.LOGGER]
+        );
+
+        container.registerSingleton(
+            'PlotAnalysisService',
+            PlotAnalysisService,
+            [SERVICE_TOKENS.LOGGER]
+        );
+
+        container.registerSingleton(
+            'ContentEnhancementService',
+            ContentEnhancementService,
             [SERVICE_TOKENS.LOGGER]
         );
 

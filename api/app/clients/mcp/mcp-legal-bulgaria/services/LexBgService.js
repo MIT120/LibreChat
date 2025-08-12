@@ -5,6 +5,7 @@
 
 import * as cheerio from 'cheerio';
 import fetch from 'node-fetch';
+import axios from 'axios';
 import { LexBgTreeScraperService } from './LexBgTreeScraperService.js';
 import { RagIntegrationService } from './RagIntegrationService.js';
 
@@ -16,6 +17,11 @@ export class LexBgService {
     this.searchEndpoint = '/search';
     this.documentsEndpoint = '/documents';
     this.newsEndpoint = '/news';
+
+    // Initialize Firecrawl integration
+    this.firecrawlApiUrl = process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev';
+    this.firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
+    this.useFirecrawl = !!this.firecrawlApiKey;
 
     // Initialize RAG integration
     this.ragService = new RagIntegrationService();
@@ -181,7 +187,7 @@ export class LexBgService {
   }
 
   /**
-   * Perform live search (original implementation)
+   * Perform live search with Firecrawl integration (enhanced implementation)
    */
   async performLiveSearch(searchCriteria) {
     try {
@@ -192,28 +198,49 @@ export class LexBgService {
         dateTo = '',
         institution = '',
         limit = 20,
+        useFirecrawl = this.useFirecrawl,
       } = searchCriteria;
+
+      console.log(`🔍 Starting LexBG search with query: "${query}", Firecrawl: ${useFirecrawl}`);
 
       // Preprocess query for better results
       const processedQueries = this.preprocessSearchQuery(query);
 
-      // Try multiple search strategies for better results
-      const searchStrategies = [];
+      let searchStrategies = [];
 
-      // Try each processed query with different strategies
-      for (const processedQuery of processedQueries) {
-        searchStrategies.push(
-          // Strategy 1: Main search page
-          this.searchMainPage(processedQuery, documentType, institution, limit),
-          // Strategy 2: News/articles search
-          this.searchNewsAndArticles(processedQuery, limit),
-          // Strategy 3: Forum search for discussions
-          this.searchForum(processedQuery, limit),
-        );
+      if (useFirecrawl && this.firecrawlApiKey) {
+        // Use Firecrawl for enhanced scraping
+        console.log('🔥 Using Firecrawl for LexBG search...');
+
+        // Try each processed query with Firecrawl
+        for (const processedQuery of processedQueries) {
+          searchStrategies.push(
+            this.searchWithFirecrawl(processedQuery, {
+              documentType,
+              institution,
+              limit: Math.ceil(limit / processedQueries.length),
+            }),
+          );
+        }
+      } else {
+        // Fallback to traditional methods
+        console.log('📋 Using traditional scraping for LexBG search...');
+
+        // Try each processed query with different strategies
+        for (const processedQuery of processedQueries) {
+          searchStrategies.push(
+            // Strategy 1: Main search page
+            this.searchMainPage(processedQuery, documentType, institution, limit),
+            // Strategy 2: News/articles search
+            this.searchNewsAndArticles(processedQuery, limit),
+            // Strategy 3: Forum search for discussions
+            this.searchForum(processedQuery, limit),
+          );
+        }
+
+        // Add Google search for original query
+        searchStrategies.push(this.searchViaGoogle(query, limit));
       }
-
-      // Add Google search for original query
-      searchStrategies.push(this.searchViaGoogle(query, limit));
 
       // Execute searches in parallel
       const results = await Promise.allSettled(searchStrategies);
@@ -234,12 +261,15 @@ export class LexBgService {
         finalResults = enhancedResults;
       }
 
+      console.log(`✅ LexBG search completed: ${finalResults.length} results found`);
+
       return {
         success: true,
         results: finalResults,
         total: finalResults.length,
         originalTotal: combinedResults.length,
         source: 'lex.bg',
+        scrapingMethod: useFirecrawl ? 'Firecrawl' : 'Traditional',
         deepAnalysisPerformed: searchCriteria.deepAnalysis !== false && searchCriteria.legalArticle,
         contentAnalyzed: finalResults.filter((r) => r.legalAnalysis).length,
         searchStrategies: results.map((r, i) => ({
@@ -257,6 +287,478 @@ export class LexBgService {
         results: [],
       };
     }
+  }
+
+  /**
+   * Search lex.bg using Firecrawl with vector database integration
+   */
+  async searchWithFirecrawl(query, options = {}) {
+    try {
+      const { documentType = '', institution = '', limit = 10, storeResults = true } = options;
+
+      console.log(`🔥 Firecrawl search for: "${query}" with vector DB integration`);
+
+      // First check vector database for existing content
+      let vectorResults = [];
+      if (process.env.RAG_API_URL) {
+        try {
+          console.log('📚 Checking vector database for existing LexBG content...');
+          const ragQuery = `lex.bg ${query} ${documentType} ${institution}`.trim();
+          const ragResponse = await this.ragService.queryLegalDocuments(ragQuery, limit, 0.7);
+
+          if (ragResponse.success && ragResponse.results.length > 0) {
+            console.log(`✅ Found ${ragResponse.results.length} results in vector database`);
+            vectorResults = ragResponse.results.map((result) => ({
+              title: result.metadata?.title || 'LexBG Document',
+              summary: result.content?.substring(0, 300) || '',
+              url: result.metadata?.url || result.metadata?.source_url || '',
+              date: result.metadata?.date || '',
+              type: result.metadata?.document_type || 'Legal Document',
+              source: 'lex.bg',
+              extractedBy: 'vector_db',
+              vectorScore: result.similarity_score || 0,
+              metadata: result.metadata,
+            }));
+          }
+        } catch (ragError) {
+          console.warn('⚠️ Vector DB query failed:', ragError.message);
+        }
+      }
+
+      // If we have good results from vector DB, return them
+      if (vectorResults.length >= Math.min(limit, 5)) {
+        console.log(`📚 Using ${vectorResults.length} results from vector database`);
+        return {
+          success: true,
+          results: vectorResults.slice(0, limit),
+          total: vectorResults.length,
+          source: 'lex.bg',
+          method: 'vector_db',
+          vectorDbUsed: true,
+        };
+      }
+
+      // Otherwise, proceed with Firecrawl scraping
+      console.log('🔥 Proceeding with Firecrawl scraping...');
+
+      // Build search URLs for lex.bg
+      const searchUrls = [
+        `${this.baseUrl}/bg/search/?q=${encodeURIComponent(query)}`,
+        `${this.baseUrl}/search/?q=${encodeURIComponent(query)}`,
+        `${this.baseUrl}/?s=${encodeURIComponent(query)}`,
+      ];
+
+      // Check local cache first
+      const cacheKey = `firecrawl_${query}_${documentType}_${institution}`;
+      if (this.cache.has(cacheKey)) {
+        const cached = this.cache.get(cacheKey);
+        const ageHours = (Date.now() - cached.timestamp) / (1000 * 60 * 60);
+        if (ageHours < 12) {
+          // Reduced cache time since we have vector DB
+          console.log('📋 Using cached Firecrawl result');
+          return cached.data;
+        }
+      }
+
+      let bestResult = { success: false, results: [] };
+
+      // Try each search URL
+      for (const searchUrl of searchUrls) {
+        try {
+          const crawlResponse = await axios.post(
+            `${this.firecrawlApiUrl}/v1/crawl`,
+            {
+              url: searchUrl,
+              limit: 3,
+              scrapeOptions: {
+                formats: ['markdown', 'html'],
+                onlyMainContent: true,
+                includeTags: [
+                  'article',
+                  'main',
+                  'content',
+                  'div[class*="search"]',
+                  'div[class*="result"]',
+                  'div[class*="document"]',
+                  'h1',
+                  'h2',
+                  'h3',
+                  'h4',
+                  'p',
+                  'a',
+                  'span[class*="date"]',
+                ],
+                excludeTags: [
+                  'nav',
+                  'footer',
+                  'header',
+                  'aside',
+                  'advertisement',
+                  'script',
+                  'style',
+                  'meta',
+                  'link',
+                  'form',
+                  'input',
+                ],
+                waitFor: 2000,
+                blockAds: true,
+                removeBase64Images: true,
+              },
+              crawlerOptions: {
+                followLinks: true,
+                maxDepth: 1,
+                allowSubdomains: false,
+                respectRobotsTxt: true,
+                includes: [
+                  '**/search/**',
+                  '**/document/**',
+                  '**/news/**',
+                  '**/article/**',
+                  '**/decision/**',
+                ],
+              },
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${this.firecrawlApiKey}`,
+                'Content-Type': 'application/json',
+              },
+              timeout: 45000,
+            },
+          );
+
+          if (crawlResponse.data.success && crawlResponse.data.data) {
+            const extractedResults = this.processFirecrawlResults(crawlResponse.data.data, query, {
+              documentType,
+              institution,
+              limit,
+            });
+
+            if (extractedResults.results.length > 0) {
+              bestResult = extractedResults;
+              break;
+            }
+          }
+        } catch (urlError) {
+          console.warn(`Firecrawl failed for URL ${searchUrl}:`, urlError.message);
+          continue;
+        }
+      }
+
+      // Store new results in vector database
+      if (
+        bestResult.success &&
+        bestResult.results.length > 0 &&
+        storeResults &&
+        process.env.RAG_API_URL
+      ) {
+        try {
+          console.log(
+            `💾 Storing ${bestResult.results.length} new LexBG results in vector database...`,
+          );
+          await this.storeResultsInVectorDB(bestResult.results, query, {
+            documentType,
+            institution,
+          });
+        } catch (storeError) {
+          console.warn('⚠️ Failed to store results in vector DB:', storeError.message);
+        }
+      }
+
+      // Combine vector results with new results if any
+      const combinedResults = [...vectorResults, ...bestResult.results];
+      const uniqueResults = this.removeDuplicateResults(combinedResults);
+
+      // Cache the result
+      if (bestResult.success) {
+        this.cache.set(cacheKey, {
+          data: bestResult,
+          timestamp: Date.now(),
+        });
+      }
+
+      const finalResult = {
+        success: uniqueResults.length > 0,
+        results: uniqueResults.slice(0, limit),
+        total: uniqueResults.length,
+        source: 'lex.bg',
+        method: vectorResults.length > 0 ? 'hybrid_vector_firecrawl' : 'firecrawl',
+        vectorDbUsed: vectorResults.length > 0,
+        newResultsStored: bestResult.results.length,
+      };
+
+      return finalResult;
+    } catch (error) {
+      console.error('🔥 Firecrawl search failed:', error);
+
+      // Fallback to traditional search
+      console.log('🔄 Falling back to traditional search...');
+      return await this.searchMainPage(
+        query,
+        options.documentType,
+        options.institution,
+        options.limit,
+      );
+    }
+  }
+
+  /**
+   * Process Firecrawl crawl results and extract legal documents
+   */
+  processFirecrawlResults(crawlData, query, options = {}) {
+    const { documentType = '', institution = '', limit = 10 } = options;
+    const results = [];
+    const processedUrls = new Set();
+
+    console.log(`🔍 Processing ${crawlData.length} Firecrawl pages...`);
+
+    for (const page of crawlData) {
+      if (!page.markdown && !page.html) continue;
+      if (processedUrls.has(page.url)) continue;
+
+      processedUrls.add(page.url);
+
+      try {
+        // Use markdown content if available, otherwise HTML
+        const content = page.markdown || page.html;
+        const extractedItems = this.extractLegalItemsFromContent(content, page.url, query);
+
+        // Filter by document type and institution if specified
+        const filteredItems = extractedItems.filter((item) => {
+          if (documentType && !item.type.toLowerCase().includes(documentType.toLowerCase())) {
+            return false;
+          }
+          if (institution && !item.summary.toLowerCase().includes(institution.toLowerCase())) {
+            return false;
+          }
+          return true;
+        });
+
+        results.push(...filteredItems);
+
+        if (results.length >= limit) break;
+      } catch (error) {
+        console.warn(`Failed to process page ${page.url}:`, error.message);
+      }
+    }
+
+    // Remove duplicates and sort by relevance
+    const uniqueResults = this.removeDuplicateResults(results);
+    const sortedResults = this.sortResultsByRelevance(uniqueResults, query);
+
+    console.log(`✅ Firecrawl extracted ${sortedResults.length} unique results`);
+
+    return {
+      success: true,
+      results: sortedResults.slice(0, limit),
+      total: sortedResults.length,
+      source: 'lex.bg',
+      method: 'firecrawl',
+      processedPages: crawlData.length,
+    };
+  }
+
+  /**
+   * Extract legal items from Firecrawl content
+   */
+  extractLegalItemsFromContent(content, url, query) {
+    const items = [];
+
+    // Split content into potential result blocks
+    const sections = this.splitContentIntoSections(content);
+
+    for (const section of sections) {
+      const item = this.parseContentSection(section, url, query);
+      if (item && this.isValidLegalResult(item, query)) {
+        items.push(item);
+      }
+    }
+
+    return items;
+  }
+
+  /**
+   * Split content into logical sections that might represent search results
+   */
+  splitContentIntoSections(content) {
+    // Split by common result separators
+    const separators = [
+      /\n#{1,3}\s+[А-Я]/g, // Headlines
+      /\n\d+\.\s+[А-Я]/g, // Numbered lists
+      /\n[-•]\s+[А-Я]/g, // Bullet points
+      /\n\[.*?\]/g, // Markdown links
+      /\n\n[А-Я]/g, // Double newline + capital letter
+    ];
+
+    let sections = [content];
+
+    for (const separator of separators) {
+      const newSections = [];
+      for (const section of sections) {
+        newSections.push(...section.split(separator));
+      }
+      sections = newSections;
+    }
+
+    // Filter out too short sections
+    return sections.filter((section) => section.trim().length > 50);
+  }
+
+  /**
+   * Parse a content section into a legal result item
+   */
+  parseContentSection(section, url, query) {
+    try {
+      const lines = section
+        .trim()
+        .split('\n')
+        .filter((line) => line.trim());
+      if (lines.length < 2) return null;
+
+      // Extract title (usually first line or first link)
+      let title = '';
+      let summary = '';
+      let resultUrl = url;
+      let date = '';
+      let type = 'Правен документ';
+
+      // Find title
+      const titleMatch =
+        section.match(/(?:^|\n)#+\s*(.+)/) ||
+        section.match(/\[([^\]]+)\]\([^)]+\)/) ||
+        section.match(/(?:^|\n)([А-Я][^.\n]{10,100})/);
+
+      if (titleMatch) {
+        title = titleMatch[1].trim();
+      }
+
+      // Find URL if it's a link
+      const urlMatch = section.match(/\]\(([^)]+)\)/);
+      if (urlMatch && urlMatch[1].startsWith('http')) {
+        resultUrl = urlMatch[1];
+      }
+
+      // Extract summary (remaining content)
+      summary = section
+        .replace(/#+\s*[^\n]*\n?/g, '') // Remove headlines
+        .replace(/\[[^\]]*\]\([^)]*\)/g, '') // Remove markdown links
+        .trim()
+        .substring(0, 300);
+
+      // Extract date
+      const dateMatch = section.match(/(\d{1,2}[\.\-\/]\d{1,2}[\.\-\/]\d{4})/);
+      if (dateMatch) {
+        date = dateMatch[1];
+      }
+
+      // Determine type
+      if (
+        section.toLowerCase().includes('решение') ||
+        section.toLowerCase().includes('постановление')
+      ) {
+        type = 'Съдебно решение';
+      } else if (
+        section.toLowerCase().includes('закон') ||
+        section.toLowerCase().includes('наредба')
+      ) {
+        type = 'Нормативен акт';
+      } else if (section.toLowerCase().includes('новина')) {
+        type = 'Новина';
+      }
+
+      return {
+        title: title || 'Без заглавие',
+        summary: this.cleanText(summary),
+        url: resultUrl,
+        date: date,
+        type: type,
+        source: 'lex.bg',
+        extractedBy: 'firecrawl',
+      };
+    } catch (error) {
+      console.warn('Error parsing content section:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Check if a result is valid and relevant
+   */
+  isValidLegalResult(item, query) {
+    if (!item.title || item.title.length < 5) return false;
+    if (!item.summary || item.summary.length < 20) return false;
+
+    // Check relevance to query
+    const queryTerms = query.toLowerCase().split(/\s+/);
+    const itemText = `${item.title} ${item.summary}`.toLowerCase();
+
+    const matchedTerms = queryTerms.filter((term) => term.length > 2 && itemText.includes(term));
+
+    // At least 50% of meaningful query terms should match
+    return matchedTerms.length >= Math.max(1, Math.floor(queryTerms.length * 0.5));
+  }
+
+  /**
+   * Remove duplicate results based on title and URL similarity
+   */
+  removeDuplicateResults(results) {
+    const seen = new Map();
+    const unique = [];
+
+    for (const result of results) {
+      const key = `${result.title.toLowerCase().trim()}_${result.url}`;
+      if (!seen.has(key)) {
+        seen.set(key, true);
+        unique.push(result);
+      }
+    }
+
+    return unique;
+  }
+
+  /**
+   * Sort results by relevance to the search query
+   */
+  sortResultsByRelevance(results, query) {
+    const queryTerms = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((term) => term.length > 2);
+
+    return results
+      .map((result) => {
+        const resultText = `${result.title} ${result.summary}`.toLowerCase();
+        let score = 0;
+
+        // Count term matches
+        for (const term of queryTerms) {
+          if (resultText.includes(term)) {
+            score += term.length; // Longer terms are more valuable
+          }
+        }
+
+        // Bonus for exact phrase matches
+        if (resultText.includes(query.toLowerCase())) {
+          score += 20;
+        }
+
+        // Bonus for court decisions
+        if (result.type === 'Съдебно решение') {
+          score += 10;
+        }
+
+        // Bonus for recent dates
+        if (result.date) {
+          const year = parseInt(result.date.match(/\d{4}/)?.[0]);
+          if (year && year >= new Date().getFullYear() - 2) {
+            score += 5;
+          }
+        }
+
+        return { ...result, relevanceScore: score };
+      })
+      .sort((a, b) => b.relevanceScore - a.relevanceScore);
   }
 
   /**
@@ -338,42 +840,31 @@ export class LexBgService {
   }
 
   /**
-   * Search main lex.bg pages
+   * Fallback search for main lex.bg pages (simplified)
    */
-  async searchMainPage(query, documentType, institution, limit) {
+  async searchMainPage(query, _documentType, _institution, limit) {
     try {
-      // Multiple URL patterns to try
-      const searchUrls = [
-        `${this.baseUrl}/bg/search/?q=${encodeURIComponent(query)}`,
-        `${this.baseUrl}/search/?q=${encodeURIComponent(query)}`,
-        `${this.baseUrl}/?s=${encodeURIComponent(query)}`,
-        `${this.baseUrl}/bg/?s=${encodeURIComponent(query)}`,
-      ];
+      console.log('📋 Using simplified fallback search...');
 
-      for (const searchUrl of searchUrls) {
-        try {
-          const response = await fetch(searchUrl, {
-            method: 'GET',
-            headers: this.headers,
-            timeout: 8000,
-          });
+      const searchUrl = `${this.baseUrl}/bg/search/?q=${encodeURIComponent(query)}`;
+      const response = await fetch(searchUrl, {
+        method: 'GET',
+        headers: this.headers,
+        timeout: 8000,
+      });
 
-          if (response.ok) {
-            const html = await response.text();
-            const results = this.parseSearchResults(html);
-            if (results.results.length > 0) {
-              return { success: true, results: results.results };
-            }
-          }
-        } catch (urlError) {
-          console.warn(`Failed to search URL ${searchUrl}:`, urlError.message);
-          continue;
-        }
+      if (response.ok) {
+        const html = await response.text();
+        const results = this.parseSearchResults(html);
+        return {
+          success: results.results.length > 0,
+          results: results.results.slice(0, limit || 20),
+        };
       }
 
       return { success: false, results: [] };
     } catch (error) {
-      console.warn('Main page search failed:', error.message);
+      console.warn('Fallback search failed:', error.message);
       return { success: false, results: [] };
     }
   }
@@ -1547,5 +2038,84 @@ export class LexBgService {
         multiStrategy: true,
       },
     };
+  }
+
+  /**
+   * Store LexBG results in vector database for future retrieval
+   */
+  async storeResultsInVectorDB(results, query, options = {}) {
+    try {
+      const { documentType = '', institution = '' } = options;
+      
+      console.log(`💾 Storing ${results.length} LexBG documents in vector database...`);
+
+      for (const result of results) {
+        try {
+          const documentData = {
+            title: `LexBG: ${result.title}`,
+            content: this.formatLexBGResultForVectorDB(result, query),
+            metadata: {
+              title: result.title,
+              url: result.url,
+              source_url: result.url,
+              date: result.date,
+              document_type: result.type,
+              institution: institution,
+              search_query: query,
+              document_category: documentType,
+              source: 'lex.bg',
+              extraction_method: result.extractedBy || 'firecrawl',
+              relevance_score: result.relevanceScore || 0,
+              timestamp: new Date().toISOString(),
+            },
+            source: 'lexbg_firecrawl',
+          };
+
+          await this.ragService.storeLegalDocument(documentData);
+          console.log(`✅ Stored: ${result.title.substring(0, 50)}...`);
+        } catch (docError) {
+          console.warn(`⚠️ Failed to store document "${result.title}":`, docError.message);
+        }
+      }
+
+      console.log(`✅ Successfully stored ${results.length} LexBG documents in vector database`);
+    } catch (error) {
+      console.error('❌ Failed to store LexBG results in vector DB:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Format LexBG result for optimal vector database storage
+   */
+  formatLexBGResultForVectorDB(result, query) {
+    const sections = [];
+
+    // Add structured information
+    sections.push(`ИЗТОЧНИК: LexBG (${result.url})`);
+    sections.push(`ЗАГЛАВИЕ: ${result.title}`);
+    sections.push(`ТИП ДОКУМЕНТ: ${result.type}`);
+    
+    if (result.date) {
+      sections.push(`ДАТА: ${result.date}`);
+    }
+
+    sections.push(`ТЪРСЕН ТЕРМИН: ${query}`);
+    sections.push('');
+    sections.push('СЪДЪРЖАНИЕ:');
+    sections.push(result.summary || '');
+
+    // Add metadata if available
+    if (result.metadata) {
+      sections.push('');
+      sections.push('ДОПЪЛНИТЕЛНА ИНФОРМАЦИЯ:');
+      Object.entries(result.metadata).forEach(([key, value]) => {
+        if (value && typeof value === 'string') {
+          sections.push(`${key.toUpperCase()}: ${value}`);
+        }
+      });
+    }
+
+    return sections.join('\n');
   }
 }

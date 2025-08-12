@@ -20,6 +20,7 @@ import { CitationService } from './services/CitationService.js';
 import { DocumentAnalysisService } from './services/DocumentAnalysisService.js';
 import { LawyerToolsService } from './services/LawyerToolsService.js';
 import { LexBgService } from './services/LexBgService.js';
+import { LegalDocumentPDFService } from './services/LegalDocumentPDFService.js';
 
 class BulgarianLegalServer {
   constructor() {
@@ -41,6 +42,7 @@ class BulgarianLegalServer {
     this.lexBgService = new LexBgService();
     this.apisService = new ApisService();
     this.lawyerToolsService = new LawyerToolsService();
+    this.pdfService = new LegalDocumentPDFService();
 
     this.setupToolHandlers();
     this.setupErrorHandling();
@@ -53,7 +55,7 @@ class BulgarianLegalServer {
           {
             name: 'search_case_law',
             description:
-              'Search Bulgarian case law based on legal articles, parties, court, date range, and other criteria. Example: Find last 20 rulings on article 15 of ZZD where seller was held liable.',
+              'Enhanced search for Bulgarian case law using Firecrawl for live scraping and RAG database for stored cases. Searches legal articles, parties, court, date range, and other criteria. Example: Find last 20 rulings on article 15 of ZZD where seller was held liable.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -92,7 +94,8 @@ class BulgarianLegalServer {
                 },
                 outcome: {
                   type: 'string',
-                  description: 'Case outcome (liable, not_liable, guilty, not_guilty)',
+                  description:
+                    'Case outcome (upheld, rejected, partially_upheld, guilty, not_guilty)',
                   default: '',
                 },
                 keywords: {
@@ -107,6 +110,28 @@ class BulgarianLegalServer {
                   default: 20,
                   minimum: 1,
                   maximum: 100,
+                },
+                useFirecrawl: {
+                  type: 'boolean',
+                  description: 'Use Firecrawl for live scraping of court websites',
+                  default: true,
+                },
+                useRag: {
+                  type: 'boolean',
+                  description: 'Search RAG database for previously stored cases',
+                  default: true,
+                },
+                saveToRag: {
+                  type: 'boolean',
+                  description: 'Save new scraped cases to RAG database for future use',
+                  default: true,
+                },
+                sources: {
+                  type: 'array',
+                  items: { type: 'string', enum: ['vks', 'vas', 'lexbg'] },
+                  description:
+                    'Court sources to search (vks=Supreme Court, vas=Administrative Court, lexbg=Lex.bg)',
+                  default: ['vks', 'vas', 'lexbg'],
                 },
               },
               required: [],
@@ -197,6 +222,266 @@ class BulgarianLegalServer {
                 },
               },
               required: ['searchCriteria'],
+            },
+          },
+          {
+            name: 'live_scrape_case_law',
+            description:
+              'Perform live scraping of Bulgarian court websites using Firecrawl to find the most recent case law. Automatically saves results to RAG database.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query in Bulgarian or English',
+                  minLength: 3,
+                },
+                sources: {
+                  type: 'array',
+                  items: { type: 'string', enum: ['vks', 'vas', 'lexbg'] },
+                  description: 'Court sources to scrape',
+                  default: ['vks', 'vas'],
+                },
+                maxResults: {
+                  type: 'integer',
+                  description: 'Maximum number of cases to scrape',
+                  default: 10,
+                  minimum: 1,
+                  maximum: 50,
+                },
+                relevanceThreshold: {
+                  type: 'number',
+                  description: 'Minimum relevance score (0-100)',
+                  default: 70,
+                  minimum: 0,
+                  maximum: 100,
+                },
+                saveToRag: {
+                  type: 'boolean',
+                  description: 'Save scraped cases to RAG database',
+                  default: true,
+                },
+              },
+              required: ['query'],
+            },
+          },
+          {
+            name: 'analyze_case_law_trends',
+            description:
+              'Analyze trends in case law over time, identify patterns in court decisions, and provide insights for legal strategy.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                searchCriteria: {
+                  type: 'object',
+                  description: 'Criteria to find cases for trend analysis',
+                  properties: {
+                    articles: { type: 'array', items: { type: 'string' } },
+                    laws: { type: 'array', items: { type: 'string' } },
+                    court: { type: 'string' },
+                    dateFrom: { type: 'string' },
+                    dateTo: { type: 'string' },
+                    keywords: { type: 'array', items: { type: 'string' } },
+                  },
+                },
+                analysisType: {
+                  type: 'string',
+                  enum: [
+                    'temporal',
+                    'outcome_patterns',
+                    'precedent_evolution',
+                    'court_consistency',
+                  ],
+                  description: 'Type of trend analysis to perform',
+                  default: 'temporal',
+                },
+                timeGranularity: {
+                  type: 'string',
+                  enum: ['monthly', 'quarterly', 'yearly'],
+                  description: 'Time granularity for temporal analysis',
+                  default: 'yearly',
+                },
+              },
+              required: ['searchCriteria'],
+            },
+          },
+          {
+            name: 'export_case_law_to_pdf',
+            description:
+              'Export case law search results to a professional PDF document with customizable options for legal documentation.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                caseLawData: {
+                  type: 'object',
+                  description: 'Case law search results to export',
+                  required: true,
+                },
+                title: {
+                  type: 'string',
+                  description: 'Title for the PDF document',
+                  default: 'Анализ на съдебна практика',
+                },
+                subtitle: {
+                  type: 'string',
+                  description: 'Subtitle for the PDF document',
+                  default: '',
+                },
+                template: {
+                  type: 'string',
+                  enum: ['professional', 'brief', 'detailed'],
+                  description: 'PDF template style',
+                  default: 'professional',
+                },
+                includeFullText: {
+                  type: 'boolean',
+                  description: 'Include full text of cases in the PDF',
+                  default: false,
+                },
+                includeSummary: {
+                  type: 'boolean',
+                  description: 'Include case summaries',
+                  default: true,
+                },
+                includeAnalysis: {
+                  type: 'boolean',
+                  description: 'Include analysis section',
+                  default: true,
+                },
+                watermark: {
+                  type: 'string',
+                  description: 'Watermark text for the document',
+                  default: '',
+                },
+              },
+              required: ['caseLawData'],
+            },
+          },
+          {
+            name: 'export_legal_analysis_to_pdf',
+            description:
+              'Export legal document analysis to a professional PDF report with risk assessment and recommendations.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                analysisData: {
+                  type: 'object',
+                  description: 'Legal analysis data to export',
+                  required: true,
+                },
+                title: {
+                  type: 'string',
+                  description: 'Title for the PDF document',
+                  default: 'Правен анализ на документ',
+                },
+                documentType: {
+                  type: 'string',
+                  description: 'Type of the analyzed document',
+                  default: 'Договор',
+                },
+                clientName: {
+                  type: 'string',
+                  description: 'Client name for the report',
+                  default: '',
+                },
+                lawyerName: {
+                  type: 'string',
+                  description: 'Lawyer name for the report',
+                  default: '',
+                },
+                includeRecommendations: {
+                  type: 'boolean',
+                  description: 'Include recommendations section',
+                  default: true,
+                },
+                includeRiskAssessment: {
+                  type: 'boolean',
+                  description: 'Include risk assessment section',
+                  default: true,
+                },
+              },
+              required: ['analysisData'],
+            },
+          },
+          {
+            name: 'export_contract_to_pdf',
+            description:
+              'Export contract content to a professional PDF document with signature lines and legal formatting.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                contractData: {
+                  type: 'object',
+                  description: 'Contract data to export',
+                  properties: {
+                    content: { type: 'string', description: 'Main contract content' },
+                    clauses: { type: 'array', items: { type: 'string' }, description: 'Contract clauses' },
+                  },
+                  required: ['content'],
+                },
+                title: {
+                  type: 'string',
+                  description: 'Contract title',
+                  default: 'Договор',
+                },
+                contractType: {
+                  type: 'string',
+                  description: 'Type of contract',
+                  default: 'Общ договор',
+                },
+                parties: {
+                  type: 'object',
+                  description: 'Contract parties',
+                  properties: {
+                    first: { type: 'string', description: 'First party name' },
+                    second: { type: 'string', description: 'Second party name' },
+                  },
+                  default: { first: '', second: '' },
+                },
+                terms: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Additional contract terms',
+                  default: [],
+                },
+                signatures: {
+                  type: 'boolean',
+                  description: 'Include signature lines',
+                  default: true,
+                },
+                notarization: {
+                  type: 'boolean',
+                  description: 'Include notarization note',
+                  default: false,
+                },
+              },
+              required: ['contractData'],
+            },
+          },
+          {
+            name: 'list_exported_pdfs',
+            description:
+              'List all exported PDF documents with details like file size, creation date, and download links.',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+              required: [],
+            },
+          },
+          {
+            name: 'delete_exported_pdf',
+            description:
+              'Delete a specific exported PDF document from the server.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                filename: {
+                  type: 'string',
+                  description: 'Name of the PDF file to delete',
+                  minLength: 1,
+                },
+              },
+              required: ['filename'],
             },
           },
           {
@@ -805,6 +1090,27 @@ class BulgarianLegalServer {
           case 'generate_case_summary':
             return await this.handleGenerateCaseSummary(args);
 
+          case 'live_scrape_case_law':
+            return await this.handleLiveScrapeCaseLaw(args);
+
+          case 'analyze_case_law_trends':
+            return await this.handleAnalyzeCaseLawTrends(args);
+
+          case 'export_case_law_to_pdf':
+            return await this.handleExportCaseLawToPDF(args);
+
+          case 'export_legal_analysis_to_pdf':
+            return await this.handleExportLegalAnalysisToPDF(args);
+
+          case 'export_contract_to_pdf':
+            return await this.handleExportContractToPDF(args);
+
+          case 'list_exported_pdfs':
+            return await this.handleListExportedPDFs(args);
+
+          case 'delete_exported_pdf':
+            return await this.handleDeleteExportedPDF(args);
+
           case 'find_similar_cases':
             return await this.handleFindSimilarCases(args);
 
@@ -868,25 +1174,114 @@ class BulgarianLegalServer {
   async handleSearchCaseLaw(args) {
     const result = await this.caseLawService.searchCaseLaw(args);
 
+    // Enhanced response with search method information
+    const searchInfo = [];
+    if (result.searchMethods && result.searchMethods.length > 0) {
+      searchInfo.push(`🔍 Методи на търсене: ${result.searchMethods.join(', ')}`);
+      if (result.ragResultsCount > 0) {
+        searchInfo.push(`📚 RAG база данни: ${result.ragResultsCount} резултата`);
+      }
+      if (result.liveScrapingCount > 0) {
+        searchInfo.push(`🔥 Live scraping: ${result.liveScrapingCount} резултата`);
+      }
+    }
+
+    const searchHeader = searchInfo.length > 0 ? searchInfo.join('\n') + '\n\n' : '';
+
     return {
       content: [
         {
           type: 'text',
           text:
-            `Намерени са ${result.total} съдебни решения:\n\n` +
+            searchHeader +
+            `📋 Намерени са ${result.total} съдебни решения:\n\n` +
             result.results
-              .map(
-                (caseLaw, index) =>
-                  `${index + 1}. ${caseLaw.generateCitation()}\n` +
-                  `   Основание: ${caseLaw.legalBasis.articles.map((a) => a.article).join(', ')}\n` +
-                  `   Резултат: ${caseLaw.outcome}\n` +
-                  `   Резюме: ${caseLaw.summary}\n` +
-                  `   Мотиви: ${caseLaw.reasoning}\n\n`,
-              )
-              .join(''),
+              .map((caseLaw, index) => {
+                const sourceIcon =
+                  caseLaw.source === 'rag_database'
+                    ? '📚'
+                    : caseLaw.source === 'vks'
+                      ? '⚖️'
+                      : caseLaw.source === 'vas'
+                        ? '🏛️'
+                        : caseLaw.source === 'lexbg'
+                          ? '📖'
+                          : '📋';
+
+                const ragScore = caseLaw.ragScore
+                  ? ` (релевантност: ${Math.round(caseLaw.ragScore * 100)}%)`
+                  : '';
+                const precedentIcon =
+                  caseLaw.precedentValue === 'high'
+                    ? '⭐⭐⭐'
+                    : caseLaw.precedentValue === 'medium'
+                      ? '⭐⭐'
+                      : '⭐';
+
+                return (
+                  `${sourceIcon} ${index + 1}. ${caseLaw.generateCitation()}${ragScore}\n` +
+                  `   📜 Основание: ${caseLaw.legalBasis.articles.map((a) => `${a.article} от ${a.law}`).join(', ')}\n` +
+                  `   ⚖️ Резултат: ${this.translateOutcome(caseLaw.outcome)}\n` +
+                  `   ${precedentIcon} Прецедентна стойност: ${this.translatePrecedentValue(caseLaw.precedentValue)}\n` +
+                  `   📝 Резюме: ${caseLaw.summary.substring(0, 200)}${caseLaw.summary.length > 200 ? '...' : ''}\n` +
+                  `   🧠 Мотиви: ${caseLaw.reasoning.substring(0, 200)}${caseLaw.reasoning.length > 200 ? '...' : ''}\n`
+                );
+              })
+              .join('\n') +
+            (result.criteria && Object.keys(result.criteria).length > 0
+              ? `\n\n🔍 Критерии за търсене:\n${this.formatSearchCriteria(result.criteria)}`
+              : '') +
+            (result.timestamp
+              ? `\n\n⏰ Търсене извършено на: ${new Date(result.timestamp).toLocaleString('bg-BG')}`
+              : ''),
         },
       ],
     };
+  }
+
+  translateOutcome(outcome) {
+    const translations = {
+      upheld: 'Уважено',
+      rejected: 'Отхвърлено',
+      partially_upheld: 'Частично уважено',
+      guilty: 'Виновен',
+      not_guilty: 'Невиновен',
+      liable: 'Отговорен',
+      not_liable: 'Неотговорен',
+    };
+    return translations[outcome] || outcome;
+  }
+
+  translatePrecedentValue(value) {
+    const translations = {
+      high: 'Висока',
+      medium: 'Средна',
+      low: 'Ниска',
+    };
+    return translations[value] || value;
+  }
+
+  formatSearchCriteria(criteria) {
+    const parts = [];
+    if (criteria.articles && criteria.articles.length > 0) {
+      parts.push(`📜 Членове: ${criteria.articles.join(', ')}`);
+    }
+    if (criteria.laws && criteria.laws.length > 0) {
+      parts.push(`⚖️ Закони: ${criteria.laws.join(', ')}`);
+    }
+    if (criteria.court) {
+      parts.push(`🏛️ Съд: ${criteria.court}`);
+    }
+    if (criteria.parties && criteria.parties.length > 0) {
+      parts.push(`👥 Страни: ${criteria.parties.join(', ')}`);
+    }
+    if (criteria.outcome) {
+      parts.push(`📊 Резултат: ${this.translateOutcome(criteria.outcome)}`);
+    }
+    if (criteria.keywords && criteria.keywords.length > 0) {
+      parts.push(`🔎 Ключови думи: ${criteria.keywords.join(', ')}`);
+    }
+    return parts.join('\n');
   }
 
   async handleAnalyzeLegalDocument(args) {
@@ -1092,29 +1487,74 @@ class BulgarianLegalServer {
   // New real-data integration handlers
 
   async handleSearchLexBg(args) {
-    const result = await this.lexBgService.searchLegalDocuments(args);
+    try {
+      // Use the new Firecrawl-enabled search method
+      const result = await this.lexBgService.searchWithFirecrawl(args.query, {
+        documentType: args.documentType || '',
+        institution: args.institution || '',
+        limit: args.limit || 10,
+      });
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: result.success
-            ? `Търсене в lex.bg намери ${result.results.length} резултата:\n\n` +
-              result.results
-                .map(
-                  (doc, index) =>
-                    `${index + 1}. ${doc.title}\n` +
-                    `   Източник: ${doc.source}\n` +
-                    `   Дата: ${doc.date}\n` +
-                    `   Тип: ${doc.type}\n` +
-                    `   URL: ${doc.url}\n` +
-                    `   Резюме: ${doc.summary}\n\n`,
-                )
-                .join('')
-            : `Грешка при търсене в lex.bg: ${result.error}`,
-        },
-      ],
-    };
+      if (!result.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Грешка при търсене в lex.bg с Firecrawl: ${result.error}`,
+            },
+          ],
+        };
+      }
+
+      const { results, fromVectorDB, searchMethods } = result;
+
+      let responseText = `🔥 **ТЪРСЕНЕ В LEX.BG С FIRECRAWL**\n\n`;
+      responseText += `📊 **Резултати:** ${results.length}\n`;
+      responseText += `💾 **Източник:** ${fromVectorDB ? 'Vector Database' : 'Live Scraping + Saved to Vector DB'}\n`;
+      if (searchMethods && searchMethods.length > 0) {
+        responseText += `🔍 **Методи:** ${searchMethods.join(', ')}\n`;
+      }
+      responseText += `\n`;
+
+      if (results.length === 0) {
+        responseText += `Няма намерени резултати за "${args.query}".\n\n`;
+        responseText += `💡 **Съвети:**\n`;
+        responseText += `- Опитайте с различни ключови думи\n`;
+        responseText += `- Използвайте по-кратки фрази\n`;
+        responseText += `- Проверете правописа на българските думи\n`;
+      } else {
+        results.forEach((doc, index) => {
+          responseText += `**${index + 1}. ${doc.title}**\n`;
+          if (doc.source) responseText += `   📰 Източник: ${doc.source}\n`;
+          if (doc.date) responseText += `   📅 Дата: ${doc.date}\n`;
+          if (doc.type) responseText += `   📄 Тип: ${doc.type}\n`;
+          if (doc.url) responseText += `   🔗 URL: ${doc.url}\n`;
+          if (doc.summary) responseText += `   📝 Резюме: ${doc.summary}\n`;
+          if (doc.content && doc.content.length > 200) {
+            responseText += `   📖 Съдържание: ${doc.content.substring(0, 300)}...\n`;
+          }
+          responseText += `\n`;
+        });
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Системна грешка при търсене в lex.bg: ${error.message}`,
+          },
+        ],
+      };
+    }
   }
 
   async handleSearchApisLegislation(args) {
@@ -1810,48 +2250,54 @@ class BulgarianLegalServer {
 
   async handleSearchSupremeCourt(args) {
     try {
-      // Use the specialized Supreme Court search from LawyerToolsService
-      const result = await this.lawyerToolsService.searchSupremeCourt(args);
+      // Use the new Firecrawl-enabled VKS search
+      const searchCriteria = {
+        query: args.query,
+        chamber: args.chamber || 'any',
+        decisionType: args.decisionType || 'any',
+        dateFrom: args.dateFrom || '',
+        dateTo: args.dateTo || '',
+        caseNumber: args.caseNumber || '',
+        maxResults: args.maxResults || 20,
+      };
+
+      const result = await this.vksScraperService.searchVKSWithFirecrawl(searchCriteria);
 
       if (!result.success) {
         return {
           content: [
             {
               type: 'text',
-              text: `❌ Грешка при търсене във Върховния касационен съд: ${result.error}`,
+              text: `❌ Грешка при търсене във ВКС с Firecrawl: ${result.error}`,
             },
           ],
         };
       }
 
-      const { court, chamber, decisionType, totalResults, results } = result;
+      const { results, fromVectorDB, searchMethods, totalResults } = result;
 
-      let responseText = `🏛️ **ТЪРСЕНЕ ВЪВ ВЪРХОВНИЯ КАСАЦИОНЕН СЪД**\n\n`;
+      let responseText = `🔥 **ТЪРСЕНЕ ВЪВ ВЪРХОВНИЯ КАСАЦИОНЕН СЪД С FIRECRAWL**\n\n`;
       responseText += `**Параметри на търсенето:**\n`;
       responseText += `- Заявка: ${args.query}\n`;
       if (args.caseNumber) responseText += `- Номер на делото: ${args.caseNumber}\n`;
       if (args.legalArticle) responseText += `- Правна разпоредба: ${args.legalArticle}\n`;
-      responseText += `- Колегия: ${
-        chamber === 'civil'
-          ? 'Гражданска'
-          : chamber === 'criminal'
-            ? 'Наказателна'
-            : chamber === 'commercial'
-              ? 'Търговска'
-              : 'Всички'
-      }\n`;
-      responseText += `- Тип решение: ${
-        decisionType === 'cassation'
-          ? 'Касационно'
-          : decisionType === 'interpretation'
-            ? 'Тълкувателно'
-            : decisionType === 'unification'
-              ? 'Обединително'
-              : 'Всички типове'
-      }\n`;
-      if (args.legalArea && args.legalArea !== 'any')
-        responseText += `- Правна област: ${args.legalArea}\n`;
-      responseText += `\n📊 **Намерени решения: ${totalResults}**\n\n`;
+      const chamberMapping = {
+        civil: 'Гражданска',
+        criminal: 'Наказателна',
+        commercial: 'Търговска'
+      };
+      responseText += `- Колегия: ${chamberMapping[searchCriteria.chamber] || 'Всички'}\n`;
+      const decisionTypeMapping = {
+        'решение': 'Решение',
+        'определение': 'Определение',
+        'постановление': 'Постановление'
+      };
+      responseText += `- Тип решение: ${decisionTypeMapping[searchCriteria.decisionType] || 'Всички типове'}\n`;
+      responseText += `💾 **Източник:** ${fromVectorDB ? 'Vector Database' : 'Live Scraping + Saved to Vector DB'}\n`;
+      if (searchMethods && searchMethods.length > 0) {
+        responseText += `🔍 **Методи:** ${searchMethods.join(', ')}\n`;
+      }
+      responseText += `\n📊 **Намерени решения: ${totalResults || results.length}**\n\n`;
 
       if (results.length === 0) {
         responseText += `❗ Няма намерени решения от Върховния касационен съд за тази заявка.\n`;
@@ -1866,20 +2312,15 @@ class BulgarianLegalServer {
           responseText += `**${index + 1}. ${decision.title || 'Решение на ВКС'}**\n`;
           if (decision.source) responseText += `📍 Източник: ${decision.source}\n`;
           if (decision.date) responseText += `📅 Дата: ${decision.date}\n`;
-          if (decision.precedentValue) {
-            const precedentText =
-              decision.precedentValue === 'binding'
-                ? '🔴 Задължително'
-                : decision.precedentValue === 'persuasive_high'
-                  ? '🟡 Високо убеждаващо'
-                  : '🟢 Убеждаващо';
-            responseText += `⚖️ Прецедентна стойност: ${precedentText}\n`;
-          }
-          if (decision.legalSignificance)
-            responseText += `📊 Правна значимост: ${decision.legalSignificance}/10\n`;
-          if (decision.summary)
-            responseText += `📄 Резюме: ${decision.summary.substring(0, 200)}...\n`;
           if (decision.url) responseText += `🔗 URL: ${decision.url}\n`;
+          if (decision.type) responseText += `📄 Тип: ${decision.type}\n`;
+          if (decision.caseNumber) responseText += `📋 Дело: ${decision.caseNumber}\n`;
+          if (decision.chamber) responseText += `🏛️ Колегия: ${decision.chamber}\n`;
+          if (decision.content && decision.content.length > 200) {
+            responseText += `📖 Съдържание: ${decision.content.substring(0, 300)}...\n`;
+          } else if (decision.summary) {
+            responseText += `📝 Резюме: ${decision.summary}\n`;
+          }
           responseText += '\n';
         });
 
@@ -1910,6 +2351,598 @@ class BulgarianLegalServer {
           {
             type: 'text',
             text: `❌ Системна грешка при търсене във ВКС: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle live scraping of case law using Firecrawl
+   */
+  async handleLiveScrapeCaseLaw(args) {
+    try {
+      // Import the service if not already imported
+      if (!this.caseLawFirecrawlService) {
+        const { CaseLawFirecrawlService } = await import('./services/CaseLawFirecrawlService.js');
+        this.caseLawFirecrawlService = new CaseLawFirecrawlService();
+      }
+
+      const {
+        query,
+        sources = ['vks', 'vas'],
+        maxResults = 10,
+        relevanceThreshold = 70,
+        saveToRag = true
+      } = args;
+
+      console.log(`🔥 Starting live scrape for: "${query}"`);
+
+      const result = await this.caseLawFirecrawlService.searchAndScrapeCaseLaw({
+        keywords: [query],
+        limit: maxResults,
+        sources,
+        useFirecrawl: true,
+        useRag: false, // Don't use RAG for live scraping
+        saveToRag
+      });
+
+      if (!result.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Грешка при live scraping: ${result.error || 'Неизвестна грешка'}`,
+            },
+          ],
+        };
+      }
+
+      const responseText = `🔥 LIVE SCRAPING РЕЗУЛТАТИ\n` +
+        `🔍 Търсене: "${query}"\n` +
+        `📊 Намерени случаи: ${result.results.length}\n` +
+        `📚 Използвани източници: ${result.sources.join(', ')}\n` +
+        `💾 Запазени в RAG: ${saveToRag ? 'Да' : 'Не'}\n\n` +
+        result.results.map((caseLaw, index) => {
+          const sourceIcon = caseLaw.source === 'vks' ? '⚖️' :
+                           caseLaw.source === 'vas' ? '🏛️' : 
+                           caseLaw.source === 'lexbg' ? '📖' : '📋';
+          
+          return `${sourceIcon} ${index + 1}. ${caseLaw.generateCitation()}\n` +
+                 `   📜 Основание: ${caseLaw.legalBasis.articles.map((a) => `${a.article} от ${a.law}`).join(', ')}\n` +
+                 `   ⚖️ Резултат: ${this.translateOutcome(caseLaw.outcome)}\n` +
+                 `   📝 Резюме: ${caseLaw.summary.substring(0, 200)}${caseLaw.summary.length > 200 ? '...' : ''}\n` +
+                 `   🔗 URL: ${caseLaw.documentUrl}\n`;
+        }).join('\n') +
+        `\n⏰ Scraping извършено на: ${new Date().toLocaleString('bg-BG')}`;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText,
+          },
+        ],
+      };
+
+    } catch (error) {
+      console.error('Live scraping error:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Грешка при live scraping: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle case law trends analysis
+   */
+  async handleAnalyzeCaseLawTrends(args) {
+    try {
+      const {
+        searchCriteria,
+        analysisType = 'temporal',
+        timeGranularity = 'yearly'
+      } = args;
+
+      // First get the cases for analysis
+      const casesResult = await this.caseLawService.searchCaseLaw({
+        ...searchCriteria,
+        limit: 100, // Get more cases for trend analysis
+        useFirecrawl: true,
+        useRag: true
+      });
+
+      if (casesResult.total === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '❗ Няма намерени случаи за анализ на тенденции.',
+            },
+          ],
+        };
+      }
+
+      let analysisText = `📊 АНАЛИЗ НА ТЕНДЕНЦИИ В СЪДЕБНАТА ПРАКТИКА\n\n`;
+      analysisText += `🔍 Анализирани случаи: ${casesResult.total}\n`;
+      analysisText += `📈 Тип анализ: ${this.translateAnalysisType(analysisType)}\n`;
+      analysisText += `⏰ Период: ${timeGranularity === 'yearly' ? 'Годишно' : timeGranularity === 'quarterly' ? 'Тримесечно' : 'Месечно'}\n\n`;
+
+      const cases = casesResult.results;
+
+      switch (analysisType) {
+        case 'temporal':
+          analysisText += this.analyzeTemporalTrends(cases, timeGranularity);
+          break;
+        case 'outcome_patterns':
+          analysisText += this.analyzeOutcomePatterns(cases);
+          break;
+        case 'precedent_evolution':
+          analysisText += this.analyzePrecedentEvolution(cases);
+          break;
+        case 'court_consistency':
+          analysisText += this.analyzeCourtConsistency(cases);
+          break;
+        default:
+          analysisText += this.analyzeTemporalTrends(cases, timeGranularity);
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: analysisText,
+          },
+        ],
+      };
+
+    } catch (error) {
+      console.error('Trends analysis error:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Грешка при анализ на тенденции: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  translateAnalysisType(type) {
+    const translations = {
+      'temporal': 'Времев анализ',
+      'outcome_patterns': 'Анализ на резултатите',
+      'precedent_evolution': 'Еволюция на прецедентите',
+      'court_consistency': 'Последователност на съдилищата'
+    };
+    return translations[type] || type;
+  }
+
+  analyzeTemporalTrends(cases, granularity) {
+    const timeGroups = {};
+    const outcomesByTime = {};
+
+    cases.forEach(caseLaw => {
+      if (!caseLaw.date) return;
+
+      const date = new Date(caseLaw.date);
+      let timeKey;
+
+      switch (granularity) {
+        case 'monthly':
+          timeKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          break;
+        case 'quarterly':
+          const quarter = Math.floor(date.getMonth() / 3) + 1;
+          timeKey = `${date.getFullYear()}-Q${quarter}`;
+          break;
+        default: // yearly
+          timeKey = date.getFullYear().toString();
+      }
+
+      if (!timeGroups[timeKey]) {
+        timeGroups[timeKey] = 0;
+        outcomesByTime[timeKey] = {};
+      }
+      timeGroups[timeKey]++;
+
+      const outcome = caseLaw.outcome || 'неизвестен';
+      outcomesByTime[timeKey][outcome] = (outcomesByTime[timeKey][outcome] || 0) + 1;
+    });
+
+    let analysis = `📅 ВРЕМЕВ АНАЛИЗ:\n\n`;
+    
+    const sortedPeriods = Object.keys(timeGroups).sort();
+    sortedPeriods.forEach(period => {
+      const count = timeGroups[period];
+      const outcomes = outcomesByTime[period];
+      const mostCommonOutcome = Object.entries(outcomes)
+        .sort(([,a], [,b]) => b - a)[0];
+
+      analysis += `${period}: ${count} случая`;
+      if (mostCommonOutcome) {
+        analysis += ` (най-често: ${this.translateOutcome(mostCommonOutcome[0])} - ${mostCommonOutcome[1]} случая)`;
+      }
+      analysis += '\n';
+    });
+
+    // Trend analysis
+    if (sortedPeriods.length > 1) {
+      const firstPeriodCount = timeGroups[sortedPeriods[0]];
+      const lastPeriodCount = timeGroups[sortedPeriods[sortedPeriods.length - 1]];
+      const trend = lastPeriodCount > firstPeriodCount ? '📈 нарастващ' : '📉 намаляващ';
+      
+      analysis += `\n📊 Тенденция: ${trend} тренд в броя на случаите\n`;
+    }
+
+    return analysis;
+  }
+
+  analyzeOutcomePatterns(cases) {
+    const outcomes = {};
+    const outcomesbyLaw = {};
+
+    cases.forEach(caseLaw => {
+      const outcome = caseLaw.outcome || 'неизвестен';
+      outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+
+      caseLaw.legalBasis.laws.forEach(law => {
+        if (!outcomesbyLaw[law]) outcomesbyLaw[law] = {};
+        outcomesbyLaw[law][outcome] = (outcomesbyLaw[law][outcome] || 0) + 1;
+      });
+    });
+
+    let analysis = `⚖️ АНАЛИЗ НА РЕЗУЛТАТИТЕ:\n\n`;
+    
+    // Overall outcome distribution
+    analysis += `📊 Общо разпределение:\n`;
+    Object.entries(outcomes)
+      .sort(([,a], [,b]) => b - a)
+      .forEach(([outcome, count]) => {
+        const percentage = Math.round((count / cases.length) * 100);
+        analysis += `   ${this.translateOutcome(outcome)}: ${count} (${percentage}%)\n`;
+      });
+
+    // Outcomes by law
+    analysis += `\n📜 Резултати по закони:\n`;
+    Object.entries(outcomesbyLaw).forEach(([law, lawOutcomes]) => {
+      analysis += `   ${law}:\n`;
+      Object.entries(lawOutcomes)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 3) // Top 3 outcomes
+        .forEach(([outcome, count]) => {
+          analysis += `     - ${this.translateOutcome(outcome)}: ${count}\n`;
+        });
+    });
+
+    return analysis;
+  }
+
+  analyzePrecedentEvolution(cases) {
+    const precedentsByYear = {};
+    const highPrecedentCases = cases.filter(c => c.precedentValue === 'high');
+
+    cases.forEach(caseLaw => {
+      if (!caseLaw.date) return;
+      const year = new Date(caseLaw.date).getFullYear();
+      
+      if (!precedentsByYear[year]) {
+        precedentsByYear[year] = { high: 0, medium: 0, low: 0 };
+      }
+      precedentsByYear[year][caseLaw.precedentValue || 'low']++;
+    });
+
+    let analysis = `⭐ ЕВОЛЮЦИЯ НА ПРЕЦЕДЕНТИТЕ:\n\n`;
+    
+    analysis += `🏆 Случаи с висока прецедентна стойност: ${highPrecedentCases.length}\n\n`;
+    
+    if (highPrecedentCases.length > 0) {
+      analysis += `📋 Ключови прецеденти:\n`;
+      highPrecedentCases.slice(0, 5).forEach((caseLaw, index) => {
+        analysis += `   ${index + 1}. ${caseLaw.generateCitation()}\n`;
+        analysis += `      ${caseLaw.summary.substring(0, 100)}...\n`;
+      });
+    }
+
+    analysis += `\n📅 Прецеденти по години:\n`;
+    Object.entries(precedentsByYear)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+      .forEach(([year, precedents]) => {
+        analysis += `   ${year}: Висока(${precedents.high}) Средна(${precedents.medium}) Ниска(${precedents.low})\n`;
+      });
+
+    return analysis;
+  }
+
+  analyzeCourtConsistency(cases) {
+    const courtOutcomes = {};
+    
+    cases.forEach(caseLaw => {
+      const court = caseLaw.court || 'неизвестен съд';
+      if (!courtOutcomes[court]) courtOutcomes[court] = {};
+      
+      const outcome = caseLaw.outcome || 'неизвестен';
+      courtOutcomes[court][outcome] = (courtOutcomes[court][outcome] || 0) + 1;
+    });
+
+    let analysis = `🏛️ ПОСЛЕДОВАТЕЛНОСТ НА СЪДИЛИЩАТА:\n\n`;
+
+    Object.entries(courtOutcomes).forEach(([court, outcomes]) => {
+      const totalCases = Object.values(outcomes).reduce((a, b) => a + b, 0);
+      const mostCommon = Object.entries(outcomes)
+        .sort(([,a], [,b]) => b - a)[0];
+      
+      const consistency = mostCommon ? Math.round((mostCommon[1] / totalCases) * 100) : 0;
+      
+      analysis += `📍 ${court}:\n`;
+      analysis += `   📊 Общо случаи: ${totalCases}\n`;
+      analysis += `   🎯 Последователност: ${consistency}% (${this.translateOutcome(mostCommon[0])})\n`;
+      
+      Object.entries(outcomes)
+        .sort(([,a], [,b]) => b - a)
+        .forEach(([outcome, count]) => {
+          const percentage = Math.round((count / totalCases) * 100);
+          analysis += `   - ${this.translateOutcome(outcome)}: ${count} (${percentage}%)\n`;
+        });
+      analysis += '\n';
+    });
+
+    return analysis;
+  }
+
+  /**
+   * Handle PDF export for case law
+   */
+  async handleExportCaseLawToPDF(args) {
+    try {
+      const result = await this.pdfService.exportCaseLawToPDF(args.caseLawData, {
+        title: args.title,
+        subtitle: args.subtitle,
+        template: args.template,
+        includeFullText: args.includeFullText,
+        includeSummary: args.includeSummary,
+        includeAnalysis: args.includeAnalysis,
+        watermark: args.watermark
+      });
+
+      if (result.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `📄 PDF експорт успешен!\n\n` +
+                    `📁 Файл: ${result.filename}\n` +
+                    `📊 Страници: ${result.pages}\n` +
+                    `💾 Размер: ${Math.round(result.size / 1024)} KB\n` +
+                    `📍 Път: ${result.outputPath}\n\n` +
+                    `✅ Документът е готов за изтегляне и използване.`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Грешка при експорт на PDF: ${result.error}`,
+            },
+          ],
+        };
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Системна грешка при PDF експорт: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle PDF export for legal analysis
+   */
+  async handleExportLegalAnalysisToPDF(args) {
+    try {
+      const result = await this.pdfService.exportLegalAnalysisToPDF(args.analysisData, {
+        title: args.title,
+        documentType: args.documentType,
+        clientName: args.clientName,
+        lawyerName: args.lawyerName,
+        includeRecommendations: args.includeRecommendations,
+        includeRiskAssessment: args.includeRiskAssessment
+      });
+
+      if (result.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `📄 Правен анализ експортиран успешно!\n\n` +
+                    `📁 Файл: ${result.filename}\n` +
+                    `📊 Страници: ${result.pages}\n` +
+                    `💾 Размер: ${Math.round(result.size / 1024)} KB\n` +
+                    `👤 Клиент: ${args.clientName || 'Неуточнен'}\n` +
+                    `⚖️ Юрист: ${args.lawyerName || 'AI Асистент'}\n` +
+                    `📄 Тип документ: ${args.documentType}\n\n` +
+                    `✅ Анализът е готов за предоставяне на клиента.`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Грешка при експорт на анализ: ${result.error}`,
+            },
+          ],
+        };
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Системна грешка при експорт на анализ: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle PDF export for contracts
+   */
+  async handleExportContractToPDF(args) {
+    try {
+      const result = await this.pdfService.exportContractToPDF(args.contractData, {
+        title: args.title,
+        contractType: args.contractType,
+        parties: args.parties,
+        terms: args.terms,
+        signatures: args.signatures,
+        notarization: args.notarization
+      });
+
+      if (result.success) {
+        const partiesText = args.parties ? 
+          `${args.parties.first || 'Неуточнена'} и ${args.parties.second || 'Неуточнена'}` : 
+          'Неуточнени страни';
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `📄 Договор експортиран успешно!\n\n` +
+                    `📁 Файл: ${result.filename}\n` +
+                    `📊 Страници: ${result.pages}\n` +
+                    `💾 Размер: ${Math.round(result.size / 1024)} KB\n` +
+                    `📋 Тип: ${args.contractType}\n` +
+                    `👥 Страни: ${partiesText}\n` +
+                    `✍️ Подписи: ${args.signatures ? 'Включени' : 'Не включени'}\n` +
+                    `📝 Нотариално заверяване: ${args.notarization ? 'Необходимо' : 'Не е необходимо'}\n\n` +
+                    `✅ Договорът е готов за подписване.`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Грешка при експорт на договор: ${result.error}`,
+            },
+          ],
+        };
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Системна грешка при експорт на договор: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle listing exported PDFs
+   */
+  async handleListExportedPDFs(args) {
+    try {
+      const pdfList = await this.pdfService.listExportedPDFs();
+
+      if (pdfList.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '📂 Няма експортирани PDF документи.\n\nИзползвайте export_case_law_to_pdf, export_legal_analysis_to_pdf или export_contract_to_pdf за да създадете документи.',
+            },
+          ],
+        };
+      }
+
+      let responseText = `📂 ЕКСПОРТИРАНИ PDF ДОКУМЕНТИ (${pdfList.length})\n\n`;
+
+      pdfList.forEach((file, index) => {
+        const sizeKB = Math.round(file.size / 1024);
+        const createdDate = file.created.toLocaleString('bg-BG');
+        const modifiedDate = file.modified.toLocaleString('bg-BG');
+
+        responseText += `${index + 1}. 📄 ${file.filename}\n`;
+        responseText += `   💾 Размер: ${sizeKB} KB\n`;
+        responseText += `   📅 Създаден: ${createdDate}\n`;
+        responseText += `   🔄 Модифициран: ${modifiedDate}\n`;
+        responseText += `   📍 Път: ${file.path}\n\n`;
+      });
+
+      responseText += `💡 Използвайте delete_exported_pdf за да изтриете файл.\n`;
+      responseText += `📥 Файловете са готови за изтегляне от папката exports/pdf/.`;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Грешка при листване на PDF файлове: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Handle deleting exported PDF
+   */
+  async handleDeleteExportedPDF(args) {
+    try {
+      const result = await this.pdfService.deletePDF(args.filename);
+
+      if (result.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ PDF файлът "${args.filename}" беше изтрит успешно.`,
+            },
+          ],
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Грешка при изтриване на файла: ${result.error}`,
+            },
+          ],
+        };
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Системна грешка при изтриване на файл: ${error.message}`,
           },
         ],
       };

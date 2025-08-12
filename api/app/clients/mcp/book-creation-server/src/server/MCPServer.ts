@@ -25,6 +25,8 @@ import { ExportToolHandlers } from './tools/ExportToolHandlers.js';
 import { ImageToolHandlers } from './tools/ImageToolHandlers.js';
 import { PageToolHandlers } from './tools/PageToolHandlers.js';
 import PlanningToolHandlers from './tools/PlanningToolHandlers.js';
+import WritingAssistantToolHandlers from './tools/WritingAssistantToolHandlers.js';
+import ContentEnhancementToolHandlers from './tools/ContentEnhancementToolHandlers.js';
 
 export class MCPServer extends BaseService implements IMCPServer {
     private server: Server;
@@ -157,6 +159,16 @@ export class MCPServer extends BaseService implements IMCPServer {
                 this.serviceContainer.resolve(SERVICE_TOKENS.ANALYTICS_SERVICE) as any,
                 bookService,
                 this.serviceContainer.resolve(SERVICE_TOKENS.AI_CONTENT_SERVICE) as any
+            ),
+            // Writing assistant features
+            new WritingAssistantToolHandlers(
+                this.serviceContainer.resolve('WritingAssistantService') as any,
+                this.serviceContainer.resolve('PlotAnalysisService') as any,
+                this.logger
+            ),
+            new ContentEnhancementToolHandlers(
+                this.serviceContainer.resolve('ContentEnhancementService') as any,
+                this.logger
             ),
         ];
 

@@ -17,3 +17,14 @@ export { WebScoutingService } from './WebScoutingService.js';
 export { WorldBuildingService } from './WorldBuildingService.js';
 export { WritingAnalyticsService } from './WritingAnalyticsService.js';
 
+// Writing Assistant Features
+export { WritingAssistantService } from './WritingAssistantService.js';
+export { PlotAnalysisService } from './PlotAnalysisService.js';
+export { ContentEnhancementService } from './ContentEnhancementService.js';
+
+// Additional existing services
+export { BookReferenceService } from './BookReferenceService.js';
+export { BookImportService } from './BookImportService.js';
+export { NaturalLanguageQueryService } from './NaturalLanguageQueryService.js';
+export { SmartLibraryService } from './SmartLibraryService.js';
+

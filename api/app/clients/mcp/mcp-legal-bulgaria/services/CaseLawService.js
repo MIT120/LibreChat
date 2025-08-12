@@ -5,16 +5,20 @@
 
 import { CaseLaw } from '../models/CaseLaw.js';
 import { BulgarianLegalParser } from '../utils/BulgarianLegalParser.js';
+import { CaseLawFirecrawlService } from './CaseLawFirecrawlService.js';
+import { RagIntegrationService } from './RagIntegrationService.js';
 
 export class CaseLawService {
   constructor() {
     this.parser = new BulgarianLegalParser();
-    // In a real implementation, this would connect to actual legal databases
+    this.firecrawlService = new CaseLawFirecrawlService();
+    this.ragService = new RagIntegrationService();
+    // Keep mock database for fallback
     this.mockDatabase = this.initializeMockDatabase();
   }
 
   /**
-   * Search case law based on criteria
+   * Enhanced search case law with Firecrawl and RAG integration
    */
   async searchCaseLaw(criteria) {
     try {
@@ -28,42 +32,85 @@ export class CaseLawService {
         outcome = '',
         limit = 20,
         keywords = [],
+        useFirecrawl = true,
+        useRag = true,
+        saveToRag = true,
       } = criteria;
 
-      // Filter cases based on criteria
-      let results = this.mockDatabase.filter((caseData) => {
-        const caseLaw = new CaseLaw(caseData);
-        return caseLaw.matchesCriteria({
-          articles,
-          laws,
-          partyType: parties.length > 0 ? parties[0] : null,
-          court,
-          dateFrom: dateFrom ? new Date(dateFrom) : null,
-          dateTo: dateTo ? new Date(dateTo) : null,
-          outcome,
-        });
-      });
+      console.log('🔍 Starting enhanced case law search...');
 
-      // Keyword filtering if provided
-      if (keywords.length > 0) {
-        results = results.filter((caseData) => {
-          const searchText =
-            `${caseData.summary} ${caseData.reasoning} ${caseData.keyPoints.join(' ')}`.toLowerCase();
-          return keywords.some((keyword) => searchText.includes(keyword.toLowerCase()));
-        });
+      let allResults = [];
+      let searchMethods = [];
+
+      // 1. First check RAG database for existing cases
+      if (useRag && process.env.RAG_API_URL) {
+        try {
+          console.log('📚 Searching RAG database...');
+          const ragQuery = this.buildRagQuery(criteria);
+          const ragResults = await this.ragService.queryLegalDocuments(
+            ragQuery,
+            limit,
+            0.7, // minimum similarity score
+          );
+
+          if (ragResults.success && ragResults.results.length > 0) {
+            console.log(`✅ Found ${ragResults.results.length} cases in RAG database`);
+            allResults.push(...this.convertRagResultsToCaseLaw(ragResults.results));
+            searchMethods.push('RAG Database');
+          }
+        } catch (error) {
+          console.warn('⚠️ RAG search failed, continuing with live search:', error.message);
+        }
       }
 
-      // Sort by date (newest first) and limit results
-      results.sort((a, b) => new Date(b.date) - new Date(a.date));
-      results = results.slice(0, limit);
+      // 2. If we don't have enough results, use Firecrawl for live scraping
+      const remainingLimit = Math.max(0, limit - allResults.length);
+      if (remainingLimit > 0 && useFirecrawl && process.env.FIRECRAWL_API_KEY) {
+        try {
+          console.log('🔥 Performing live case law scraping with Firecrawl...');
+          const firecrawlResults = await this.firecrawlService.searchAndScrapeCaseLaw({
+            ...criteria,
+            limit: remainingLimit,
+            saveToRag,
+          });
+
+          if (firecrawlResults.success && firecrawlResults.results.length > 0) {
+            console.log(`✅ Found ${firecrawlResults.results.length} cases via Firecrawl`);
+            allResults.push(...firecrawlResults.results);
+            searchMethods.push('Firecrawl Live Scraping');
+          }
+        } catch (error) {
+          console.warn('⚠️ Firecrawl search failed, falling back to mock data:', error.message);
+        }
+      }
+
+      // 3. Fallback to mock database if needed
+      if (allResults.length === 0) {
+        console.log('📋 Using mock database as fallback...');
+        allResults = this.searchMockDatabase(criteria);
+        searchMethods.push('Mock Database');
+      }
+
+      // Remove duplicates and sort
+      const uniqueResults = this.removeDuplicateCases(allResults);
+      const sortedResults = this.sortCasesByRelevance(uniqueResults, criteria);
+      const finalResults = sortedResults.slice(0, limit);
 
       return {
-        results: results.map((data) => new CaseLaw(data)),
-        total: results.length,
+        results: finalResults,
+        total: finalResults.length,
         criteria: criteria,
+        searchMethods: searchMethods,
+        ragResultsCount: searchMethods.includes('RAG Database')
+          ? Math.min(finalResults.length, limit / 2)
+          : 0,
+        liveScrapingCount: searchMethods.includes('Firecrawl Live Scraping')
+          ? finalResults.length - (searchMethods.includes('RAG Database') ? limit / 2 : 0)
+          : 0,
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      throw new Error(`Case law search failed: ${error.message}`);
+      throw new Error(`Enhanced case law search failed: ${error.message}`);
     }
   }
 
@@ -413,6 +460,263 @@ export class CaseLawService {
     }
 
     return reasons.join('; ');
+  }
+
+  /**
+   * Build RAG query from search criteria
+   */
+  buildRagQuery(criteria) {
+    const queryParts = [];
+
+    if (criteria.articles && criteria.articles.length > 0) {
+      queryParts.push(`articles: ${criteria.articles.join(', ')}`);
+    }
+
+    if (criteria.laws && criteria.laws.length > 0) {
+      queryParts.push(`laws: ${criteria.laws.join(', ')}`);
+    }
+
+    if (criteria.keywords && criteria.keywords.length > 0) {
+      queryParts.push(criteria.keywords.join(' '));
+    }
+
+    if (criteria.parties && criteria.parties.length > 0) {
+      queryParts.push(`parties: ${criteria.parties.join(', ')}`);
+    }
+
+    if (criteria.outcome) {
+      queryParts.push(`outcome: ${criteria.outcome}`);
+    }
+
+    return queryParts.join(' ');
+  }
+
+  /**
+   * Convert RAG results to CaseLaw objects
+   */
+  convertRagResultsToCaseLaw(ragResults) {
+    return ragResults
+      .map((result) => {
+        try {
+          // Extract case data from RAG result
+          const metadata = result.metadata || {};
+
+          const caseData = {
+            id: result.id || `rag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            source: 'rag_database',
+            caseNumber: metadata.caseNumber || '',
+            court: metadata.court || '',
+            date: metadata.date ? new Date(metadata.date) : null,
+            parties: metadata.parties || { plaintiff: '', defendant: '', type: '' },
+            legalBasis: metadata.legalBasis || { articles: [], laws: [], regulations: [] },
+            summary: this.extractSummaryFromContent(result.content),
+            reasoning: this.extractReasoningFromContent(result.content),
+            decision: this.extractDecisionFromContent(result.content),
+            outcome: metadata.outcome || '',
+            keyPoints: this.extractKeyPointsFromContent(result.content),
+            precedentValue: metadata.precedentValue || 'medium',
+            documentUrl: result.url || '',
+            fullText: result.content || '',
+            tags: metadata.tags || [],
+            relatedCases: [],
+            lastUpdated: new Date(result.updated_at || Date.now()),
+            ragScore: result.similarity_score || 0,
+          };
+
+          return new CaseLaw(caseData);
+        } catch (error) {
+          console.warn('Failed to convert RAG result to CaseLaw:', error.message);
+          return null;
+        }
+      })
+      .filter(Boolean);
+  }
+
+  /**
+   * Search mock database (fallback method)
+   */
+  searchMockDatabase(criteria) {
+    const {
+      articles = [],
+      laws = [],
+      parties = [],
+      court = '',
+      dateFrom = null,
+      dateTo = null,
+      outcome = '',
+      keywords = [],
+    } = criteria;
+
+    // Filter cases based on criteria
+    let results = this.mockDatabase.filter((caseData) => {
+      const caseLaw = new CaseLaw(caseData);
+      return caseLaw.matchesCriteria({
+        articles,
+        laws,
+        partyType: parties.length > 0 ? parties[0] : null,
+        court,
+        dateFrom: dateFrom ? new Date(dateFrom) : null,
+        dateTo: dateTo ? new Date(dateTo) : null,
+        outcome,
+      });
+    });
+
+    // Keyword filtering if provided
+    if (keywords.length > 0) {
+      results = results.filter((caseData) => {
+        const searchText =
+          `${caseData.summary} ${caseData.reasoning} ${caseData.keyPoints.join(' ')}`.toLowerCase();
+        return keywords.some((keyword) => searchText.includes(keyword.toLowerCase()));
+      });
+    }
+
+    return results.map((data) => new CaseLaw(data));
+  }
+
+  /**
+   * Remove duplicate cases
+   */
+  removeDuplicateCases(cases) {
+    const seen = new Map();
+    return cases.filter((caseObj) => {
+      const key = `${caseObj.caseNumber}_${caseObj.court}`;
+      if (seen.has(key)) return false;
+      seen.add(key, true);
+      return true;
+    });
+  }
+
+  /**
+   * Sort cases by relevance to search criteria
+   */
+  sortCasesByRelevance(cases, criteria) {
+    return cases
+      .map((caseObj) => ({
+        case: caseObj,
+        score: this.calculateRelevanceScore(caseObj, criteria),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map((item) => item.case);
+  }
+
+  /**
+   * Calculate relevance score for a case
+   */
+  calculateRelevanceScore(caseObj, criteria) {
+    let score = 0;
+
+    // RAG similarity score (if available)
+    if (caseObj.ragScore) {
+      score += caseObj.ragScore * 10;
+    }
+
+    // Article matches (high weight)
+    if (criteria.articles) {
+      for (const article of criteria.articles) {
+        if (
+          caseObj.legalBasis.articles.some(
+            (a) => a.article && a.article.toLowerCase().includes(article.toLowerCase()),
+          )
+        ) {
+          score += 10;
+        }
+      }
+    }
+
+    // Law matches (medium weight)
+    if (criteria.laws) {
+      for (const law of criteria.laws) {
+        if (caseObj.legalBasis.laws.some((l) => l.toLowerCase().includes(law.toLowerCase()))) {
+          score += 7;
+        }
+      }
+    }
+
+    // Party type matches
+    if (criteria.parties && criteria.parties.length > 0) {
+      if (criteria.parties.includes(caseObj.parties.type)) {
+        score += 6;
+      }
+    }
+
+    // Court matches
+    if (criteria.court && caseObj.court.toLowerCase().includes(criteria.court.toLowerCase())) {
+      score += 3;
+    }
+
+    // Outcome matches
+    if (criteria.outcome && caseObj.outcome === criteria.outcome) {
+      score += 5;
+    }
+
+    // Keyword matches
+    if (criteria.keywords) {
+      const caseText =
+        `${caseObj.summary} ${caseObj.reasoning} ${caseObj.keyPoints.join(' ')}`.toLowerCase();
+      for (const keyword of criteria.keywords) {
+        if (caseText.includes(keyword.toLowerCase())) {
+          score += 2;
+        }
+      }
+    }
+
+    // Precedent value bonus
+    if (caseObj.precedentValue === 'high') {
+      score += 5;
+    } else if (caseObj.precedentValue === 'medium') {
+      score += 2;
+    }
+
+    // Recency bonus
+    if (caseObj.date) {
+      const daysAgo = (Date.now() - new Date(caseObj.date).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysAgo < 365) score += 2;
+      else if (daysAgo < 365 * 3) score += 1;
+    }
+
+    return score;
+  }
+
+  /**
+   * Extract summary from RAG content
+   */
+  extractSummaryFromContent(content) {
+    const summaryMatch = content.match(/РЕЗЮМЕ:\s*([\s\S]*?)(?=\n\n[А-Я]+:|$)/);
+    return summaryMatch
+      ? summaryMatch[1].trim().substring(0, 500)
+      : content.substring(0, 300) + '...';
+  }
+
+  /**
+   * Extract reasoning from RAG content
+   */
+  extractReasoningFromContent(content) {
+    const reasoningMatch = content.match(/МОТИВИ:\s*([\s\S]*?)(?=\n\n[А-Я]+:|$)/);
+    return reasoningMatch ? reasoningMatch[1].trim() : '';
+  }
+
+  /**
+   * Extract decision from RAG content
+   */
+  extractDecisionFromContent(content) {
+    const decisionMatch = content.match(/РЕШЕНИЕ:\s*([\s\S]*?)(?=\n\n[А-Я]+:|$)/);
+    return decisionMatch ? decisionMatch[1].trim() : '';
+  }
+
+  /**
+   * Extract key points from RAG content
+   */
+  extractKeyPointsFromContent(content) {
+    const keyPointsMatch = content.match(/КЛЮЧОВИ ТОЧКИ:\s*([\s\S]*?)(?=\n\n[А-Я]+:|$)/);
+    if (keyPointsMatch) {
+      return keyPointsMatch[1]
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.match(/^\d+\./))
+        .map((line) => line.replace(/^\d+\.\s*/, ''))
+        .slice(0, 5);
+    }
+    return [];
   }
 
   /**

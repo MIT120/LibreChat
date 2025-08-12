@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { MessageSquareQuote, ArrowRightToLine, Settings2, Database, Bookmark } from 'lucide-react';
+import { MessageSquareQuote, ArrowRightToLine, Settings2, Database, Bookmark, FileText } from 'lucide-react';
 import {
   isAssistantsEndpoint,
   isAgentsEndpoint,
@@ -19,6 +19,7 @@ import { Blocks, MCPIcon, AttachmentIcon } from '~/components/svg';
 import Parameters from '~/components/SidePanel/Parameters/Panel';
 import FilesPanel from '~/components/SidePanel/Files/Panel';
 import MCPPanel from '~/components/SidePanel/MCP/MCPPanel';
+import LegalDocumentPanel from '~/components/SidePanel/LegalDocuments/LegalDocumentPanel';
 import { useGetStartupConfig } from '~/data-provider';
 import { useHasAccess } from '~/hooks';
 
@@ -141,6 +142,26 @@ export default function useSideNavLinks({
       id: 'files',
       Component: FilesPanel,
     });
+
+    // Add Legal Documents panel - show when legal or book MCP servers are configured
+    if (
+      startupConfig?.mcpServers &&
+      Object.keys(startupConfig.mcpServers).some(
+        (serverName) => 
+          serverName.includes('legal') || 
+          serverName.includes('book') || 
+          serverName.includes('bulgaria') ||
+          serverName.includes('creation')
+      )
+    ) {
+      links.push({
+        title: 'Legal Documents',
+        label: '',
+        icon: FileText,
+        id: 'legal-documents',
+        Component: LegalDocumentPanel,
+      });
+    }
 
     if (hasAccessToBookmarks) {
       links.push({
