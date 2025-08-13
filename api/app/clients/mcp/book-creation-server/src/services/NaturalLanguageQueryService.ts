@@ -7,7 +7,7 @@ import { BaseService } from '../core/BaseService.js';
 import { Book } from '../../models/Book.js';
 import { Chapter } from '../../models/Chapter.js';
 import { Page } from '../../models/Page.js';
-import { generateShortLivedToken } from '~/server/services/AuthService.js';
+import { generateShortLivedToken } from '../stubs/authService.js';
 import axios from 'axios';
 
 export interface QueryResult {

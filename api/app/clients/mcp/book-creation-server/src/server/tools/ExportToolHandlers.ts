@@ -3,15 +3,17 @@
  */
 
 import { ILogger } from '../../core/Logger.js';
-import { IExportService, IToolHandler } from '../../interfaces/index.js';
+import { IExportService, IToolHandler, IBookService } from '../../interfaces/index.js';
 
 export class ExportToolHandlers {
     private logger: ILogger;
     private exportService: IExportService;
+    private bookService: IBookService;
 
-    constructor(logger: ILogger, exportService: IExportService) {
+    constructor(logger: ILogger, exportService: IExportService, bookService: IBookService) {
         this.logger = logger.child('ExportToolHandlers');
         this.exportService = exportService;
+        this.bookService = bookService;
     }
 
     getTools(): IToolHandler[] {
@@ -48,6 +50,89 @@ export class ExportToolHandlers {
                     required: ['bookId', 'format', 'authorId'],
                 },
                 handler: this.handleExportBook.bind(this),
+            },
+            {
+                name: 'get_export_history',
+                description: 'Get export history for a book with version tracking',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        bookId: {
+                            type: 'string',
+                            description: 'The unique identifier of the book',
+                        },
+                        authorId: {
+                            type: 'string',
+                            description: 'The unique identifier of the author',
+                        },
+                        format: {
+                            type: 'string',
+                            enum: ['pdf', 'html', 'txt', 'epub', 'docx'],
+                            description: 'Filter by export format (optional)',
+                        },
+                        status: {
+                            type: 'string',
+                            enum: ['pending', 'completed', 'failed', 'deleted'],
+                            description: 'Filter by export status (optional)',
+                        },
+                        limit: {
+                            type: 'number',
+                            description: 'Maximum number of exports to return',
+                            default: 20,
+                        },
+                    },
+                    required: ['bookId', 'authorId'],
+                },
+                handler: this.handleGetExportHistory.bind(this),
+            },
+            {
+                name: 'get_latest_export',
+                description: 'Get the latest export for a book and format',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        bookId: {
+                            type: 'string',
+                            description: 'The unique identifier of the book',
+                        },
+                        format: {
+                            type: 'string',
+                            enum: ['pdf', 'html', 'txt', 'epub', 'docx'],
+                            description: 'The export format',
+                        },
+                        authorId: {
+                            type: 'string',
+                            description: 'The unique identifier of the author',
+                        },
+                    },
+                    required: ['bookId', 'format', 'authorId'],
+                },
+                handler: this.handleGetLatestExport.bind(this),
+            },
+            {
+                name: 'list_user_books',
+                description: 'List all books for a user with basic information',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        authorId: {
+                            type: 'string',
+                            description: 'The unique identifier of the author',
+                        },
+                        limit: {
+                            type: 'number',
+                            description: 'Maximum number of books to return',
+                            default: 50,
+                        },
+                        status: {
+                            type: 'string',
+                            enum: ['planning', 'outlining', 'writing', 'editing', 'review', 'completed', 'published'],
+                            description: 'Filter by book status (optional)',
+                        },
+                    },
+                    required: ['authorId'],
+                },
+                handler: this.handleListUserBooks.bind(this),
             },
         ];
     }
@@ -87,6 +172,8 @@ export class ExportToolHandlers {
 
 **Export Details:**
 - **Book ID:** ${args.bookId}
+- **Export ID:** ${result.exportId || 'N/A'}
+- **Version:** ${result.version || 'N/A'}
 - **Format:** ${result.format.toUpperCase()}
 - **Filename:** ${result.filename}
 - **File Size:** ${fileSizeMB} MB
@@ -94,10 +181,13 @@ export class ExportToolHandlers {
 - **Created:** ${result.createdAt.toLocaleString()}
 - **Include Metadata:** ${args.includeMetadata ?? true ? 'Yes' : 'No'}
 
-**File Location:**
-\`${result.filepath}\`
+**File Access:**
+- **File Location:** \`${result.filepath}\`
+- **URL:** ${result.url || `/c/exports/${result.filename}`}
 
 The exported file is ready for download or sharing. The export includes ${args.includeMetadata !== false ? 'book metadata, table of contents, and ' : ''}all written content formatted for ${result.format.toUpperCase()}.
+
+**Version Tracking:** This export is automatically tracked in the database with version ${result.version || 'N/A'} for future reference.
 
 ${this.getFormatSpecificNotes(result.format)}`;
         } catch (error) {
@@ -145,6 +235,223 @@ ${this.getFormatSpecificNotes(result.format)}`;
 
             default:
                 return '';
+        }
+    }
+
+    private async handleGetExportHistory(args: {
+        bookId: string;
+        authorId: string;
+        format?: string;
+        status?: string;
+        limit?: number;
+    }): Promise<string> {
+        try {
+            this.logger.info('Getting export history', {
+                bookId: args.bookId,
+                format: args.format,
+                status: args.status,
+                limit: args.limit
+            });
+
+            const exports = await this.exportService.getBookExportHistory(
+                args.bookId,
+                args.authorId,
+                {
+                    format: args.format,
+                    status: args.status || 'completed',
+                    limit: args.limit || 20,
+                }
+            );
+
+            if (exports.length === 0) {
+                return `📄 No exports found for book ${args.bookId}${args.format ? ` in ${args.format.toUpperCase()} format` : ''}.
+
+**Available Actions:**
+- Use \`export_book\` to create a new export
+- Check if the book ID is correct`;
+            }
+
+            let response = `📋 **Export History for Book ${args.bookId}**\n\n`;
+            response += `Found ${exports.length} export${exports.length > 1 ? 's' : ''}:\n\n`;
+
+            for (const exportRecord of exports) {
+                const fileSizeMB = (exportRecord.size / (1024 * 1024)).toFixed(2);
+                const statusIcon = exportRecord.status === 'completed' ? '✅' : 
+                                  exportRecord.status === 'pending' ? '⏳' : 
+                                  exportRecord.status === 'failed' ? '❌' : '🗑️';
+
+                response += `${statusIcon} **Version ${exportRecord.version}** (${exportRecord.format.toUpperCase()})\n`;
+                response += `- **Filename:** ${exportRecord.filename}\n`;
+                response += `- **Size:** ${fileSizeMB} MB\n`;
+                response += `- **Status:** ${exportRecord.status}\n`;
+                response += `- **Created:** ${exportRecord.createdAt.toLocaleString()}\n`;
+                response += `- **Downloads:** ${exportRecord.downloadCount}\n`;
+                if (exportRecord.lastDownloaded) {
+                    response += `- **Last Downloaded:** ${exportRecord.lastDownloaded.toLocaleString()}\n`;
+                }
+                if (exportRecord.status === 'completed') {
+                    response += `- **URL:** /c/exports/${exportRecord.filename}\n`;
+                }
+                if (exportRecord.error) {
+                    response += `- **Error:** ${exportRecord.error}\n`;
+                }
+                response += `\n`;
+            }
+
+            response += `**Version Tracking:** Each export creates a new version. Latest versions are shown first.`;
+
+            return response;
+        } catch (error) {
+            this.logger.error('Failed to get export history', error as Error, args);
+            throw error;
+        }
+    }
+
+    private async handleGetLatestExport(args: {
+        bookId: string;
+        format: string;
+        authorId: string;
+    }): Promise<string> {
+        try {
+            this.logger.info('Getting latest export', {
+                bookId: args.bookId,
+                format: args.format,
+                authorId: args.authorId
+            });
+
+            const latestExport = await this.exportService.getLatestExport(
+                args.bookId,
+                args.format,
+                args.authorId
+            );
+
+            if (!latestExport) {
+                return `📄 No ${args.format.toUpperCase()} export found for book ${args.bookId}.
+
+**Available Actions:**
+- Use \`export_book\` to create a new ${args.format.toUpperCase()} export
+- Use \`get_export_history\` to see all export formats available`;
+            }
+
+            const fileSizeMB = (latestExport.size / (1024 * 1024)).toFixed(2);
+            const statusIcon = latestExport.status === 'completed' ? '✅' : 
+                              latestExport.status === 'pending' ? '⏳' : 
+                              latestExport.status === 'failed' ? '❌' : '🗑️';
+
+            let response = `${statusIcon} **Latest ${args.format.toUpperCase()} Export**\n\n`;
+            response += `**Export Details:**\n`;
+            response += `- **Book ID:** ${args.bookId}\n`;
+            response += `- **Format:** ${latestExport.format.toUpperCase()}\n`;
+            response += `- **Version:** ${latestExport.version}\n`;
+            response += `- **Filename:** ${latestExport.filename}\n`;
+            response += `- **Size:** ${fileSizeMB} MB\n`;
+            response += `- **Status:** ${latestExport.status}\n`;
+            response += `- **Created:** ${latestExport.createdAt.toLocaleString()}\n`;
+            response += `- **Downloads:** ${latestExport.downloadCount}\n`;
+
+            if (latestExport.lastDownloaded) {
+                response += `- **Last Downloaded:** ${latestExport.lastDownloaded.toLocaleString()}\n`;
+            }
+
+            if (latestExport.status === 'completed') {
+                response += `\n**File Access:**\n`;
+                response += `- **URL:** /c/exports/${latestExport.filename}\n`;
+                response += `- **Direct Link:** \`${latestExport.url}\`\n`;
+            }
+
+            if (latestExport.error) {
+                response += `\n**Error Details:**\n${latestExport.error}\n`;
+            }
+
+            if (latestExport.metadata?.aliasFilename) {
+                response += `\n**Alias:** Also available as ${latestExport.metadata.aliasFilename}`;
+            }
+
+            return response;
+        } catch (error) {
+            this.logger.error('Failed to get latest export', error as Error, args);
+            throw error;
+        }
+    }
+
+    private async handleListUserBooks(args: {
+        authorId: string;
+        limit?: number;
+        status?: string;
+    }): Promise<string> {
+        try {
+            this.logger.info('Listing user books', {
+                authorId: args.authorId,
+                limit: args.limit,
+                status: args.status
+            });
+
+            // Get books from the book service
+            const result = await this.bookService.listBooks({
+                authorId: args.authorId,
+                limit: args.limit || 50,
+                status: args.status as any,
+            });
+            
+            const books = result.data;
+
+            if (books.length === 0) {
+                return `📚 No books found for author ${args.authorId}${args.status ? ` with status '${args.status}'` : ''}.
+
+**Get Started:**
+- Use \`create_book\` to create your first book
+- Start writing with the book creation tools`;
+            }
+
+            let response = `📚 **Books for Author ${args.authorId}**\n\n`;
+            response += `Found ${books.length} book${books.length > 1 ? 's' : ''}:\n\n`;
+
+            for (const book of books) {
+                const statusIcon = this.getStatusIcon(book.status);
+                const wordCount = book.currentWordCount || 0;
+                const targetWords = book.targetWordCount || 0;
+                const progress = targetWords > 0 ? Math.round((wordCount / targetWords) * 100) : 0;
+
+                response += `${statusIcon} **${book.title}**\n`;
+                response += `- **ID:** \`${book._id}\`\n`;
+                response += `- **Genre:** ${book.genre}\n`;
+                response += `- **Theme:** ${book.theme}\n`;
+                response += `- **Status:** ${book.status}\n`;
+                response += `- **Progress:** ${wordCount.toLocaleString()} words`;
+                if (targetWords > 0) {
+                    response += ` / ${targetWords.toLocaleString()} (${progress}%)`;
+                }
+                response += `\n`;
+                if (book.description) {
+                    response += `- **Description:** ${book.description.substring(0, 100)}${book.description.length > 100 ? '...' : ''}\n`;
+                }
+                response += `- **Created:** ${new Date(book.createdAt).toLocaleDateString()}\n`;
+                response += `- **Updated:** ${new Date(book.updatedAt).toLocaleDateString()}\n`;
+                response += `\n`;
+            }
+
+            response += `**Book Management:**\n`;
+            response += `- Use \`get_book\` with any book ID to view details\n`;
+            response += `- Use \`export_book\` to create downloadable versions\n`;
+            response += `- Use \`get_export_history\` to see previous exports`;
+
+            return response;
+        } catch (error) {
+            this.logger.error('Failed to list user books', error as Error, args);
+            throw error;
+        }
+    }
+
+    private getStatusIcon(status: string): string {
+        switch (status) {
+            case 'planning': return '📋';
+            case 'outlining': return '📝';
+            case 'writing': return '✍️';
+            case 'editing': return '✏️';
+            case 'review': return '👀';
+            case 'completed': return '✅';
+            case 'published': return '📖';
+            default: return '📚';
         }
     }
 }

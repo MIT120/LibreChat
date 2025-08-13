@@ -2,7 +2,7 @@
  * Writing Assistant Tool Handlers - MCP integration for writing assistance features
  */
 
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { IToolHandler } from '../../interfaces/index.js';
 import { ILogger } from '../../core/Logger.js';
 import WritingAssistantService, { 
     WritingAssistanceRequest, 
@@ -32,8 +32,8 @@ export class WritingAssistantToolHandlers {
     /**
      * Get all writing assistant tools
      */
-    getTools(): Tool[] {
-        return [
+    getTools(): IToolHandler[] {
+        const tools = [
             // Real-time writing suggestions
             {
                 name: 'get_writing_suggestions',
@@ -298,6 +298,12 @@ export class WritingAssistantToolHandlers {
                 }
             }
         ];
+
+        // Add handler function to each tool
+        return tools.map(tool => ({
+            ...tool,
+            handler: async (args: any) => this.handleToolCall(tool.name, args)
+        }));
     }
 
     /**

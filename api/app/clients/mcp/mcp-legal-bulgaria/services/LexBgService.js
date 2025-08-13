@@ -365,6 +365,14 @@ export class LexBgService {
       // Try each search URL
       for (const searchUrl of searchUrls) {
         try {
+          console.log(`🔥 Attempting Firecrawl for: ${searchUrl}`);
+          
+          // Check if Firecrawl is properly configured
+          if (!this.firecrawlApiKey) {
+            console.log('⚠️ Firecrawl API key not configured, falling back to regular scraping');
+            throw new Error('Firecrawl API key not configured');
+          }
+
           const crawlResponse = await axios.post(
             `${this.firecrawlApiUrl}/v1/crawl`,
             {
@@ -494,12 +502,12 @@ export class LexBgService {
 
       // Fallback to traditional search
       console.log('🔄 Falling back to traditional search...');
-      return await this.searchMainPage(
+      return await this.performLiveSearch({
         query,
-        options.documentType,
-        options.institution,
-        options.limit,
-      );
+        documentType: options.documentType,
+        institution: options.institution,
+        limit: options.limit,
+      });
     }
   }
 

@@ -169,7 +169,7 @@ export class ConfigService extends BaseService implements IConfigService {
     private getDefaultConfig(): BookCreationConfig {
         return {
             database: {
-                uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/librechat',
+                uri: process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/librechat',
                 options: {
                     bufferCommands: false,
                     serverSelectionTimeoutMS: 5000,
@@ -262,8 +262,8 @@ export class ConfigService extends BaseService implements IConfigService {
 
     private applyEnvironmentOverrides(): void {
         // Database overrides
-        if (process.env.MONGODB_URI) {
-            this.config.database.uri = process.env.MONGODB_URI;
+        if (process.env.MONGO_URI || process.env.MONGODB_URI) {
+            this.config.database.uri = process.env.MONGO_URI || process.env.MONGODB_URI;
         }
 
         // Export overrides

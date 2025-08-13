@@ -128,21 +128,6 @@ function ChatView({ index = 0 }: { index?: number }) {
               {isLandingPage ? <ConversationStarters /> : <Footer />}
             </div>
           </TabsContent>
-          <TabsContent value="tools" className="mt-0 h-full rounded-none p-0">
-            <div className="h-full overflow-auto p-2 text-text-secondary">
-              {localize('com_ui_tools')}
-            </div>
-          </TabsContent>
-          <TabsContent value="files" className="mt-0 h-full rounded-none p-0">
-            <div className="h-full overflow-auto p-2 text-text-secondary">
-              {localize('com_ui_files')}
-            </div>
-          </TabsContent>
-          <TabsContent value="history" className="mt-0 h-full rounded-none p-0">
-            <div className="h-full overflow-auto p-2 text-text-secondary">
-              {localize('com_ui_chat_history')}
-            </div>
-          </TabsContent>
         </div>
       </Tabs>
     </div>

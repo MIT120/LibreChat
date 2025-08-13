@@ -5,6 +5,10 @@
  * Main entry point for the server
  */
 
+// Load environment variables
+import { config } from 'dotenv';
+config();
+
 import { Logger, LogLevel } from './core/Logger.js';
 import { container } from './core/ServiceContainer.js';
 import { SERVICE_TOKENS } from './interfaces/index.js';
@@ -51,7 +55,7 @@ async function main(): Promise<void> {
         logger.info('Environment configuration', {
             nodeEnv: process.env.NODE_ENV || 'development',
             logLevel,
-            mongoUri: process.env.MONGODB_URI ? 'configured' : 'not configured',
+            mongoUri: (process.env.MONGO_URI || process.env.MONGODB_URI) ? 'configured' : 'not configured',
             exportDir: process.env.EXPORT_DIR || './exports',
         });
 

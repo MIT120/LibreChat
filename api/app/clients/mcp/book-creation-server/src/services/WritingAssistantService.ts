@@ -5,8 +5,8 @@
 import axios from 'axios';
 import { BaseService } from '../core/BaseService.js';
 import { ILogger } from '../core/Logger.js';
-import { IBook, IWritingStyle } from '../../types/book.js';
-import { generateShortLivedToken } from '~/server/services/AuthService.js';
+import { IBook, IWritingStyle, WritingTone, VocabularyLevel, WritingVoice, SentenceStructure } from '../../types/book.js';
+import { generateShortLivedToken } from '../stubs/authService.js';
 
 export interface WritingAssistanceRequest {
     bookId: string;
@@ -200,7 +200,7 @@ export class WritingAssistantService extends BaseService {
             for (const prompt of continuationPrompts) {
                 try {
                     const continuation = await this.generateAIContent({
-                        prompt,
+                        prompt: prompt.prompt,
                         context: {
                             bookId,
                             previousContent: content,
@@ -222,7 +222,7 @@ export class WritingAssistantService extends BaseService {
                         wordCount: continuation.content.split(' ').length
                     });
                 } catch (error) {
-                    this.logger.warn('Failed to generate continuation', error as Error, { approach: prompt.approach });
+                    this.logger.warn('Failed to generate continuation', { error: error as Error, approach: prompt.approach });
                 }
             }
 
@@ -708,26 +708,26 @@ export class WritingAssistantService extends BaseService {
         return text;
     }
 
-    private analyzeTone(content: string): string {
+    private analyzeTone(content: string): WritingTone {
         // Simple tone analysis based on word patterns
         const positiveWords = content.match(/\b(bright|happy|joy|love|hope|success)\b/gi)?.length || 0;
         const negativeWords = content.match(/\b(dark|sad|fear|hate|despair|failure)\b/gi)?.length || 0;
         const formalWords = content.match(/\b(however|therefore|consequently|furthermore)\b/gi)?.length || 0;
         
-        if (formalWords > 0) return 'formal';
-        if (positiveWords > negativeWords) return 'optimistic';
-        if (negativeWords > positiveWords) return 'serious';
-        return 'neutral';
+        if (formalWords > 0) return WritingTone.FORMAL;
+        if (positiveWords > negativeWords) return WritingTone.HUMOROUS;
+        if (negativeWords > positiveWords) return WritingTone.SERIOUS;
+        return WritingTone.CONVERSATIONAL;
     }
 
-    private analyzeVocabularyLevel(content: string): string {
+    private analyzeVocabularyLevel(content: string): VocabularyLevel {
         const words = content.split(' ');
         const complexWords = words.filter(word => word.length > 7).length;
         const ratio = complexWords / words.length;
         
-        if (ratio > 0.3) return 'advanced';
-        if (ratio > 0.15) return 'intermediate';
-        return 'simple';
+        if (ratio > 0.3) return VocabularyLevel.ADVANCED;
+        if (ratio > 0.15) return VocabularyLevel.INTERMEDIATE;
+        return VocabularyLevel.SIMPLE;
     }
 
     private analyzePacing(content: string): string {
@@ -739,12 +739,12 @@ export class WritingAssistantService extends BaseService {
         return 'moderate';
     }
 
-    private async adjustTone(content: string, targetTone: string): string {
+    private async adjustTone(content: string, targetTone: string): Promise<string> {
         // Mock tone adjustment - in practice, use AI to rewrite
         return `[Adjusted to ${targetTone} tone] ${content}`;
     }
 
-    private async adjustVocabulary(content: string, targetLevel: string): string {
+    private async adjustVocabulary(content: string, targetLevel: string): Promise<string> {
         // Mock vocabulary adjustment
         return `[Adjusted to ${targetLevel} vocabulary] ${content}`;
     }
@@ -753,7 +753,7 @@ export class WritingAssistantService extends BaseService {
         return /["'].*["']/.test(content);
     }
 
-    private async suggestDialogueAddition(content: string): string {
+    private async suggestDialogueAddition(content: string): Promise<string> {
         return `${content}\n\n"Let me think about this," she said, pausing to consider the implications.`;
     }
 
@@ -768,7 +768,7 @@ export class WritingAssistantService extends BaseService {
         return actionVerbs.includes(word.toLowerCase());
     }
 
-    private async enhanceActionVerbs(content: string): string {
+    private async enhanceActionVerbs(content: string): Promise<string> {
         return content.replace(/\bwent\b/g, 'rushed').replace(/\bmoved\b/g, 'darted');
     }
 
@@ -777,7 +777,7 @@ export class WritingAssistantService extends BaseService {
         return sensoryWords?.length || 0;
     }
 
-    private async enhanceSensoryDetails(content: string): string {
+    private async enhanceSensoryDetails(content: string): Promise<string> {
         return `${content} The air carried the scent of rain and distant flowers.`;
     }
 
@@ -795,7 +795,7 @@ export class WritingAssistantService extends BaseService {
         return { score: Math.random() * 0.4 + 0.6 }; // 0.6-1.0
     }
 
-    private async adjustCharacterVoice(content: string, character: string, voice: any): string {
+    private async adjustCharacterVoice(content: string, character: string, voice: any): Promise<string> {
         return `[Adjusted to match ${character}'s voice] ${content}`;
     }
 
@@ -862,7 +862,8 @@ export class WritingAssistantService extends BaseService {
         return {
             tone: this.analyzeTone(content),
             vocabulary: this.analyzeVocabularyLevel(content),
-            voice: 'third_person'
+            voice: WritingVoice.THIRD_PERSON,
+            sentenceStructure: SentenceStructure.VARIED
         };
     }
 

@@ -34,7 +34,16 @@ export enum WritingTone {
   CONVERSATIONAL = 'conversational',
   HUMOROUS = 'humorous',
   SERIOUS = 'serious',
-  INSPIRATIONAL = 'inspirational'
+  INSPIRATIONAL = 'inspirational',
+  DARK = 'dark',
+  ATMOSPHERIC = 'atmospheric',
+  SUSPENSEFUL = 'suspenseful',
+  DRAMATIC = 'dramatic',
+  MYSTERIOUS = 'mysterious',
+  NOIR = 'noir',
+  ROMANTIC = 'romantic',
+  MELANCHOLIC = 'melancholic',
+  TENSE = 'tense'
 }
 
 export enum WritingVoice {

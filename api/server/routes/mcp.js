@@ -8,6 +8,7 @@ const { getUserPluginAuthValue } = require('~/server/services/PluginService');
 const { getMCPManager, getFlowStateManager } = require('~/config');
 const { requireJwtAuth } = require('~/server/middleware');
 const { getLogStores } = require('~/cache');
+const bookUpdateService = require('~/server/services/BookUpdateService');
 
 const router = Router();
 
@@ -343,6 +344,11 @@ router.post('/:serverName/tools/:toolName/call', requireJwtAuth, async (req, res
       tokenMethods: { findToken, updateToken, createToken, deleteTokens },
       customUserVars,
     });
+
+    // Handle post-call processing for book-related tools
+    if (serverName === 'book-creation-server') {
+      await handleBookToolPostProcessing(toolName, toolArguments, result, user);
+    }
 
     res.json({ success: true, result });
   } catch (error) {
@@ -770,5 +776,76 @@ router.get('/:serverName/auth-values', requireJwtAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to check auth value flags' });
   }
 });
+
+/**
+ * Handle post-processing for book-related MCP tools
+ * @param {string} toolName 
+ * @param {Object} toolArguments 
+ * @param {Object} result 
+ * @param {Object} user 
+ */
+async function handleBookToolPostProcessing(toolName, toolArguments, result, user) {
+  try {
+    // Extract bookId from tool arguments or result
+    let bookId = toolArguments?.bookId || toolArguments?.book_id;
+    
+    // For tools that might not have bookId in arguments but return it in result
+    if (!bookId && result?.content?.[0]?.text) {
+      const match = result.content[0].text.match(/\bID:\s*([a-zA-Z0-9_-]{6,})/);
+      if (match) {
+        bookId = match[1];
+      }
+    }
+
+    if (!bookId) {
+      logger.debug('No bookId found for book tool post-processing', { toolName, toolArguments });
+      return;
+    }
+
+    // Define tools that modify book content and should trigger export
+    const bookModifyingTools = [
+      'create_book',
+      'update_book',
+      'add_chapter',
+      'update_chapter',
+      'add_page',
+      'update_page',
+      'delete_page',
+      'write_content',
+      'enhance_content',
+      'generate_chapter',
+      'import_book'
+    ];
+
+    if (bookModifyingTools.includes(toolName)) {
+      logger.info('Book content modified, notifying update', { 
+        toolName, 
+        bookId, 
+        userId: user.id 
+      });
+      
+      // Notify book update
+      bookUpdateService.notifyBookUpdate(bookId, 'book_updated', {
+        toolName,
+        userId: user.id,
+        action: 'content_modified'
+      });
+    }
+
+    // For any book-related tool, we might want to refresh the export
+    // This ensures the preview is always up to date
+    logger.debug('Book tool executed, considering export refresh', { 
+      toolName, 
+      bookId 
+    });
+    
+  } catch (error) {
+    logger.error('Error in book tool post-processing', { 
+      error: error.message, 
+      toolName, 
+      bookId: toolArguments?.bookId 
+    });
+  }
+}
 
 module.exports = router;

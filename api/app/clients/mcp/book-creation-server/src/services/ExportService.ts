@@ -5,11 +5,13 @@
 import fs from 'fs/promises';
 import path from 'path';
 import PDFDocument from 'pdfkit';
+import { v4 as uuidv4 } from 'uuid';
 import { ExportFormat } from '../../types/book.js';
 import { DatabaseError, ValidationError } from '../../types/errors.js';
 import { BaseService, ServiceHealth, ServiceHealthStatus } from '../core/BaseService.js';
 import { ILogger } from '../core/Logger.js';
 import { ExportOptions, ExportResult, IBookService, IExportService } from '../interfaces/index.js';
+import Export, { IExport, IExportDocument } from '../../models/Export.js';
 import { ConfigService } from './ConfigService.js';
 
 interface BookExportData {
@@ -127,57 +129,169 @@ export class ExportService extends BaseService implements IExportService {
             // Fetch the complete book data
             const bookData = await this.fetchBookData(bookId, authorId);
 
-            // Fetch images if available
-            if (this.imageService) {
-                this.logger.info(`Export: ImageService is available, fetching images for book ${bookId}`);
-                try {
-                    const bookImages = await this.imageService.getBookImages(bookId);
-                    bookData.allImages = bookImages;
-                    bookData.imagesByChapter = this.organizeImagesByChapter(bookImages);
+            // Get next version number for this book/format combination
+            const version = await Export.getNextVersion(bookId, format);
+            const exportId = uuidv4();
 
-                    this.logger.info(`Export: Found ${bookImages.length} images for book ${bookId}`, {
-                        images: bookImages.map((img: any) => ({
-                            id: img.id,
-                            pageNumber: img.pageNumber,
-                            chapterId: img.chapterId,
-                            url: img.url ? img.url.substring(0, 50) + '...' : 'no url'
-                        }))
-                    });
-                } catch (error) {
-                    this.logger.warn('Failed to fetch images for export', { error: (error as Error).message });
+            // Create export record in database (pending status)
+            const exportRecord = new Export({
+                _id: exportId,
+                bookId,
+                authorId,
+                format,
+                filename: '', // Will be updated after generation
+                filepath: '', // Will be updated after generation
+                size: 0, // Will be updated after generation
+                version,
+                metadata: {
+                    includeMetadata,
+                    aliasFilename: (options as any).aliasFilename,
+                    bookTitle: bookData.title,
+                    bookTheme: bookData.theme,
+                    bookGenre: bookData.genre,
+                    exportOptions: options,
+                },
+                status: 'pending',
+            });
+
+            try {
+                await exportRecord.save();
+                this.logger.info('Export record created', { exportId, bookId, version });
+
+                // Fetch images if available
+                if (this.imageService) {
+                    this.logger.info(`Export: ImageService is available, fetching images for book ${bookId}`);
+                    try {
+                        const bookImages = await this.imageService.getBookImages(bookId);
+                        bookData.allImages = bookImages;
+                        bookData.imagesByChapter = this.organizeImagesByChapter(bookImages);
+
+                        this.logger.info(`Export: Found ${bookImages.length} images for book ${bookId}`, {
+                            images: bookImages.map((img: any) => ({
+                                id: img.id,
+                                pageNumber: img.pageNumber,
+                                chapterId: img.chapterId,
+                                url: img.url ? img.url.substring(0, 50) + '...' : 'no url'
+                            }))
+                        });
+                    } catch (error) {
+                        this.logger.warn('Failed to fetch images for export', { error: (error as Error).message });
+                        bookData.allImages = [];
+                        bookData.imagesByChapter = {};
+                    }
+                } else {
+                    this.logger.warn('Export: ImageService is not available - images will not be included in export');
                     bookData.allImages = [];
                     bookData.imagesByChapter = {};
                 }
-            } else {
-                this.logger.warn('Export: ImageService is not available - images will not be included in export');
-                bookData.allImages = [];
-                bookData.imagesByChapter = {};
-            }
 
-            // Generate export based on format
-            const result = await this.generateExport(bookData, format as ExportFormat, includeMetadata);
+                // Generate export based on format
+                const result = await this.generateExport(bookData, format as ExportFormat, includeMetadata);
 
-            // Optional alias filename (e.g., copy to conversationId.html for immediate client fetch)
-            if (options && (options as any).aliasFilename) {
-                try {
-                    const exportConfig = this.configService.getExportConfig();
-                    const aliasPath = path.join(exportConfig.outputDirectory, String((options as any).aliasFilename));
-                    await fs.copyFile(result.filepath, aliasPath);
-                    this.logger.info('Export alias created', { alias: aliasPath });
-                } catch (aliasErr) {
-                    this.logger.warn('Failed to create export alias', { error: (aliasErr as Error).message });
+                // Update export record with file details
+                exportRecord.filename = result.filename;
+                exportRecord.filepath = result.filepath;
+                exportRecord.size = result.size;
+                exportRecord.status = 'completed';
+                await exportRecord.save();
+
+                // Optional alias filename (e.g., copy to conversationId.html for immediate client fetch)
+                if (options && (options as any).aliasFilename) {
+                    try {
+                        const exportConfig = this.configService.getExportConfig();
+                        const aliasPath = path.join(exportConfig.outputDirectory, String((options as any).aliasFilename));
+                        await fs.copyFile(result.filepath, aliasPath);
+                        this.logger.info('Export alias created', { alias: aliasPath });
+                    } catch (aliasErr) {
+                        this.logger.warn('Failed to create export alias', { error: (aliasErr as Error).message });
+                    }
                 }
+
+                this.logger.info('Book export completed successfully', {
+                    exportId,
+                    bookId,
+                    format,
+                    filename: result.filename,
+                    size: result.size,
+                    version,
+                });
+
+                // Return enhanced result with database info
+                return {
+                    ...result,
+                    exportId,
+                    version,
+                    url: `/c/exports/${result.filename}`,
+                };
+
+            } catch (error) {
+                // Mark export as failed
+                exportRecord.status = 'failed';
+                exportRecord.error = (error as Error).message;
+                await exportRecord.save().catch(() => {}); // Don't throw if save fails
+                throw error;
             }
-
-            this.logger.info('Book export completed successfully', {
-                bookId,
-                format,
-                filename: result.filename,
-                size: result.size,
-            });
-
-            return result;
         }, { bookId, format, authorId: options.authorId });
+    }
+
+    /**
+     * Get export history for a book
+     */
+    async getBookExportHistory(bookId: string, authorId: string, options: {
+        format?: string;
+        status?: string;
+        limit?: number;
+        skip?: number;
+    } = {}): Promise<IExportDocument[]> {
+        return this.executeWithLogging('getBookExportHistory', async () => {
+            return await Export.getBookExportHistory(bookId, authorId, options);
+        }, { bookId, authorId });
+    }
+
+    /**
+     * Get latest export for a book and format
+     */
+    async getLatestExport(bookId: string, format: string, authorId: string): Promise<IExportDocument | null> {
+        return this.executeWithLogging('getLatestExport', async () => {
+            return await Export.getLatestExport(bookId, format, authorId);
+        }, { bookId, format, authorId });
+    }
+
+    /**
+     * Get export by ID
+     */
+    async getExportById(exportId: string, authorId: string): Promise<IExportDocument | null> {
+        return this.executeWithLogging('getExportById', async () => {
+            return await Export.findOne({ _id: exportId, authorId });
+        }, { exportId, authorId });
+    }
+
+    /**
+     * Mark export as downloaded
+     */
+    async markExportDownloaded(exportId: string, authorId: string): Promise<IExportDocument | null> {
+        return this.executeWithLogging('markExportDownloaded', async () => {
+            const exportRecord = await Export.findOne({ _id: exportId, authorId });
+            if (exportRecord) {
+                await exportRecord.markDownloaded();
+                return exportRecord;
+            }
+            return null;
+        }, { exportId, authorId });
+    }
+
+    /**
+     * Delete export (mark as deleted, don't physically remove)
+     */
+    async deleteExport(exportId: string, authorId: string): Promise<boolean> {
+        return this.executeWithLogging('deleteExport', async () => {
+            const exportRecord = await Export.findOne({ _id: exportId, authorId });
+            if (exportRecord) {
+                await exportRecord.markDeleted();
+                return true;
+            }
+            return false;
+        }, { exportId, authorId });
     }
 
     private async fetchBookData(bookId: string, authorId: string): Promise<BookExportData> {

@@ -7,8 +7,11 @@
     "scripts": {
         "build": "tsc",
         "build:watch": "tsc --watch",
+        "build:simple": "tsc src/index.ts --outDir dist --target ES2022 --module ESNext --moduleResolution node --esModuleInterop --allowSyntheticDefaultImports --skipLibCheck",
         "start": "node dist/src/index.js",
+        "start:simple": "node dist/src/simple-index.js",
         "dev": "tsc && node --watch dist/src/index.js",
+        "dev:simple": "npm run build:simple && node --watch dist/src/simple-index.js",
         "dev:ts": "tsc --watch & node --watch dist/src/index.js",
         "test": "jest",
         "test:watch": "jest --watch",
@@ -18,6 +21,7 @@
     "dependencies": {
         "@modelcontextprotocol/sdk": "^0.6.0",
         "axios": "^1.6.0",
+        "dotenv": "^16.0.0",
         "module-alias": "^2.2.3",
         "mongoose": "^8.0.0",
         "openai": "^4.0.0",

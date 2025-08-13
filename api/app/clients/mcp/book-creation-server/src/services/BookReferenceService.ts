@@ -6,7 +6,7 @@ import axios from 'axios';
 import { ILogger } from '../core/Logger.js';
 import { BaseService } from '../core/BaseService.js';
 import { IBook } from '../../types/book.js';
-import { generateShortLivedToken } from '~/server/services/AuthService.js';
+import { generateShortLivedToken } from '../stubs/authService.js';
 
 export interface OpenLibrarySearchResult {
     docs: Array<{
@@ -416,7 +416,8 @@ export class BookReferenceService extends BaseService {
                     }
                 }
             } catch (error) {
-                this.logger.warn('Failed to scrape reference book', error as Error, {
+                this.logger.warn('Failed to scrape reference book', {
+                    error: error as Error,
                     referenceId: reference.id,
                     title: reference.title
                 });
@@ -531,7 +532,7 @@ export class BookReferenceService extends BaseService {
                 }
             }
         } catch (error) {
-            this.logger.debug('Gutenberg search failed', error as Error, { title: reference.title });
+            this.logger.debug('Gutenberg search failed', { error: error as Error, title: reference.title });
         }
         
         return null;
@@ -548,7 +549,7 @@ export class BookReferenceService extends BaseService {
             const previewUrl = `https://books.google.com/books?isbn=${isbn}`;
             return await this.scrapeWithFirecrawl(previewUrl);
         } catch (error) {
-            this.logger.debug('Google Books preview failed', error as Error, { isbn: reference.isbn?.[0] });
+            this.logger.debug('Google Books preview failed', { error: error as Error, isbn: reference.isbn?.[0] });
         }
 
         return null;

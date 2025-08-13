@@ -8,7 +8,7 @@ import { IBook } from '../types/book.js';
 const writingStyleSchema = new mongoose.Schema({
     tone: {
         type: String,
-        enum: ['formal', 'informal', 'academic', 'conversational', 'humorous', 'serious', 'inspirational'],
+        enum: ['formal', 'informal', 'academic', 'conversational', 'humorous', 'serious', 'inspirational', 'dark', 'atmospheric', 'suspenseful', 'dramatic', 'mysterious', 'noir', 'romantic', 'melancholic', 'tense'],
         required: true,
     },
     voice: {

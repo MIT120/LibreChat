@@ -591,7 +591,7 @@ export class BookImportService extends BaseService {
         try {
             await fs.mkdir(importDir, { recursive: true });
         } catch (error) {
-            this.logger.warn('Failed to create import directory', error as Error, { importDir });
+            this.logger.warn('Failed to create import directory', { error: error as Error, importDir });
         }
     }
 
@@ -599,12 +599,21 @@ export class BookImportService extends BaseService {
         const tempDir = path.join(process.cwd(), 'temp', 'imports');
         try {
             const files = await fs.readdir(tempDir);
-            const oldFiles = files.filter(file => {
+            const oldFiles = [];
+            
+            for (const file of files) {
                 const filePath = path.join(tempDir, file);
-                // Remove files older than 1 hour
-                const stats = fs.stat(filePath);
-                return Date.now() - stats.then(s => s.mtime.getTime()) > 3600000;
-            });
+                try {
+                    // Remove files older than 1 hour
+                    const stats = await fs.stat(filePath);
+                    if (Date.now() - stats.mtime.getTime() > 3600000) {
+                        oldFiles.push(file);
+                    }
+                } catch (error) {
+                    // Skip files that can't be accessed
+                    continue;
+                }
+            }
 
             for (const file of oldFiles) {
                 await fs.unlink(path.join(tempDir, file));

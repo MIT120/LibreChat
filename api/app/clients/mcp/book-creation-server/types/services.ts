@@ -101,6 +101,9 @@ export interface ExportResult {
   format: string;
   size: number;
   createdAt: Date;
+  exportId?: string;
+  version?: number;
+  url?: string;
 }
 
 // Configuration service interface

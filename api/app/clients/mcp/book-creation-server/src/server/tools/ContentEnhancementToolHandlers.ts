@@ -2,7 +2,7 @@
  * Content Enhancement Tool Handlers - MCP integration for character development, world-building, conflict generation, and research assistance
  */
 
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { IToolHandler } from '../../interfaces/index.js';
 import { ILogger } from '../../core/Logger.js';
 import ContentEnhancementService, {
     CharacterProfile,
@@ -27,8 +27,8 @@ export class ContentEnhancementToolHandlers {
     /**
      * Get all content enhancement tools
      */
-    getTools(): Tool[] {
-        return [
+    getTools(): IToolHandler[] {
+        const tools = [
             // Character Development Generator
             {
                 name: 'generate_character_development',
@@ -318,6 +318,12 @@ export class ContentEnhancementToolHandlers {
                 }
             }
         ];
+
+        // Add handler function to each tool
+        return tools.map(tool => ({
+            ...tool,
+            handler: async (args: any) => this.handleToolCall(tool.name, args)
+        }));
     }
 
     /**

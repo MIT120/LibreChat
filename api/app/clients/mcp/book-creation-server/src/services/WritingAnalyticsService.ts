@@ -450,7 +450,7 @@ export class WritingAnalyticsService extends BaseService {
 
     private analyzeWritingStyle(content: string): StyleAnalysis {
         const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
-        const words = content.match(/\b\w+\b/g) || [];
+        const words: string[] = content.match(/\b\w+\b/g) || [];
 
         // Mock style analysis
         return {
@@ -566,8 +566,8 @@ export class WritingAnalyticsService extends BaseService {
     }
 
     private estimateSyllables(content: string): number {
-        const words = content.match(/\b\w+\b/g) || [];
-        return words.reduce((total, word) => {
+        const words: string[] = content.match(/\b\w+\b/g) || [];
+        return words.reduce((total: number, word: string) => {
             // Simple syllable estimation
             const vowels = word.toLowerCase().match(/[aeiouy]+/g) || [];
             return total + Math.max(1, vowels.length);

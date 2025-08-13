@@ -2120,15 +2120,10 @@ class BulgarianLegalServer {
   }
 
   async handleEnhancedLegalSearch(args) {
+    // If RAG is not available, use Firecrawl-enhanced search instead
     if (!process.env.RAG_API_URL) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: '❌ RAG система не е налична. Използва се обикновено търсене.',
-          },
-        ],
-      };
+      console.log('⚠️ RAG система не е налична. Използва се Firecrawl търсене.');
+      return await this.handleEnhancedSearchWithoutRAG(args);
     }
 
     try {
@@ -2242,6 +2237,110 @@ class BulgarianLegalServer {
           {
             type: 'text',
             text: `❌ Грешка при разширеното търсене: ${error.message}`,
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Enhanced search without RAG - uses Firecrawl for all sources
+   */
+  async handleEnhancedSearchWithoutRAG(args) {
+    try {
+      const {
+        query,
+        sources = ['both'],
+        limit = 20,
+      } = args;
+
+      let searchPromises = [];
+
+      // Determine which sources to search
+      const searchLex = sources.includes('lex.bg') || sources.includes('both');
+      const searchApis = sources.includes('apis') || sources.includes('both');
+
+      console.log(`🔥 Enhanced Firecrawl search for: "${query}"`);
+
+      if (searchLex) {
+        searchPromises.push(
+          this.lexBgService.searchWithFirecrawl(query, { limit: Math.ceil(limit / 2) })
+            .then(result => ({ source: 'lex.bg', ...result }))
+            .catch(error => ({ source: 'lex.bg', success: false, error: error.message, results: [] }))
+        );
+      }
+
+      if (searchApis) {
+        searchPromises.push(
+          this.apisService.searchLegislation({ query, limit: Math.ceil(limit / 2) })
+            .then(result => ({ source: 'apis', ...result }))
+            .catch(error => ({ source: 'apis', success: false, error: error.message, results: [] }))
+        );
+      }
+
+      // Execute searches in parallel
+      const searchResults = await Promise.all(searchPromises);
+
+      // Combine and process results
+      const allResults = [];
+      let responseText = `🔥 **ENHANCED FIRECRAWL LEGAL SEARCH**\n\n`;
+      responseText += `🔍 **Заявка:** ${query}\n`;
+      responseText += `📊 **Търсене в:** ${sources.join(', ')}\n\n`;
+
+      searchResults.forEach(result => {
+        if (result.success && result.results.length > 0) {
+          responseText += `✅ **${result.source.toUpperCase()}:** ${result.results.length} резултата\n`;
+          if (result.fromVectorDB) {
+            responseText += `   💾 Източник: Vector Database\n`;
+          } else if (result.method) {
+            responseText += `   🔍 Метод: ${result.method}\n`;
+          }
+          allResults.push(...result.results.map(r => ({ ...r, source: result.source })));
+        } else {
+          responseText += `❌ **${result.source.toUpperCase()}:** Грешка - ${result.error || 'Няма резултати'}\n`;
+        }
+      });
+
+      responseText += `\n📋 **ОБЩО РЕЗУЛТАТИ: ${allResults.length}**\n\n`;
+
+      if (allResults.length === 0) {
+        responseText += `❗ Няма намерени резултати за "${query}".\n\n`;
+        responseText += `💡 **Препоръки:**\n`;
+        responseText += `- Опитайте с различни ключови думи\n`;
+        responseText += `- Използвайте синоними\n`;
+        responseText += `- Проверете правописа\n`;
+      } else {
+        // Sort by relevance and show top results
+        const sortedResults = allResults
+          .sort((a, b) => (b.vectorScore || 0) - (a.vectorScore || 0))
+          .slice(0, limit);
+
+        sortedResults.forEach((doc, index) => {
+          responseText += `**${index + 1}. ${doc.title}**\n`;
+          responseText += `   📰 Източник: ${doc.source}\n`;
+          if (doc.date) responseText += `   📅 Дата: ${doc.date}\n`;
+          if (doc.type) responseText += `   📄 Тип: ${doc.type}\n`;
+          if (doc.url) responseText += `   🔗 URL: ${doc.url}\n`;
+          if (doc.summary) responseText += `   📝 Резюме: ${doc.summary.substring(0, 200)}...\n`;
+          if (doc.vectorScore) responseText += `   🎯 Релевантност: ${(doc.vectorScore * 100).toFixed(1)}%\n`;
+          responseText += `\n`;
+        });
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: responseText,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Грешка при разширено търсене: ${error.message}`,
           },
         ],
       };

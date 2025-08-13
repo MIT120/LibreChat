@@ -6,7 +6,7 @@ import axios from 'axios';
 import { BaseService } from '../core/BaseService.js';
 import { ILogger } from '../core/Logger.js';
 import { IBook, IWritingStyle } from '../../types/book.js';
-import { generateShortLivedToken } from '~/server/services/AuthService.js';
+import { generateShortLivedToken } from '../stubs/authService.js';
 
 export interface CharacterProfile {
     id: string;

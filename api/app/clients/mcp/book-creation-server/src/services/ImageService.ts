@@ -202,10 +202,10 @@ export class ImageService extends BaseService {
 
             // Generate image URL
             const imageUrl = await this.requestDalleImageUrl(openaiApiKey, dallePrompt, {
-                model,
-                size,
-                quality,
-                style: renderStyle,
+                model: 'dall-e-3',
+                size: '1024x1024',
+                quality: 'standard',
+                style: 'vivid',
             });
 
             // Attempt to download and convert to base64 (optional, best-effort)
@@ -318,7 +318,12 @@ export class ImageService extends BaseService {
         return `${prompt}. ${basePrompt}`;
     }
 
-    private async requestDalleImageUrl(apiKey: string, prompt: string): Promise<string> {
+    private async requestDalleImageUrl(apiKey: string, prompt: string, opts?: {
+        model?: string;
+        size?: string;
+        quality?: string;
+        style?: string;
+    }): Promise<string> {
         const response = await fetch('https://api.openai.com/v1/images/generations', {
             method: 'POST',
             headers: {
@@ -326,12 +331,12 @@ export class ImageService extends BaseService {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: opts.model,
+                model: opts?.model || 'dall-e-3',
                 prompt,
                 n: 1,
-                size: opts.size,
-                quality: opts.quality,
-                style: opts.style,
+                size: opts?.size || '1024x1024',
+                quality: opts?.quality || 'standard',
+                style: opts?.style || 'vivid',
             }),
         });
 

@@ -71,7 +71,9 @@
     "b:test:api": "cd api && bun run b:test",
     "b:balance": "bun config/add-balance.js",
     "b:list-balances": "bun config/list-balances.js",
-    "reset-terms": "node config/reset-terms.js"
+    "reset-terms": "node config/reset-terms.js",
+    "build:mcp": "cd api/app/clients/mcp/book-creation-server && npm run build",
+    "mcp:build-all": "npm run build:mcp"
   },
   "repository": {
     "type": "git",

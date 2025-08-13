@@ -165,7 +165,7 @@ export class VKSScraperService {
       // Fallback to Puppeteer if Firecrawl didn't work or not available
       if (results.length === 0) {
         console.log('🤖 Falling back to Puppeteer search...');
-        
+
         // Initialize browser
         const browser = await this.initBrowser();
         const page = await browser.newPage();
@@ -199,7 +199,9 @@ export class VKSScraperService {
       const uniqueResults = this.deduplicateResults(results);
       const enhancedResults = await this.enhanceResults(uniqueResults, searchCriteria);
 
-      console.log(`✅ VKS search completed: ${enhancedResults.length} results found using ${searchMethod}`);
+      console.log(
+        `✅ VKS search completed: ${enhancedResults.length} results found using ${searchMethod}`,
+      );
 
       return {
         success: true,
@@ -210,9 +212,10 @@ export class VKSScraperService {
         metadata: {
           searchDate: new Date().toISOString(),
           searchCriteria,
-          methodsUsed: searchMethod === 'firecrawl_enhanced' 
-            ? ['firecrawl'] 
-            : ['form_search', 'general_search', 'news_search'],
+          methodsUsed:
+            searchMethod === 'firecrawl_enhanced'
+              ? ['firecrawl']
+              : ['form_search', 'general_search', 'news_search'],
           duplicatesRemoved: results.length - uniqueResults.length,
           usingFirecrawl: searchMethod === 'firecrawl_enhanced',
         },
@@ -259,12 +262,13 @@ export class VKSScraperService {
       if (process.env.RAG_API_URL) {
         try {
           console.log('📚 Checking vector database for existing VKS content...');
-          const ragQuery = `VKS ВКС Върховен касационен съд ${query} ${chamber} ${decisionType}`.trim();
+          const ragQuery =
+            `VKS ВКС Върховен касационен съд ${query} ${chamber} ${decisionType}`.trim();
           const ragResponse = await this.ragService.queryLegalDocuments(ragQuery, maxResults, 0.75);
-          
+
           if (ragResponse.success && ragResponse.results.length > 0) {
             console.log(`✅ Found ${ragResponse.results.length} VKS results in vector database`);
-            vectorResults = ragResponse.results.map(result => ({
+            vectorResults = ragResponse.results.map((result) => ({
               title: result.metadata?.title || 'ВКС решение',
               summary: result.content?.substring(0, 400) || '',
               url: result.metadata?.url || result.metadata?.source_url || '',
@@ -278,7 +282,7 @@ export class VKSScraperService {
               precedentValue: 'high',
               legalSignificance: result.metadata?.legal_significance || 9,
               vectorScore: result.similarity_score || 0,
-              metadata: result.metadata
+              metadata: result.metadata,
             }));
           }
         } catch (ragError) {
@@ -295,7 +299,7 @@ export class VKSScraperService {
           total: vectorResults.length,
           source: 'vks.bg',
           method: 'vector_db',
-          vectorDbUsed: true
+          vectorDbUsed: true,
         };
       }
 
@@ -315,7 +319,8 @@ export class VKSScraperService {
       if (this.cache.has(cacheKey)) {
         const cached = this.cache.get(cacheKey);
         const ageHours = (Date.now() - cached.timestamp) / (1000 * 60 * 60);
-        if (ageHours < 8) { // Reduced cache time since we have vector DB
+        if (ageHours < 8) {
+          // Reduced cache time since we have vector DB
           console.log('📋 Using cached Firecrawl VKS result');
           return cached.data;
         }
@@ -326,6 +331,16 @@ export class VKSScraperService {
       // Try each search URL
       for (const searchUrl of searchUrls) {
         try {
+          console.log(`🔥 Attempting VKS Firecrawl for: ${searchUrl}`);
+
+          // Check if Firecrawl is properly configured
+          if (!this.firecrawlApiKey) {
+            console.log(
+              '⚠️ Firecrawl API key not configured for VKS, falling back to traditional scraping',
+            );
+            throw new Error('Firecrawl API key not configured');
+          }
+
           const crawlResponse = await axios.post(
             `${this.firecrawlApiUrl}/v1/crawl`,
             {
@@ -406,14 +421,29 @@ export class VKSScraperService {
           }
         } catch (urlError) {
           console.warn(`Firecrawl failed for VKS URL ${searchUrl}:`, urlError.message);
+
+          // If this is a configuration error, fall back immediately to traditional scraping
+          if (urlError.message.includes('API key') || urlError.message.includes('configuration')) {
+            console.log(
+              '🔄 Falling back to traditional VKS scraping due to configuration issue...',
+            );
+            return await this.searchVKSDecisions(searchCriteria);
+          }
           continue;
         }
       }
 
       // Store new results in vector database
-      if (bestResult.success && bestResult.results.length > 0 && storeResults && process.env.RAG_API_URL) {
+      if (
+        bestResult.success &&
+        bestResult.results.length > 0 &&
+        storeResults &&
+        process.env.RAG_API_URL
+      ) {
         try {
-          console.log(`💾 Storing ${bestResult.results.length} new VKS results in vector database...`);
+          console.log(
+            `💾 Storing ${bestResult.results.length} new VKS results in vector database...`,
+          );
           await this.storeVKSResultsInVectorDB(bestResult.results, searchCriteria);
         } catch (storeError) {
           console.warn('⚠️ Failed to store VKS results in vector DB:', storeError.message);
@@ -443,10 +473,21 @@ export class VKSScraperService {
       };
 
       return finalResult;
-
     } catch (error) {
       console.error('🔥 Firecrawl VKS search failed:', error);
-      return { success: false, results: [], error: error.message };
+
+      // Fallback to traditional VKS scraping
+      console.log('🔄 Falling back to traditional VKS scraping...');
+      try {
+        return await this.searchVKSDecisions(searchCriteria);
+      } catch (fallbackError) {
+        console.error('❌ Traditional VKS scraping also failed:', fallbackError);
+        return {
+          success: false,
+          results: [],
+          error: `Both Firecrawl and traditional scraping failed: ${error.message}`,
+        };
+      }
     }
   }
 
@@ -463,16 +504,20 @@ export class VKSScraperService {
     for (const page of crawlData) {
       if (!page.markdown && !page.html) continue;
       if (processedUrls.has(page.url)) continue;
-      
+
       processedUrls.add(page.url);
 
       try {
         // Use markdown content if available, otherwise HTML
         const content = page.markdown || page.html;
-        const extractedDecisions = this.extractVKSDecisionsFromContent(content, page.url, searchCriteria);
-        
+        const extractedDecisions = this.extractVKSDecisionsFromContent(
+          content,
+          page.url,
+          searchCriteria,
+        );
+
         results.push(...extractedDecisions);
-        
+
         if (results.length >= maxResults) break;
       } catch (error) {
         console.warn(`Failed to process VKS page ${page.url}:`, error.message);
@@ -491,7 +536,7 @@ export class VKSScraperService {
       total: sortedResults.length,
       source: 'vks.bg',
       method: 'firecrawl',
-      processedPages: crawlData.length
+      processedPages: crawlData.length,
     };
   }
 
@@ -500,10 +545,10 @@ export class VKSScraperService {
    */
   extractVKSDecisionsFromContent(content, url, searchCriteria) {
     const decisions = [];
-    
+
     // Split content into potential decision blocks
     const sections = this.splitVKSContentIntoDecisions(content);
-    
+
     for (const section of sections) {
       const decision = this.parseVKSDecisionSection(section, url, searchCriteria);
       if (decision && this.isValidVKSDecision(decision, searchCriteria)) {
@@ -528,7 +573,7 @@ export class VKSScraperService {
     ];
 
     let sections = [content];
-    
+
     for (const separator of separators) {
       const newSections = [];
       for (const section of sections) {
@@ -538,14 +583,16 @@ export class VKSScraperService {
     }
 
     // Filter sections that might contain court decisions
-    return sections.filter(section => {
+    return sections.filter((section) => {
       const sectionLower = section.toLowerCase();
-      return section.trim().length > 100 && 
-             (sectionLower.includes('решение') || 
-              sectionLower.includes('постановление') ||
-              sectionLower.includes('определение') ||
-              sectionLower.includes('съд') ||
-              sectionLower.includes('дело'));
+      return (
+        section.trim().length > 100 &&
+        (sectionLower.includes('решение') ||
+          sectionLower.includes('постановление') ||
+          sectionLower.includes('определение') ||
+          sectionLower.includes('съд') ||
+          sectionLower.includes('дело'))
+      );
     });
   }
 
@@ -564,12 +611,14 @@ export class VKSScraperService {
       let decisionType = '';
 
       // Extract decision title
-      const titleMatch = section.match(/(?:^|\n)(?:решение|постановление|определение)\s*(?:№?\s*\d+[\/\-\d]*)?[:\-\s]*([^\n]{20,120})/i);
+      const titleMatch = section.match(
+        /(?:^|\n)(?:решение|постановление|определение)\s*(?:№?\s*\d+[\/\-\d]*)?[:\-\s]*([^\n]{20,120})/i,
+      );
       if (titleMatch) {
         title = titleMatch[0].trim();
       } else {
         // Fallback title extraction
-        const lines = section.split('\n').filter(line => line.trim().length > 10);
+        const lines = section.split('\n').filter((line) => line.trim().length > 10);
         if (lines.length > 0) {
           title = lines[0].trim().substring(0, 100);
         }
@@ -632,9 +681,8 @@ export class VKSScraperService {
         source: 'vks.bg',
         extractedBy: 'firecrawl',
         precedentValue: 'high', // VKS decisions have high precedent value
-        legalSignificance: this.assessVKSLegalSignificance(section)
+        legalSignificance: this.assessVKSLegalSignificance(section),
       };
-
     } catch (error) {
       console.warn('Error parsing VKS decision section:', error.message);
       return null;
@@ -668,7 +716,7 @@ export class VKSScraperService {
   isValidVKSDecision(decision, searchCriteria) {
     if (!decision.title || decision.title.length < 5) return false;
     if (!decision.summary || decision.summary.length < 30) return false;
-    
+
     const { query = '', chamber = 'any', decisionType = 'any' } = searchCriteria;
 
     // Check chamber filter
@@ -676,9 +724,12 @@ export class VKSScraperService {
       return false;
     }
 
-    // Check decision type filter  
-    if (decisionType !== 'any' && decision.decisionType && 
-        !decision.decisionType.toLowerCase().includes(decisionType.toLowerCase())) {
+    // Check decision type filter
+    if (
+      decisionType !== 'any' &&
+      decision.decisionType &&
+      !decision.decisionType.toLowerCase().includes(decisionType.toLowerCase())
+    ) {
       return false;
     }
 
@@ -686,11 +737,11 @@ export class VKSScraperService {
     if (query) {
       const queryTerms = query.toLowerCase().split(/\s+/);
       const decisionText = `${decision.title} ${decision.summary}`.toLowerCase();
-      
-      const matchedTerms = queryTerms.filter(term => 
-        term.length > 2 && decisionText.includes(term)
+
+      const matchedTerms = queryTerms.filter(
+        (term) => term.length > 2 && decisionText.includes(term),
       );
-      
+
       // At least 40% of meaningful query terms should match for VKS
       return matchedTerms.length >= Math.max(1, Math.floor(queryTerms.length * 0.4));
     }
@@ -721,10 +772,13 @@ export class VKSScraperService {
    */
   sortVKSResultsByRelevance(results, searchCriteria) {
     const { query = '' } = searchCriteria;
-    const queryTerms = query.toLowerCase().split(/\s+/).filter(term => term.length > 2);
-    
+    const queryTerms = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((term) => term.length > 2);
+
     return results
-      .map(result => {
+      .map((result) => {
         const resultText = `${result.title} ${result.summary}`.toLowerCase();
         let score = 0;
 
@@ -1479,7 +1533,7 @@ export class VKSScraperService {
   async storeVKSResultsInVectorDB(results, searchCriteria) {
     try {
       const { query = '', chamber = 'any', decisionType = 'any' } = searchCriteria;
-      
+
       console.log(`💾 Storing ${results.length} VKS decisions in vector database...`);
 
       for (const result of results) {
@@ -1533,11 +1587,11 @@ export class VKSScraperService {
     sections.push(`ИЗТОЧНИК: Върховен касационен съд (${result.url})`);
     sections.push(`ЗАГЛАВИЕ: ${result.title}`);
     sections.push(`СЪД: ${result.court}`);
-    
+
     if (result.caseNumber) {
       sections.push(`ДЕЛО №: ${result.caseNumber}`);
     }
-    
+
     if (result.date) {
       sections.push(`ДАТА: ${result.date}`);
     }

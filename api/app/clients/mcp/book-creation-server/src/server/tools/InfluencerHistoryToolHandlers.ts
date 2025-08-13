@@ -2,7 +2,7 @@
  * Influencer History Tool Handlers - MCP integration for influencer tracking and history analysis
  */
 
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { IToolHandler } from '../../interfaces/index.js';
 import { ILogger } from '../../core/Logger.js';
 import InfluencerHistoryService, {
     InfluencerTrackingConfig,
@@ -23,8 +23,8 @@ export class InfluencerHistoryToolHandlers {
     /**
      * Get all influencer history tracking tools
      */
-    getTools(): Tool[] {
-        return [
+    getTools(): IToolHandler[] {
+        const tools = [
             // Setup influencer tracking
             {
                 name: 'setup_influencer_tracking',
@@ -416,6 +416,12 @@ export class InfluencerHistoryToolHandlers {
                 }
             }
         ];
+
+        // Add handler function to each tool
+        return tools.map(tool => ({
+            ...tool,
+            handler: async (args: any) => this.handleToolCall(tool.name, args)
+        }));
     }
 
     /**

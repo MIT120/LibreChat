@@ -5,6 +5,7 @@ import { Button } from '~/components/ui';
 import PDFPreviewSidebar from './PDFPreviewSidebar';
 import { usePDFSidebar } from '~/hooks/usePDFSidebar';
 import { useMCPServerManager } from '~/hooks/MCP/useMCPServerManager';
+import { BadgeRowProvider } from '~/Providers';
 import store from '~/store';
 
 // Import the book creation panel if it exists
@@ -17,11 +18,21 @@ try {
 
 interface LegalDocumentPanelProps {
   // Add any props needed
+  // eslint-disable-next-line @typescript-eslint/no-empty-interface
 }
 
 export default function LegalDocumentPanel(props: LegalDocumentPanelProps) {
+  const conversation = useRecoilValue(store.conversationByIndex(0));
+
+  return (
+    <BadgeRowProvider conversationId={conversation?.conversationId}>
+      <LegalDocumentPanelContent {...props} />
+    </BadgeRowProvider>
+  );
+}
+
+function LegalDocumentPanelContent(props: LegalDocumentPanelProps) {
   const { mcpValues } = useMCPServerManager();
-  const conversation = useRecoilValue(store.conversation);
   const [activeView, setActiveView] = useState<'books' | 'legal'>('legal');
 
   const {

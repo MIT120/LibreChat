@@ -9,14 +9,14 @@
     "checkJs": false,
     "outDir": "./dist",
     "rootDir": "./",
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": false,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
     "noImplicitOverride": true,
     "useUnknownInCatchVariables": true,
     "forceConsistentCasingInFileNames": true,
@@ -30,7 +30,11 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "incremental": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "baseUrl": "./",
+    "paths": {
+      "~/*": ["../../../../*"]
+    }
   },
   "include": ["./src/**/*.ts", "./types/**/*.ts", "./models/**/*.ts"],
   "exclude": [

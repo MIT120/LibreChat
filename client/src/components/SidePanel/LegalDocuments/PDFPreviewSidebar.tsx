@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Download, Eye, Trash2, FileText, RefreshCw, AlertCircle } from 'lucide-react';
 import { Button } from '~/components/ui';
 import { useToastContext } from '~/Providers';
+import { useAuthContext } from '~/hooks';
 
 interface PDFDocument {
   filename: string;
@@ -33,8 +34,10 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
   const [selectedPdf, setSelectedPdf] = useState<PDFDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [isConnected, setIsConnected] = useState<boolean>(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const { showToast } = useToastContext();
+  const { token } = useAuthContext();
 
   // Fetch PDF documents list
   const fetchPDFDocuments = useCallback(async () => {
@@ -42,11 +45,14 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
       setIsLoading(true);
       setError(null);
 
-      // This would normally be an API call to the MCP server
-      // For now, we'll simulate the data structure
-      const response = await fetch('/api/mcp/legal-documents/pdfs', {
+      // Call the legal documents API to list PDFs
+      const response = await fetch('/api/legal-documents/pdfs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        credentials: 'include',
         body: JSON.stringify({
           tool: 'list_exported_pdfs',
           arguments: {}
@@ -64,19 +70,22 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
         const pdfList = parsePDFListFromText(data.content[0].text);
         setPdfDocuments(pdfList);
         setLastUpdate(new Date());
+        setIsConnected(true);
+      } else {
+        setIsConnected(false);
       }
     } catch (err) {
       console.error('Error fetching PDF documents:', err);
       setError('Failed to load PDF documents');
+      setIsConnected(false);
       showToast({
-        title: 'Error',
-        description: 'Failed to load PDF documents',
+        message: 'Failed to load PDF documents',
         status: 'error',
       });
     } finally {
       setIsLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, token]);
 
   // Parse PDF list from MCP server text response
   const parsePDFListFromText = (text: string): PDFDocument[] => {
@@ -153,9 +162,13 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
       }
 
       if (exportTool) {
-        const response = await fetch('/api/mcp/legal-documents/export', {
+        const response = await fetch('/api/legal-documents/export', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+          credentials: 'include',
           body: JSON.stringify({
             tool: exportTool,
             arguments: exportArgs
@@ -166,8 +179,7 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
           // Refresh the PDF list
           await fetchPDFDocuments();
           showToast({
-            title: 'Success',
-            description: 'Document exported to PDF automatically',
+            message: 'Document exported to PDF automatically',
             status: 'success',
           });
         }
@@ -175,14 +187,18 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
     } catch (err) {
       console.error('Auto-export error:', err);
     }
-  }, [currentDocumentData, autoExportEnabled, fetchPDFDocuments, showToast]);
+  }, [currentDocumentData, autoExportEnabled, fetchPDFDocuments, showToast, token]);
 
   // Delete PDF document
   const deletePDF = async (filename: string) => {
     try {
-      const response = await fetch('/api/mcp/legal-documents/delete', {
+      const response = await fetch('/api/legal-documents/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        credentials: 'include',
         body: JSON.stringify({
           tool: 'delete_exported_pdf',
           arguments: { filename }
@@ -193,8 +209,7 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
         await fetchPDFDocuments();
         setSelectedPdf(null);
         showToast({
-          title: 'Success',
-          description: 'PDF document deleted successfully',
+          message: 'PDF document deleted successfully',
           status: 'success',
         });
       } else {
@@ -203,8 +218,7 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
     } catch (err) {
       console.error('Delete error:', err);
       showToast({
-        title: 'Error',
-        description: 'Failed to delete PDF document',
+        message: 'Failed to delete PDF document',
         status: 'error',
       });
     }
@@ -212,8 +226,8 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
 
   // Download PDF document
   const downloadPDF = (document: PDFDocument) => {
-    const link = document.createElement('a');
-    link.href = `/api/mcp/legal-documents/download/${document.filename}`;
+    const link = window.document.createElement('a');
+    link.href = `/api/legal-documents/download/${document.filename}`;
     link.download = document.filename;
     link.click();
   };
@@ -263,11 +277,29 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
     <div className="fixed right-0 top-0 h-full w-96 bg-white dark:bg-gray-800 shadow-xl z-50 flex flex-col border-l border-gray-200 dark:border-gray-700">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-2">
-          <FileText className="w-5 h-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            PDF Documents
-          </h2>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              PDF Documents
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-1">
+              <div
+                className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
+                title={isConnected ? 'Connected to legal documents service' : 'Disconnected from legal documents service'}
+              />
+              <span className="text-xs text-gray-500">
+                {isConnected ? 'Live' : 'Offline'}
+              </span>
+            </div>
+            {lastUpdate && (
+              <span className="text-xs text-gray-400">
+                Updated: {lastUpdate.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
         </div>
         <Button
           variant="ghost"
@@ -388,7 +420,7 @@ export const PDFPreviewSidebar: React.FC<PDFPreviewSidebarProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       // Open preview in modal or new tab
-                      window.open(`/api/mcp/legal-documents/preview/${pdf.filename}`, '_blank');
+                      window.open(`/api/legal-documents/preview/${pdf.filename}`, '_blank');
                     }}
                     className="p-1 h-6 w-6"
                     title="Preview PDF"

@@ -14,6 +14,7 @@ const { findToken, createToken, updateToken } = require('~/models');
 const { getMCPManager, getFlowStateManager } = require('~/config');
 const { getCachedTools } = require('./Config');
 const { getLogStores } = require('~/cache');
+const bookUpdateService = require('./BookUpdateService');
 
 /**
  * @param {object} params
@@ -191,6 +192,22 @@ async function createMCPTool({ req, res, toolKey, provider: _provider }) {
         oauthEnd,
       });
 
+      // Handle post-call processing for book-related tools
+      if (serverName === 'book-creation-server') {
+        handleBookToolPostProcessing(
+          toolName,
+          toolArguments,
+          result,
+          config?.configurable?.user,
+        ).catch((error) => {
+          logger.warn('Book tool post-processing failed', {
+            error: error.message,
+            toolName,
+            serverName,
+          });
+        });
+      }
+
       if (isAssistantsEndpoint(provider) && Array.isArray(result)) {
         return result[0];
       }
@@ -237,6 +254,82 @@ async function createMCPTool({ req, res, toolKey, provider: _provider }) {
   toolInstance.mcp = true;
   toolInstance.mcpRawServerName = serverName;
   return toolInstance;
+}
+
+/**
+ * Handle post-processing for book-related MCP tools
+ * @param {string} toolName
+ * @param {Object} toolArguments
+ * @param {Object} result
+ * @param {Object} user
+ */
+async function handleBookToolPostProcessing(toolName, toolArguments, result, user) {
+  try {
+    if (!user?.id) {
+      logger.debug('No user found for book tool post-processing');
+      return;
+    }
+
+    // Extract bookId from tool arguments or result
+    let bookId = toolArguments?.bookId || toolArguments?.book_id;
+
+    // For tools that might not have bookId in arguments but return it in result
+    if (!bookId && result?.content?.[0]?.text) {
+      const match = result.content[0].text.match(/\bID:\s*([a-zA-Z0-9_-]{6,})/);
+      if (match) {
+        bookId = match[1];
+      }
+    }
+
+    if (!bookId) {
+      logger.debug('No bookId found for book tool post-processing', { toolName, toolArguments });
+      return;
+    }
+
+    // Define tools that modify book content and should trigger export
+    const bookModifyingTools = [
+      'create_book',
+      'update_book',
+      'add_chapter',
+      'update_chapter',
+      'add_page',
+      'update_page',
+      'delete_page',
+      'write_content',
+      'enhance_content',
+      'generate_chapter',
+      'import_book',
+      'add_comic_page',
+      'update_comic_page',
+    ];
+
+    if (bookModifyingTools.includes(toolName)) {
+      logger.info('Book content modified via agents, notifying update', {
+        toolName,
+        bookId,
+        userId: user.id,
+      });
+
+      // Notify book update - this will auto-trigger export due to our enhanced logic
+      bookUpdateService.notifyBookUpdate(bookId, 'book_updated', {
+        toolName,
+        userId: user.id,
+        action: 'content_modified',
+        source: 'agent',
+      });
+    }
+
+    logger.debug('Book tool executed via agents', {
+      toolName,
+      bookId,
+    });
+  } catch (error) {
+    logger.error('Error in book tool post-processing (agents)', {
+      error: error.message,
+      toolName,
+      bookId: toolArguments?.bookId,
+    });
+  }
 }
 
 module.exports = {

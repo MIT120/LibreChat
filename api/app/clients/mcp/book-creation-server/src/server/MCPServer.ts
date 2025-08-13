@@ -21,6 +21,7 @@ import { IMCPServer, IToolHandler, SERVICE_TOKENS } from '../interfaces/index.js
 import AnalysisToolHandlers from './tools/AnalysisToolHandlers.js';
 import { BookToolHandlers } from './tools/BookToolHandlers.js';
 import { ChapterToolHandlers } from './tools/ChapterToolHandlers.js';
+import { ComicToolHandlers } from './tools/ComicToolHandlers.js';
 import { ExportToolHandlers } from './tools/ExportToolHandlers.js';
 import { ImageToolHandlers } from './tools/ImageToolHandlers.js';
 import { PageToolHandlers } from './tools/PageToolHandlers.js';
@@ -150,8 +151,9 @@ export class MCPServer extends BaseService implements IMCPServer {
             new BookToolHandlers(this.logger, bookService),
             new ChapterToolHandlers(this.logger, bookService),
             new PageToolHandlers(this.logger, bookService),
+            new ComicToolHandlers(this.logger, bookService),
             new ImageToolHandlers(this.logger, imageService),
-            new ExportToolHandlers(this.logger, exportService),
+            new ExportToolHandlers(this.logger, exportService, bookService),
             // New planning & analysis tools
             new PlanningToolHandlers(this.logger, bookService),
             new AnalysisToolHandlers(
@@ -209,6 +211,9 @@ export class MCPServer extends BaseService implements IMCPServer {
             try {
                 this.logger.debug('Executing tool', { tool: name, args });
                 const result = await handler.handler(args || {});
+
+                // Emit update notification after successful tool execution
+                this.emitUpdateNotification(name, args, result);
 
                 // Handle different result types
                 if (typeof result === 'string') {
@@ -376,6 +381,85 @@ export class MCPServer extends BaseService implements IMCPServer {
 
     getToolByName(name: string): IToolHandler | undefined {
         return this.toolHandlers.get(name);
+    }
+
+    /**
+     * Emit update notification after successful tool execution
+     */
+    private emitUpdateNotification(toolName: string, args: any, result: any): void {
+        try {
+            // Extract book ID from args
+            const bookId = args?.bookId || args?.book_id;
+            if (!bookId) {
+                return; // No book ID to notify about
+            }
+
+            // Determine update type based on tool name
+            let updateType = 'book_updated';
+            if (toolName.includes('chapter')) {
+                updateType = 'chapter_updated';
+            } else if (toolName.includes('page')) {
+                updateType = 'page_updated';
+            } else if (toolName.includes('export')) {
+                updateType = 'export_ready';
+            }
+
+            // Make HTTP request to notify the book update service
+            const notificationData = {
+                bookId,
+                updateType,
+                toolName,
+                timestamp: new Date().toISOString(),
+                metadata: {
+                    chapterId: args?.chapterId,
+                    pageId: args?.pageId,
+                    operation: toolName,
+                }
+            };
+
+            // Use HTTP request to notify the main server
+            // Note: This is done asynchronously to not block the tool response
+            this.notifyBookUpdateService(notificationData).catch((error) => {
+                this.logger.warn('Failed to notify book update service', { 
+                    error: (error as Error).message,
+                    toolName,
+                    bookId 
+                });
+            });
+            
+        } catch (error) {
+            this.logger.warn('Error in emitUpdateNotification', { 
+                error: (error as Error).message,
+                toolName 
+            });
+        }
+    }
+
+    /**
+     * Notify the book update service via HTTP
+     */
+    private async notifyBookUpdateService(data: any): Promise<void> {
+        const serverHost = process.env.SERVER_HOST || 'http://localhost:3080';
+        
+        try {
+            const response = await fetch(`${serverHost}/api/book-updates/notify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+        } catch (error) {
+            // Log but don't throw - we don't want notification failures to break tool execution
+            this.logger.debug('Book update notification failed', { 
+                error: (error as Error).message,
+                data 
+            });
+        }
     }
 
     async getServerStatus(): Promise<{

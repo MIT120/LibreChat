@@ -36,7 +36,35 @@ export class BookToolHandlers {
                         theme: { type: 'string', description: 'Main theme or subject matter' },
                         genre: { type: 'string', description: 'Book genre' },
                         targetAudience: { type: 'string', description: 'Target audience description (optional)' },
-                        writingStyle: { type: 'object', description: 'Writing style configuration' },
+                        writingStyle: {
+                            type: 'object',
+                            description: 'Writing style configuration',
+                            properties: {
+                                tone: {
+                                    type: 'string',
+                                    description: 'Tone of the writing',
+                                    enum: ['formal', 'informal', 'academic', 'conversational', 'humorous', 'serious', 'inspirational', 'dark', 'atmospheric', 'suspenseful', 'dramatic', 'mysterious', 'noir', 'romantic', 'melancholic', 'tense']
+                                },
+                                voice: {
+                                    type: 'string',
+                                    description: 'Narrative voice perspective',
+                                    enum: ['first_person', 'second_person', 'third_person']
+                                },
+                                vocabulary: {
+                                    type: 'string',
+                                    description: 'Complexity level of vocabulary',
+                                    enum: ['simple', 'intermediate', 'advanced', 'technical']
+                                },
+                                sentenceStructure: {
+                                    type: 'string',
+                                    description: 'Structure and complexity of sentences',
+                                    enum: ['simple', 'complex', 'varied']
+                                },
+                                perspective: { type: 'string', description: 'Writing perspective description (optional)' },
+                                specialInstructions: { type: 'string', description: 'Special writing instructions (optional)' }
+                            },
+                            required: ['tone', 'voice', 'vocabulary', 'sentenceStructure']
+                        },
                         description: { type: 'string', description: 'Book description (optional)' },
                         targetWordCount: { type: 'number', description: 'Target word count (optional)' },
                         estimatedPages: { type: 'number', description: 'Estimated page count (optional)' },
@@ -46,7 +74,7 @@ export class BookToolHandlers {
                 },
                 handler: async (args: any) => {
                     const writingStyleSchema = z.object({
-                        tone: z.enum(['formal', 'informal', 'academic', 'conversational', 'humorous', 'serious', 'inspirational']),
+                        tone: z.enum(['formal', 'informal', 'academic', 'conversational', 'humorous', 'serious', 'inspirational', 'dark', 'atmospheric', 'suspenseful', 'dramatic', 'mysterious', 'noir', 'romantic', 'melancholic', 'tense']),
                         voice: z.enum(['first_person', 'second_person', 'third_person']),
                         vocabulary: z.enum(['simple', 'intermediate', 'advanced', 'technical']),
                         sentenceStructure: z.enum(['simple', 'complex', 'varied']),
@@ -192,6 +220,30 @@ export class BookToolHandlers {
                                 writingStyle: {
                                     type: 'object',
                                     description: 'Updated writing style',
+                                    properties: {
+                                        tone: {
+                                            type: 'string',
+                                            description: 'Tone of the writing',
+                                            enum: ['formal', 'informal', 'academic', 'conversational', 'humorous', 'serious', 'inspirational', 'dark', 'atmospheric', 'suspenseful', 'dramatic', 'mysterious', 'noir', 'romantic', 'melancholic', 'tense']
+                                        },
+                                        voice: {
+                                            type: 'string',
+                                            description: 'Narrative voice perspective',
+                                            enum: ['first_person', 'second_person', 'third_person']
+                                        },
+                                        vocabulary: {
+                                            type: 'string',
+                                            description: 'Complexity level of vocabulary',
+                                            enum: ['simple', 'intermediate', 'advanced', 'technical']
+                                        },
+                                        sentenceStructure: {
+                                            type: 'string',
+                                            description: 'Structure and complexity of sentences',
+                                            enum: ['simple', 'complex', 'varied']
+                                        },
+                                        perspective: { type: 'string', description: 'Writing perspective description (optional)' },
+                                        specialInstructions: { type: 'string', description: 'Special writing instructions (optional)' }
+                                    }
                                 },
                             },
                         },
