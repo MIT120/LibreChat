@@ -268,7 +268,8 @@ export class LexBgTreeScraperService {
       });
 
       // Wait for tree to load
-      await page.waitForTimeout(3000);
+      await page.waitForSelector('body', { timeout: 10000 });
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Extract tree structure
       const treeStructure = await page.evaluate(() => {

@@ -5,9 +5,10 @@
 import mongoose from 'mongoose';
 
 export interface IExport {
-    _id: string;
+    _id?: string;
     bookId: string;
     authorId: string;
+    conversationId: string;
     format: 'pdf' | 'html' | 'txt' | 'epub' | 'docx';
     filename: string;
     filepath: string;
@@ -40,6 +41,11 @@ const exportSchema = new mongoose.Schema({
         index: true,
     },
     authorId: {
+        type: String,
+        required: true,
+        index: true,
+    },
+    conversationId: {
         type: String,
         required: true,
         index: true,
@@ -125,6 +131,8 @@ const exportSchema = new mongoose.Schema({
 // Indexes for efficient queries
 exportSchema.index({ bookId: 1, format: 1, status: 1 });
 exportSchema.index({ authorId: 1, createdAt: -1 });
+exportSchema.index({ conversationId: 1 });
+exportSchema.index({ authorId: 1, conversationId: 1 });
 exportSchema.index({ bookId: 1, version: -1 });
 exportSchema.index({ createdAt: -1 });
 exportSchema.index({ status: 1, createdAt: -1 });
@@ -140,7 +148,7 @@ exportSchema.virtual('isAvailable').get(function() {
 });
 
 // Define interfaces for static and instance methods
-interface IExportDocument extends IExport, mongoose.Document {
+interface IExportDocument extends Omit<IExport, '_id'>, mongoose.Document {
     markDownloaded(): Promise<IExportDocument>;
     markDeleted(): Promise<IExportDocument>;
 }
@@ -202,4 +210,4 @@ exportSchema.methods.markDeleted = function() {
 const Export = mongoose.model<IExportDocument, IExportModel>('Export', exportSchema);
 
 export default Export;
-export { IExportDocument, IExportModel };
+export type { IExportDocument, IExportModel };

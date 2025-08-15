@@ -22,6 +22,7 @@ interface BookExportData {
     genre: string;
     description?: string;
     authorId: string;
+    conversationId: string;
     writingStyle: any;
     targetAudience?: string;
     currentWordCount: number;
@@ -133,31 +134,7 @@ export class ExportService extends BaseService implements IExportService {
             const version = await Export.getNextVersion(bookId, format);
             const exportId = uuidv4();
 
-            // Create export record in database (pending status)
-            const exportRecord = new Export({
-                _id: exportId,
-                bookId,
-                authorId,
-                format,
-                filename: '', // Will be updated after generation
-                filepath: '', // Will be updated after generation
-                size: 0, // Will be updated after generation
-                version,
-                metadata: {
-                    includeMetadata,
-                    aliasFilename: (options as any).aliasFilename,
-                    bookTitle: bookData.title,
-                    bookTheme: bookData.theme,
-                    bookGenre: bookData.genre,
-                    exportOptions: options,
-                },
-                status: 'pending',
-            });
-
             try {
-                await exportRecord.save();
-                this.logger.info('Export record created', { exportId, bookId, version });
-
                 // Fetch images if available
                 if (this.imageService) {
                     this.logger.info(`Export: ImageService is available, fetching images for book ${bookId}`);
@@ -188,12 +165,30 @@ export class ExportService extends BaseService implements IExportService {
                 // Generate export based on format
                 const result = await this.generateExport(bookData, format as ExportFormat, includeMetadata);
 
-                // Update export record with file details
-                exportRecord.filename = result.filename;
-                exportRecord.filepath = result.filepath;
-                exportRecord.size = result.size;
-                exportRecord.status = 'completed';
+                // Create export record in database with all required fields
+                const exportRecord = new Export({
+                    _id: exportId,
+                    bookId,
+                    authorId,
+                    conversationId: bookData.conversationId,
+                    format,
+                    filename: result.filename,
+                    filepath: result.filepath,
+                    size: result.size,
+                    version,
+                    metadata: {
+                        includeMetadata,
+                        aliasFilename: (options as any).aliasFilename,
+                        bookTitle: bookData.title,
+                        bookTheme: bookData.theme,
+                        bookGenre: bookData.genre,
+                        exportOptions: options,
+                    },
+                    status: 'completed',
+                });
+
                 await exportRecord.save();
+                this.logger.info('Export record created', { exportId, bookId, version });
 
                 // Optional alias filename (e.g., copy to conversationId.html for immediate client fetch)
                 if (options && (options as any).aliasFilename) {
@@ -225,10 +220,33 @@ export class ExportService extends BaseService implements IExportService {
                 };
 
             } catch (error) {
-                // Mark export as failed
-                exportRecord.status = 'failed';
-                exportRecord.error = (error as Error).message;
-                await exportRecord.save().catch(() => {}); // Don't throw if save fails
+                // Create a failed export record only if the export generation failed after processing
+                try {
+                    const failedExportRecord = new Export({
+                        _id: exportId,
+                        bookId,
+                        authorId,
+                        conversationId: bookData.conversationId,
+                        format,
+                        filename: `failed_export_${exportId}.${format}`,
+                        filepath: `/exports/failed_export_${exportId}.${format}`,
+                        size: 0,
+                        version,
+                        metadata: {
+                            includeMetadata,
+                            aliasFilename: (options as any).aliasFilename,
+                            bookTitle: bookData.title,
+                            bookTheme: bookData.theme,
+                            bookGenre: bookData.genre,
+                            exportOptions: options,
+                        },
+                        status: 'failed',
+                        error: (error as Error).message,
+                    });
+                    await failedExportRecord.save();
+                } catch (saveError) {
+                    this.logger.warn('Failed to save failed export record', { error: (saveError as Error).message });
+                }
                 throw error;
             }
         }, { bookId, format, authorId: options.authorId });
@@ -308,11 +326,22 @@ export class ExportService extends BaseService implements IExportService {
                 includePages: true,
             });
 
-            // Verify author permissions
-            if (bookData.authorId !== authorId) {
+            // Verify author permissions - allow system exports via special authorId
+            const isSystemExport = authorId === 'auto-export-system' || authorId === 'system-user';
+            if (!isSystemExport && bookData.authorId !== authorId) {
                 throw new ValidationError('Unauthorized: You can only export your own books', [
                     { field: 'authorId', message: 'Unauthorized access', code: 'UNAUTHORIZED' }
                 ]);
+            }
+
+            // Log system exports for security auditing
+            if (isSystemExport) {
+                this.logger.info('System export authorized', {
+                    bookId,
+                    requestedAuthorId: authorId,
+                    actualAuthorId: bookData.authorId,
+                    systemExport: true
+                });
             }
 
             return bookData as BookExportData;

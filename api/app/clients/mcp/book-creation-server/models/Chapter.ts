@@ -15,6 +15,11 @@ const chapterSchema = new mongoose.Schema({
         required: true,
         index: true,
     },
+    conversationId: {
+        type: String,
+        required: true,
+        index: true,
+    },
     chapterNumber: {
         type: Number,
         required: true,
@@ -62,6 +67,8 @@ const chapterSchema = new mongoose.Schema({
 
 // Indexes
 chapterSchema.index({ bookId: 1, chapterNumber: 1 }, { unique: true });
+chapterSchema.index({ conversationId: 1 });
+chapterSchema.index({ bookId: 1, conversationId: 1 });
 chapterSchema.index({ status: 1 });
 chapterSchema.index({ createdAt: -1 });
 

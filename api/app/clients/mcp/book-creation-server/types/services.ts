@@ -86,6 +86,11 @@ export interface IContentService {
 // Export service interface
 export interface IExportService {
   exportBook(bookId: string, format: string, options: ExportOptions): Promise<ExportResult>;
+  getBookExportHistory(bookId: string, authorId?: string, options?: any): Promise<any[]>;
+  getLatestExport(bookId: string, format: string, authorId?: string): Promise<any | null>;
+  getExportById(exportId: string, authorId?: string): Promise<any | null>;
+  markExportDownloaded(exportId: string, authorId?: string): Promise<any>;
+  deleteExport(exportId: string, authorId?: string): Promise<boolean>;
 }
 
 export interface ExportOptions {

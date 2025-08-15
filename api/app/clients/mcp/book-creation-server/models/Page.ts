@@ -17,6 +17,11 @@ const pageSchema = new mongoose.Schema({
         required: true,
         index: true,
     },
+    conversationId: {
+        type: String,
+        required: true,
+        index: true,
+    },
     pageNumber: {
         type: Number,
         required: true,
@@ -72,6 +77,8 @@ const pageSchema = new mongoose.Schema({
 
 // Indexes
 pageSchema.index({ chapterId: 1, pageNumber: 1 }, { unique: true });
+pageSchema.index({ conversationId: 1 });
+pageSchema.index({ chapterId: 1, conversationId: 1 });
 pageSchema.index({ status: 1 });
 pageSchema.index({ createdAt: -1 });
 

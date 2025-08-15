@@ -26,16 +26,18 @@ export class PageToolHandlers {
                     type: 'object',
                     properties: {
                         chapterId: { type: 'string', description: 'Chapter identifier' },
+                        conversationId: { type: 'string', description: 'Conversation identifier' },
                         title: { type: 'string', description: 'Page title' },
                         content: { type: 'string', description: 'Page content' },
                         notes: { type: 'string', description: 'Page notes (optional)' },
                         pageNumber: { type: 'number', description: 'Page number (optional - will auto-increment if not provided)' },
                     },
-                    required: ['chapterId', 'title', 'content'],
+                    required: ['chapterId', 'conversationId', 'title', 'content'],
                 },
                 handler: async (args: any) => {
                     const schema = z.object({
                         chapterId: z.string().min(1),
+                        conversationId: z.string().min(1),
                         title: z.string().min(1),
                         content: z.string().min(1),
                         notes: z.string().optional(),

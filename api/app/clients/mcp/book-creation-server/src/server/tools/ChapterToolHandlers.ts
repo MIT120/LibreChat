@@ -26,17 +26,19 @@ export class ChapterToolHandlers {
                     type: 'object',
                     properties: {
                         bookId: { type: 'string', description: 'Book identifier' },
+                        conversationId: { type: 'string', description: 'Conversation identifier' },
                         title: { type: 'string', description: 'Chapter title' },
                         description: { type: 'string', description: 'Chapter description (optional)' },
                         outline: { type: 'string', description: 'Chapter outline (optional)' },
                         targetWordCount: { type: 'number', description: 'Target word count for this chapter (optional)' },
                         chapterNumber: { type: 'number', description: 'Chapter number (optional - auto-increment if not provided)' },
                     },
-                    required: ['bookId', 'title'],
+                    required: ['bookId', 'conversationId', 'title'],
                 },
                 handler: async (args: any) => {
                     const schema = z.object({
                         bookId: z.string().min(1),
+                        conversationId: z.string().min(1),
                         title: z.string().min(1),
                         description: z.string().optional(),
                         outline: z.string().optional(),

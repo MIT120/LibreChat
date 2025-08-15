@@ -7,6 +7,7 @@ import { useGetConvoIdQuery, useGetStartupConfig, useGetEndpointsQuery } from '~
 import { useNewConvo, useAppStartup, useAssistantListMap, useIdChangeEffect } from '~/hooks';
 import { getDefaultModelSpec, getModelSpecPreset, logger } from '~/utils';
 import { ToolCallsMapProvider } from '~/Providers';
+import { BookProvider } from '~/components/SidePanel/Books';
 import ChatView from '~/components/Chat/ChatView';
 import useAuthRedirect from './useAuthRedirect';
 import temporaryStore from '~/store/temporary';
@@ -147,8 +148,10 @@ export default function ChatRoute() {
   }
 
   return (
-    <ToolCallsMapProvider conversationId={conversation.conversationId ?? ''}>
-      <ChatView index={index} />
-    </ToolCallsMapProvider>
+    <BookProvider>
+      <ToolCallsMapProvider conversationId={conversation.conversationId ?? ''}>
+        <ChatView index={index} />
+      </ToolCallsMapProvider>
+    </BookProvider>
   );
 }

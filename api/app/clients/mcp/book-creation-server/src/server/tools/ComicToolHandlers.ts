@@ -379,7 +379,8 @@ export class ComicToolHandlers {
             },
             description: input.description,
             estimatedPages: input.estimated_pages,
-            authorId: input.author || 'comic_creator'
+            authorId: input.author || 'comic_creator',
+            conversationId: input.conversationId || 'default'
         };
 
         const book = await this.bookService.createBook(bookData);

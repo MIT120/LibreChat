@@ -33,7 +33,7 @@ class BulgarianLegalServer {
         capabilities: {
           tools: {},
         },
-      },
+      }
     );
 
     this.caseLawService = new CaseLawService();
@@ -1637,7 +1637,7 @@ class BulgarianLegalServer {
       };
     }
 
-    const { results, totalItems, sources } = result;
+    const { results, totalItems, sources = [] } = result;
 
     let researchText = `🔍 Обширно правно изследване за: "${args.query}"\n`;
     researchText += `📊 Общо намерени документи: ${totalItems}\n`;

@@ -174,6 +174,11 @@ const bookSchema = new mongoose.Schema({
         required: true,
         index: true,
     },
+    conversationId: {
+        type: String,
+        required: true,
+        index: true,
+    },
     publishingInfo: publishingInfoSchema,
     metadata: {
         type: metadataSchema,
@@ -202,6 +207,8 @@ const bookSchema = new mongoose.Schema({
 
 // Indexes
 bookSchema.index({ authorId: 1, status: 1 });
+bookSchema.index({ conversationId: 1 });
+bookSchema.index({ authorId: 1, conversationId: 1 });
 bookSchema.index({ genre: 1 });
 bookSchema.index({ 'metadata.tags': 1 });
 bookSchema.index({ createdAt: -1 });

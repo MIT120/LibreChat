@@ -37,6 +37,10 @@ export class ExportToolHandlers {
                             type: 'string',
                             description: 'Author identifier for verification',
                         },
+                        conversationId: {
+                            type: 'string',
+                            description: 'Conversation identifier to scope books',
+                        },
                         includeMetadata: {
                             type: 'boolean',
                             description: 'Include book metadata in export (default: true)',
@@ -47,7 +51,7 @@ export class ExportToolHandlers {
                             description: 'Optional alias filename to copy the export as (e.g., conversationId.html)',
                         },
                     },
-                    required: ['bookId', 'format', 'authorId'],
+                    required: ['bookId', 'format', 'authorId', 'conversationId'],
                 },
                 handler: this.handleExportBook.bind(this),
             },
@@ -119,6 +123,10 @@ export class ExportToolHandlers {
                             type: 'string',
                             description: 'The unique identifier of the author',
                         },
+                        conversationId: {
+                            type: 'string',
+                            description: 'Conversation identifier to scope books',
+                        },
                         limit: {
                             type: 'number',
                             description: 'Maximum number of books to return',
@@ -130,7 +138,7 @@ export class ExportToolHandlers {
                             description: 'Filter by book status (optional)',
                         },
                     },
-                    required: ['authorId'],
+                    required: ['authorId', 'conversationId'],
                 },
                 handler: this.handleListUserBooks.bind(this),
             },
@@ -376,12 +384,14 @@ ${this.getFormatSpecificNotes(result.format)}`;
 
     private async handleListUserBooks(args: {
         authorId: string;
+        conversationId: string;
         limit?: number;
         status?: string;
     }): Promise<string> {
         try {
             this.logger.info('Listing user books', {
                 authorId: args.authorId,
+                conversationId: args.conversationId,
                 limit: args.limit,
                 status: args.status
             });
@@ -389,6 +399,7 @@ ${this.getFormatSpecificNotes(result.format)}`;
             // Get books from the book service
             const result = await this.bookService.listBooks({
                 authorId: args.authorId,
+                conversationId: args.conversationId,
                 limit: args.limit || 50,
                 status: args.status as any,
             });

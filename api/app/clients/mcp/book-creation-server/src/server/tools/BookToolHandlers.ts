@@ -69,8 +69,9 @@ export class BookToolHandlers {
                         targetWordCount: { type: 'number', description: 'Target word count (optional)' },
                         estimatedPages: { type: 'number', description: 'Estimated page count (optional)' },
                         authorId: { type: 'string', description: 'Author identifier' },
+                        conversationId: { type: 'string', description: 'Conversation identifier' },
                     },
-                    required: ['title', 'theme', 'genre', 'writingStyle', 'authorId'],
+                    required: ['title', 'theme', 'genre', 'writingStyle', 'authorId', 'conversationId'],
                 },
                 handler: async (args: any) => {
                     const writingStyleSchema = z.object({
@@ -93,6 +94,7 @@ export class BookToolHandlers {
                         targetWordCount: z.number().int().positive().optional(),
                         estimatedPages: z.number().int().positive().optional(),
                         authorId: z.string().min(1),
+                        conversationId: z.string().min(1),
                     });
 
                     return ToolExecutor.run({
@@ -142,6 +144,10 @@ export class BookToolHandlers {
                             type: 'string',
                             description: 'Author identifier',
                         },
+                        conversationId: {
+                            type: 'string',
+                            description: 'Conversation identifier',
+                        },
                         status: {
                             type: 'string',
                             enum: ['planning', 'outlining', 'writing', 'editing', 'review', 'completed', 'published'],
@@ -162,7 +168,7 @@ export class BookToolHandlers {
                             default: 0,
                         },
                     },
-                    required: ['authorId'],
+                    required: ['authorId', 'conversationId'],
                 },
                 handler: this.handleListBooks.bind(this),
             },

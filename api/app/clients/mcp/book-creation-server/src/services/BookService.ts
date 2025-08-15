@@ -122,6 +122,7 @@ export class BookService extends BaseService implements IBookService, IChapterSe
                 targetWordCount: bookData.targetWordCount,
                 estimatedPages: bookData.estimatedPages,
                 authorId: bookData.authorId,
+                conversationId: bookData.conversationId,
                 status: BookStatus.PLANNING,
                 currentWordCount: 0,
                 metadata: {
@@ -205,11 +206,17 @@ export class BookService extends BaseService implements IBookService, IChapterSe
                 ]);
             }
 
-            const { authorId, status, genre, limit = 20, offset = 0 } = options;
+            if (!options.conversationId) {
+                throw new ValidationError('Conversation ID is required', [
+                    { field: 'conversationId', message: 'Conversation ID is required', code: 'REQUIRED' }
+                ]);
+            }
+
+            const { authorId, conversationId, status, genre, limit = 20, offset = 0 } = options;
 
             try {
                 // Build query
-                const query: any = { authorId };
+                const query: any = { authorId, conversationId };
                 if (status) query.status = status;
                 if (genre) query.genre = genre;
 
@@ -402,6 +409,7 @@ export class BookService extends BaseService implements IBookService, IChapterSe
                 const chapter = new Chapter({
                     _id: uuidv4(),
                     bookId: chapterData.bookId,
+                    conversationId: chapterData.conversationId,
                     chapterNumber,
                     title: chapterData.title,
                     description: chapterData.description,
@@ -578,6 +586,7 @@ export class BookService extends BaseService implements IBookService, IChapterSe
                 const page = new Page({
                     pageId: uuidv4(),
                     chapterId: pageData.chapterId,
+                    conversationId: pageData.conversationId,
                     pageNumber,
                     title: pageData.title,
                     content: pageData.content,

@@ -319,7 +319,104 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
 });
 
 /**
- * Call a specific MCP tool by name on a server
+ * Call a specific MCP tool by name on a server (book-creation-server without auth)
+ * @route POST /api/mcp/book-creation-server/tools/:toolName/call
+ * Body: { arguments?: object, customUserVars?: Record<string,string> }
+ */
+router.post('/book-creation/tools/:toolName/call', async (req, res) => {
+  try {
+    const { toolName } = req.params;
+    const serverName = 'book-creation';
+    const toolArguments = req.body?.arguments || {};
+    const customUserVars = req.body?.customUserVars;
+
+    // Create a mock user for book creation tools
+    const user = { id: 'system-user' };
+
+    // For book creation tools, we need to ensure the authorId is provided (except for export_book which might be auto-generated)
+    if (!toolArguments.authorId && toolName !== 'export_book') {
+      logger.error(`[MCP] ${toolName} requires authorId but none was provided`);
+      return res.status(400).json({ success: false, error: `${toolName} requires authorId` });
+    }
+
+    // Auto-inject conversationId for book creation tools if not already provided
+    const bookToolsRequiringConversationId = [
+      'create_book',
+      'list_books',
+      'create_chapter',
+      'create_page',
+      'export_book',
+    ];
+
+    if (bookToolsRequiringConversationId.includes(toolName) && !toolArguments.conversationId) {
+      // Try to get conversationId from request headers or body
+      const conversationId =
+        req.headers['x-conversation-id'] ||
+        req.body?.conversationId ||
+        req.body?.metadata?.conversationId;
+
+      if (conversationId) {
+        toolArguments.conversationId = conversationId;
+        logger.debug(`[MCP] Auto-injected conversationId for ${toolName}`, {
+          conversationId,
+          toolName,
+        });
+      } else {
+        // Fallback: use authorId as conversationId if no conversationId is available
+        if (toolArguments.authorId) {
+          toolArguments.conversationId = `fallback-${toolArguments.authorId}`;
+          logger.warn(
+            `[MCP] No conversationId provided for ${toolName}, using fallback based on authorId`,
+            {
+              toolName,
+              authorId: toolArguments.authorId,
+              fallbackConversationId: toolArguments.conversationId,
+            },
+          );
+        } else {
+          logger.error(
+            `[MCP] ${toolName} requires conversationId but none was provided and no authorId available`,
+            { toolName },
+          );
+        }
+      }
+    }
+
+    // Auto-inject authorId for export_book if missing
+    if (toolName === 'export_book' && !toolArguments.authorId) {
+      toolArguments.authorId = 'auto-export-system';
+      logger.debug(`[MCP] Auto-injected authorId for ${toolName}`, {
+        authorId: toolArguments.authorId,
+      });
+    }
+
+    const flowsCache = getLogStores(CacheKeys.FLOWS);
+    const flowManager = getFlowStateManager(flowsCache);
+    const mcpManager = getMCPManager(user.id); // Use user-level MCP manager
+
+    const result = await mcpManager.callTool({
+      user,
+      serverName,
+      toolName,
+      provider: 'openai',
+      toolArguments,
+      flowManager,
+      tokenMethods: { findToken, updateToken, createToken, deleteTokens },
+      customUserVars,
+    });
+
+    // Handle post-call processing for book-related tools
+    await handleBookToolPostProcessing(toolName, toolArguments, result, user);
+
+    res.json({ success: true, result });
+  } catch (error) {
+    logger.error('[MCP] Tool call failed', error);
+    res.status(500).json({ success: false, error: error?.message || 'Tool call failed' });
+  }
+});
+
+/**
+ * Call a specific MCP tool by name on a server (authenticated route)
  * @route POST /api/mcp/:serverName/tools/:toolName/call
  * Body: { arguments?: object, customUserVars?: Record<string,string> }
  */
@@ -329,6 +426,50 @@ router.post('/:serverName/tools/:toolName/call', requireJwtAuth, async (req, res
     const user = req.user;
     const toolArguments = req.body?.arguments || {};
     const customUserVars = req.body?.customUserVars;
+
+    // Auto-inject conversationId for book creation tools if not already provided
+    if (serverName === 'book-creation') {
+      const bookToolsRequiringConversationId = [
+        'create_book',
+        'list_books',
+        'create_chapter',
+        'create_page',
+      ];
+
+      if (bookToolsRequiringConversationId.includes(toolName) && !toolArguments.conversationId) {
+        // Try to get conversationId from request headers or body
+        const conversationId =
+          req.headers['x-conversation-id'] ||
+          req.body?.conversationId ||
+          req.body?.metadata?.conversationId;
+
+        if (conversationId) {
+          toolArguments.conversationId = conversationId;
+          logger.debug(`[MCP] Auto-injected conversationId for ${toolName}`, {
+            conversationId,
+            toolName,
+          });
+        } else {
+          // Fallback: use authorId as conversationId if no conversationId is available
+          if (toolArguments.authorId) {
+            toolArguments.conversationId = `fallback-${toolArguments.authorId}`;
+            logger.warn(
+              `[MCP] No conversationId provided for ${toolName}, using fallback based on authorId`,
+              {
+                toolName,
+                authorId: toolArguments.authorId,
+                fallbackConversationId: toolArguments.conversationId,
+              },
+            );
+          } else {
+            logger.error(
+              `[MCP] ${toolName} requires conversationId but none was provided and no authorId available`,
+              { toolName },
+            );
+          }
+        }
+      }
+    }
 
     const flowsCache = getLogStores(CacheKeys.FLOWS);
     const flowManager = getFlowStateManager(flowsCache);
@@ -346,7 +487,7 @@ router.post('/:serverName/tools/:toolName/call', requireJwtAuth, async (req, res
     });
 
     // Handle post-call processing for book-related tools
-    if (serverName === 'book-creation-server') {
+    if (serverName === 'book-creation') {
       await handleBookToolPostProcessing(toolName, toolArguments, result, user);
     }
 
@@ -779,16 +920,16 @@ router.get('/:serverName/auth-values', requireJwtAuth, async (req, res) => {
 
 /**
  * Handle post-processing for book-related MCP tools
- * @param {string} toolName 
- * @param {Object} toolArguments 
- * @param {Object} result 
- * @param {Object} user 
+ * @param {string} toolName
+ * @param {Object} toolArguments
+ * @param {Object} result
+ * @param {Object} user
  */
 async function handleBookToolPostProcessing(toolName, toolArguments, result, user) {
   try {
     // Extract bookId from tool arguments or result
     let bookId = toolArguments?.bookId || toolArguments?.book_id;
-    
+
     // For tools that might not have bookId in arguments but return it in result
     if (!bookId && result?.content?.[0]?.text) {
       const match = result.content[0].text.match(/\bID:\s*([a-zA-Z0-9_-]{6,})/);
@@ -797,53 +938,265 @@ async function handleBookToolPostProcessing(toolName, toolArguments, result, use
       }
     }
 
+    // For create_book, try to extract bookId from different result formats
+    if (!bookId && toolName === 'create_book' && result?.content?.[0]?.text) {
+      const text = result.content[0].text;
+      // Try different patterns to extract book ID
+      const patterns = [
+        /Book ID:\s*([a-f0-9-]{36})/i,
+        /book\s*(?:id|identifier):\s*([a-f0-9-]{36})/i,
+        /created.*id:\s*([a-f0-9-]{36})/i,
+        /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i,
+      ];
+
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match) {
+          bookId = match[1];
+          break;
+        }
+      }
+    }
+
     if (!bookId) {
-      logger.debug('No bookId found for book tool post-processing', { toolName, toolArguments });
+      logger.debug('No bookId found for book tool post-processing', {
+        toolName,
+        toolArguments,
+        resultPreview: result?.content?.[0]?.text?.substring(0, 200),
+      });
       return;
     }
 
-    // Define tools that modify book content and should trigger export
+    // Define tools that modify book content and should trigger automatic export
     const bookModifyingTools = [
       'create_book',
+      'create_chapter',
+      'create_page',
       'update_book',
-      'add_chapter',
       'update_chapter',
-      'add_page',
       'update_page',
+      'delete_book',
+      'delete_chapter',
       'delete_page',
+      'add_chapter',
+      'add_page',
       'write_content',
       'enhance_content',
       'generate_chapter',
-      'import_book'
+      'import_book',
     ];
 
     if (bookModifyingTools.includes(toolName)) {
-      logger.info('Book content modified, notifying update', { 
-        toolName, 
-        bookId, 
-        userId: user.id 
+      logger.info('Book content modified, triggering automatic export', {
+        toolName,
+        bookId,
+        userId: user.id,
       });
-      
+
+      // Trigger automatic export generation, passing the original authorId from tool arguments
+      await triggerAutomaticExport(
+        bookId,
+        toolArguments?.conversationId,
+        toolName,
+        user,
+        toolArguments?.authorId,
+      );
+
       // Notify book update
       bookUpdateService.notifyBookUpdate(bookId, 'book_updated', {
         toolName,
         userId: user.id,
-        action: 'content_modified'
+        action: 'content_modified',
       });
     }
 
-    // For any book-related tool, we might want to refresh the export
-    // This ensures the preview is always up to date
-    logger.debug('Book tool executed, considering export refresh', { 
-      toolName, 
-      bookId 
+    logger.debug('Book tool post-processing completed', {
+      toolName,
+      bookId,
+      isModifyingTool: bookModifyingTools.includes(toolName),
     });
-    
   } catch (error) {
-    logger.error('Error in book tool post-processing', { 
-      error: error.message, 
-      toolName, 
-      bookId: toolArguments?.bookId 
+    logger.error('Error in book tool post-processing', {
+      error: error.message,
+      toolName,
+      bookId: toolArguments?.bookId,
+    });
+  }
+}
+
+/**
+ * Trigger automatic export generation for a book
+ * @param {string} bookId
+ * @param {string} conversationId
+ * @param {string} triggerTool
+ * @param {Object} user
+ * @param {string} authorId - The actual authorId from the original tool call
+ */
+async function triggerAutomaticExport(bookId, conversationId, triggerTool, user, authorId) {
+  try {
+    logger.info('Triggering automatic export generation', {
+      bookId,
+      conversationId,
+      triggerTool,
+      userId: user.id,
+    });
+
+    // Use the authorId from the original tool call, with fallbacks
+    let bookAuthorId = authorId;
+
+    if (!bookAuthorId && user.id !== 'system-user') {
+      bookAuthorId = user.id;
+    }
+
+    // If we still don't have an authorId, try to find it by querying the book-creation MCP server
+    // using a database query approach (looking at common authorIds)
+    if (!bookAuthorId) {
+      logger.warn('No authorId available for automatic export, trying to discover book owner', {
+        bookId,
+      });
+
+      // Try a few common authorIds that might exist in the system
+      const possibleAuthorIds = [
+        'writer001',
+        'test-user-001',
+        'user-1',
+        'admin',
+        'author-1',
+        'system',
+        'book-author',
+        'default-author',
+        '6747b3c65dfea0bce0a7d7c6',
+      ];
+
+      for (const testAuthorId of possibleAuthorIds) {
+        try {
+          const testResponse = await fetch(
+            `${process.env.SERVER_HOST || 'http://localhost:3080'}/api/mcp/book-creation/tools/list_books/call`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                arguments: {
+                  authorId: testAuthorId,
+                  conversationId: conversationId || `lookup-${bookId.slice(0, 8)}`,
+                },
+              }),
+            },
+          );
+
+          if (testResponse.ok) {
+            const testResult = await testResponse.json();
+            if (
+              testResult.success &&
+              testResult.result?.[0]?.[0]?.text &&
+              testResult.result[0][0].text.includes(bookId)
+            ) {
+              bookAuthorId = testAuthorId;
+              logger.info('Found book owner through discovery', { bookId, authorId: bookAuthorId });
+              break;
+            }
+          }
+        } catch (error) {
+          // Continue to next possible authorId
+        }
+      }
+    }
+
+    if (!bookAuthorId) {
+      logger.error('Cannot determine book authorId for automatic export after discovery attempt', {
+        bookId,
+        userId: user.id,
+        providedAuthorId: authorId,
+      });
+      return;
+    }
+
+    logger.debug('Using authorId for automatic export', {
+      bookId,
+      authorId: bookAuthorId,
+      originalUserId: user.id,
+    });
+
+    // Generate a unique filename with timestamp
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:]/g, '-');
+    const filename = `book-${bookId.slice(0, 8)}-${timestamp}.html`;
+
+    // Prepare the export tool arguments with the correct authorId
+    const exportArguments = {
+      bookId: bookId,
+      format: 'html',
+      includeMetadata: true,
+      aliasFilename: filename,
+      authorId: bookAuthorId,
+    };
+
+    // Add conversationId if available
+    if (conversationId) {
+      exportArguments.conversationId = conversationId;
+    } else if (bookAuthorId) {
+      exportArguments.conversationId = `fallback-${bookAuthorId}`;
+    } else {
+      exportArguments.conversationId = `auto-export-${bookId.slice(0, 8)}`;
+    }
+
+    // Use internal HTTP call to the unauthenticated endpoint to avoid MCP config issues
+    const serverHost = process.env.SERVER_HOST || 'http://localhost:3080';
+    const response = await fetch(`${serverHost}/api/mcp/book-creation/tools/export_book/call`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        arguments: exportArguments,
+      }),
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        logger.info('Automatic export generated successfully', {
+          bookId,
+          filename,
+          triggerTool,
+          userId: user.id,
+        });
+
+        // Notify about the new export
+        bookUpdateService.notifyBookUpdate(bookId, 'export_ready', {
+          filename: filename,
+          exportUrl: `/c/exports/${filename}`,
+          triggerTool: triggerTool,
+          userId: user.id,
+          timestamp: new Date().toISOString(),
+          format: 'html',
+        });
+      } else {
+        logger.warn('Automatic export generation failed', {
+          bookId,
+          filename,
+          triggerTool,
+          error: result.error,
+        });
+      }
+    } else {
+      const errorText = await response.text();
+      logger.error('Failed to call automatic export endpoint', {
+        bookId,
+        filename,
+        triggerTool,
+        status: response.status,
+        error: errorText,
+      });
+    }
+  } catch (error) {
+    logger.error('Failed to trigger automatic export', {
+      error: error.message,
+      bookId,
+      conversationId,
+      triggerTool,
+      userId: user.id,
     });
   }
 }

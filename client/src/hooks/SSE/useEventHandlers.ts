@@ -36,6 +36,7 @@ import useStepHandler from '~/hooks/SSE/useStepHandler';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { MESSAGE_UPDATE_INTERVAL } from '~/common';
 import { useLiveAnnouncer } from '~/Providers';
+import { triggerChatComplete } from '~/hooks/useExports';
 
 type TSyncData = {
   sync: boolean;
@@ -559,6 +560,9 @@ export default function useEventHandlers({
           navigate(`/c/${conversation.conversationId}`, { replace: true });
         }
       }
+
+      // Trigger export refresh after chat completion
+      triggerChatComplete();
 
       setIsSubmitting(false);
     },

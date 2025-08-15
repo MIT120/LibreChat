@@ -840,7 +840,8 @@ export class VKSScraperService {
       });
 
       // Wait for page to load and look for search elements
-      await page.waitForTimeout(2000);
+      await page.waitForSelector('body', { timeout: 10000 });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Check if search form exists
       const hasSearchForm =
@@ -1014,7 +1015,8 @@ export class VKSScraperService {
       }
 
       // Wait for results to load
-      await page.waitForTimeout(3000);
+      await page.waitForSelector('body', { timeout: 10000 });
+      await new Promise(resolve => setTimeout(resolve, 3000));
     } catch (error) {
       console.warn('⚠️ Error filling search form:', error.message);
       throw error;
@@ -1026,7 +1028,8 @@ export class VKSScraperService {
    */
   async extractSearchResults(page) {
     try {
-      await page.waitForTimeout(2000);
+      await page.waitForSelector('body', { timeout: 10000 });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await page.evaluate(() => {
         const results = [];

@@ -128,6 +128,7 @@ export interface IBook extends IEntity {
   estimatedPages?: number;
   status: BookStatus;
   authorId: string;
+  conversationId: string;
   publishingInfo?: IPublishingInfo;
   metadata: IBookMetadata;
   settings: IBookSettings;
@@ -138,6 +139,7 @@ export interface IBook extends IEntity {
 // Chapter interface
 export interface IChapter extends IEntity {
   bookId: string;
+  conversationId: string;
   chapterNumber: number;
   title: string;
   description?: string;
@@ -152,6 +154,7 @@ export interface IChapter extends IEntity {
 export interface IPage extends IEntity {
   pageId: string;
   chapterId: string;
+  conversationId: string;
   pageNumber: number;
   title: string;
   content: string;
@@ -172,6 +175,7 @@ export interface CreateBookRequest {
   targetWordCount?: number;
   estimatedPages?: number;
   authorId: string;
+  conversationId: string;
 }
 
 export interface UpdateBookRequest {
@@ -190,6 +194,7 @@ export interface UpdateBookRequest {
 
 export interface CreateChapterRequest {
   bookId: string;
+  conversationId: string;
   title: string;
   description?: string;
   outline?: string;
@@ -209,6 +214,7 @@ export interface UpdateChapterRequest {
 
 export interface CreatePageRequest {
   chapterId: string;
+  conversationId: string;
   title: string;
   content: string;
   notes?: string;
@@ -230,6 +236,7 @@ export interface GetBookOptions {
 
 export interface ListBooksOptions {
   authorId: string;
+  conversationId: string;
   status?: BookStatus;
   genre?: string;
   limit?: number;

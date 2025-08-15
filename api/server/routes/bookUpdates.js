@@ -46,7 +46,62 @@ const sseAuth = (req, res, next) => {
 };
 
 /**
- * SSE endpoint for book updates
+ * SSE endpoint for book updates by bookId
+ * GET /api/book-updates/stream/:bookId?token=<jwt_token>
+ */
+router.get('/stream/:bookId', sseAuth, (req, res) => {
+  const { bookId } = req.params;
+  const userId = req.user?.id || req.user?._id;
+
+  if (!bookId) {
+    return res.status(400).json({ error: 'bookId is required' });
+  }
+
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control',
+  });
+
+  // Send initial connection event
+  res.write(
+    `event: connected\ndata: ${JSON.stringify({
+      bookId,
+      timestamp: new Date().toISOString(),
+    })}\n\n`,
+  );
+
+  // Subscribe to book updates for this specific book
+  bookUpdateService.subscribeToBook(bookId, res);
+
+  logger.info('Book-specific SSE connection established', {
+    bookId,
+    userId,
+  });
+
+  // Handle client disconnect
+  req.on('close', () => {
+    bookUpdateService.unsubscribeFromBook(bookId, res);
+    logger.info('Book-specific SSE connection closed', {
+      bookId,
+      userId,
+    });
+  });
+
+  req.on('aborted', () => {
+    bookUpdateService.unsubscribeFromBook(bookId, res);
+    logger.info('Book-specific SSE connection aborted', {
+      bookId,
+      userId,
+    });
+  });
+});
+
+/**
+ * SSE endpoint for book updates by conversation
  * GET /api/book-updates/:conversationId?token=<jwt_token>
  */
 router.get('/:conversationId', sseAuth, (req, res) => {

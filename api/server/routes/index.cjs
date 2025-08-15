@@ -28,7 +28,7 @@ const user = require('./user');
 const mcp = require('./mcp');
 const legalDocuments = require('./legal-documents');
 const bookUpdates = require('./bookUpdates');
-const exports = require('./exports');
+const exportsRoute = require('./exports');
 
 module.exports = {
   edit,
@@ -61,5 +61,5 @@ module.exports = {
   mcp,
   legalDocuments,
   bookUpdates,
-  exports,
+  exports: exportsRoute,
 };

@@ -12,7 +12,7 @@ import { useAddedResponse, useChatHelpers, useLocalize, useSSE } from '~/hooks';
 import { AddedChatContext, ChatContext, ChatFormProvider, useFileMapContext } from '~/Providers';
 import store from '~/store';
 import { buildTree, cn } from '~/utils';
-import BookCenter from './BookCenter';
+import BookPreview from './BookPreview';
 import Footer from './Footer';
 import Header from './Header';
 import ChatForm from './Input/ChatForm';
@@ -88,11 +88,7 @@ function ChatView({ index = 0 }: { index?: number }) {
         </div>
         <div className="flex h-full w-full overflow-hidden">
           <div className="flex-1 overflow-hidden">
-            <BookCenter
-              className="h-full"
-              title={conversation?.title ?? ''}
-              refreshKey={bookRefreshKey}
-            />
+            <BookPreview className="h-full" />
           </div>
         </div>
       </div>

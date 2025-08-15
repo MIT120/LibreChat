@@ -182,6 +182,7 @@ export class ContentService extends BaseService implements IContentService {
             // Create the page using PageService
             const pageData = {
                 chapterId,
+                conversationId: book.conversationId,
                 title: options.pageTitle,
                 content,
                 notes: `Generated content based on: ${options.contentPrompt}`,

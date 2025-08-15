@@ -21,7 +21,7 @@ const configureSocialLogins = require('./socialLogins');
 const AppService = require('./services/AppService');
 const staticCache = require('./utils/staticCache');
 const noIndex = require('./middleware/noIndex');
-const routes = require('./routes');
+const routes = require('./routes/index.cjs');
 
 const { PORT, HOST, ALLOW_SOCIAL_LOGIN, DISABLE_COMPRESSION, TRUST_PROXY } = process.env ?? {};
 
@@ -123,6 +123,7 @@ const startServer = async () => {
   app.use('/api/mcp', routes.mcp);
   app.use('/api/legal-documents', routes.legalDocuments);
   app.use('/api/book-updates', routes.bookUpdates);
+  app.use('/api/exports', routes.exports);
 
   // Add the error controller one more time after all routes
   app.use(errorController);
