@@ -121,15 +121,13 @@ export const useBookExportUrl = (bookId: string, conversationId?: string) => {
       // Use URL if available
       if (exportInfo.url) {
         const url = exportInfo.url.trim();
-        return url.startsWith('http')
-          ? `${url}?t=${Date.now()}`
-          : `${serverBase}${url}?t=${Date.now()}`;
+        return url.startsWith('http') ? url : `${serverBase}${url}`;
       }
 
       // Fallback to filename
       if (exportInfo.filename) {
         const filename = exportInfo.filename.trim();
-        return `${serverBase}/c/exports/${filename}?t=${Date.now()}`;
+        return `${serverBase}/c/exports/${filename}`;
       }
 
       return null;

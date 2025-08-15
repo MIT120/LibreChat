@@ -22,6 +22,10 @@ export class VKSScraperService {
     this.firecrawlApiUrl = process.env.FIRECRAWL_API_URL || 'https://api.firecrawl.dev';
     this.firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
     this.useFirecrawl = !!this.firecrawlApiKey;
+    
+    if (!this.firecrawlApiKey) {
+      console.warn('⚠️ VKS Service: Firecrawl API key not configured, will use fallback scraping methods');
+    }
 
     // Browser instance for reuse (fallback)
     this.browser = null;

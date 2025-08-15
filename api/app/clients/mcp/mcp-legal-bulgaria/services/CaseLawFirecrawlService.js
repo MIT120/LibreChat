@@ -170,7 +170,14 @@ export class CaseLawFirecrawlService {
   async scrapeWithFirecrawl(url, options = {}) {
     try {
       if (!this.firecrawlApiKey) {
-        throw new Error('Firecrawl API key not configured');
+        console.warn('⚠️ Firecrawl API key not configured, skipping Firecrawl scraping');
+        return {
+          success: false,
+          error: 'Firecrawl API key not configured',
+          results: [],
+          source: options.source || 'unknown',
+          fallback: true
+        };
       }
 
       const {

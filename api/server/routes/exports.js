@@ -227,6 +227,190 @@ router.get('/download/:exportId', requireJwtAuth, async (req, res) => {
 });
 
 /**
+ * List static export files with comprehensive metadata
+ * GET /api/exports/static/list
+ */
+router.get('/static/list', async (req, res) => {
+  try {
+    const fs = require('fs').promises;
+    const path = require('path');
+
+    // Get the exports directory path
+    const exportsDir = path.join(process.cwd(), 'exports');
+
+    try {
+      const files = await fs.readdir(exportsDir);
+      const htmlFiles = files.filter((file) => file.endsWith('.html'));
+
+      // Get detailed information for each file
+      const fileDetails = await Promise.all(
+        htmlFiles.map(async (filename) => {
+          try {
+            const filePath = path.join(exportsDir, filename);
+            const stats = await fs.stat(filePath);
+
+            return {
+              filename,
+              size: stats.size,
+              created: stats.birthtime,
+              modified: stats.mtime,
+              url: `/c/exports/${filename}`,
+              downloadUrl: `/api/exports/static/download/${filename}`,
+              directUrl: `http://localhost:3080/c/exports/${filename}`,
+              accessible: true,
+            };
+          } catch (error) {
+            logger.warn('Error getting file stats', { filename, error: error.message });
+            return {
+              filename,
+              size: 0,
+              created: null,
+              modified: null,
+              url: `/c/exports/${filename}`,
+              downloadUrl: `/api/exports/static/download/${filename}`,
+              directUrl: `http://localhost:3080/c/exports/${filename}`,
+              accessible: false,
+              error: error.message,
+            };
+          }
+        }),
+      );
+
+      // Sort by modification date (newest first)
+      fileDetails.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+
+      res.json({
+        success: true,
+        files: fileDetails,
+        count: fileDetails.length,
+        exportsDir,
+        baseUrl: '/c/exports',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.warn('Exports directory not found or not accessible', {
+        exportsDir,
+        error: error.message,
+      });
+
+      res.json({
+        success: true,
+        files: [],
+        count: 0,
+        exportsDir,
+        baseUrl: '/c/exports',
+        error: 'Exports directory not accessible',
+      });
+    }
+  } catch (error) {
+    logger.error('Error listing static export files', {
+      error: error.message,
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to list static export files',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * Download static export file directly
+ * GET /api/exports/static/download/:filename
+ */
+router.get('/static/download/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const path = require('path');
+
+    // Validate filename (basic security check)
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid filename',
+      });
+    }
+
+    // Get the exports directory path
+    const exportsDir = path.join(process.cwd(), 'exports');
+    const filePath = path.join(exportsDir, filename);
+
+    // Check if file exists
+    try {
+      await fs.access(filePath);
+    } catch {
+      logger.warn('Static export file not found', { filename, filePath });
+      return res.status(404).json({
+        success: false,
+        error: 'Export file not found',
+      });
+    }
+
+    // Set appropriate headers
+    let contentType = 'application/octet-stream';
+    const extension = path.extname(filename).toLowerCase();
+
+    switch (extension) {
+      case '.html':
+        contentType = 'text/html; charset=utf-8';
+        break;
+      case '.pdf':
+        contentType = 'application/pdf';
+        break;
+      case '.txt':
+        contentType = 'text/plain; charset=utf-8';
+        break;
+      case '.epub':
+        contentType = 'application/epub+zip';
+        break;
+      case '.docx':
+        contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        break;
+    }
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+
+    // Stream the file
+    const fileStream = require('fs').createReadStream(filePath);
+    fileStream.pipe(res);
+
+    fileStream.on('error', (error) => {
+      logger.error('File stream error for static export', {
+        filename,
+        filePath,
+        error: error.message,
+      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          error: 'Failed to stream file',
+        });
+      }
+    });
+
+    fileStream.on('end', () => {
+      logger.info('Static export download completed', { filename });
+    });
+  } catch (error) {
+    logger.error('Error downloading static export', {
+      error: error.message,
+      filename: req.params.filename,
+    });
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to download static export',
+        message: error.message,
+      });
+    }
+  }
+});
+
+/**
  * Get export statistics for a conversation
  * GET /api/exports/conversation/:conversationId/stats
  */

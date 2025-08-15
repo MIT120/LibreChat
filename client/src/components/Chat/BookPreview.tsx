@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { RefreshCw, ExternalLink, Download } from 'lucide-react';
 import { Button } from '~/components/ui';
 import { useBookContext } from '~/components/SidePanel/Books';
-import { useExports, useAutoRefreshExports } from '~/hooks/useExports';
+import { useStaticExports } from '~/hooks/useStaticExports';
 import { useAuthContext } from '~/hooks/AuthContext';
 
 type BookPreviewProps = {
@@ -12,107 +12,110 @@ type BookPreviewProps = {
 
 export default function BookPreview({ className = '' }: BookPreviewProps) {
   const { conversationId } = useParams();
-  const { selectedBookId, previewUrl, selectedExportVersion } = useBookContext();
+  const { selectedBookId, previewUrl } = useBookContext();
   const { user } = useAuthContext();
   const [currentPreviewUrl, setCurrentPreviewUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [userSelectedFile, setUserSelectedFile] = useState<string | null>(null);
 
-  // Use the new exports hook
+  // Construct server base URL for static exports
+  const serverBase = useMemo(() => {
+    if (typeof window !== 'undefined') {
+      const { protocol, hostname } = window.location;
+      // Use environment variable for port or default to 3080
+      const port = process.env.REACT_APP_BACKEND_PORT || '3080';
+      return `${protocol}//${hostname}:${port}`;
+    }
+    return '';
+  }, []);
+
+  // Use static exports hook
   const {
-    exports: availableExports,
-    isLoading: isLoadingExports,
-    refresh: refreshExports,
-  } = useExports({
-    conversationId,
-    format: 'html', // Priority for HTML exports in preview
-    enabled: !!conversationId && !!user?.id,
+    staticExports,
+    isLoading: isLoadingStaticExports,
+    refresh: refreshStaticExports,
+  } = useStaticExports({
+    enabled: !!user?.id,
   });
 
-  // Auto-refresh exports after chat completion
-  useAutoRefreshExports(conversationId);
-
-  // Set preview URL based on available exports
+  // Set preview URL based on static exports
   useEffect(() => {
+    // Clear any previous errors when trying to load a new preview
+    setPreviewError(null);
+
     if (previewUrl) {
       setCurrentPreviewUrl(previewUrl);
       return;
     }
 
-    // If no specific preview URL is set, use the latest HTML export from the conversation
-    if (availableExports.length > 0) {
-      const latestHtmlExport = availableExports.find((exp) => exp.format === 'html') || availableExports[0];
-      if (latestHtmlExport?.url) {
-        setCurrentPreviewUrl(latestHtmlExport.url);
-      }
-    } else {
-      setCurrentPreviewUrl('');
-    }
-  }, [previewUrl, availableExports]);
-
-  // Set up Server-Sent Events for real-time export updates
-  useEffect(() => {
-    // Clean up previous connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    if (!conversationId) {
+    // Don't automatically change URL if user has manually selected a file
+    if (userSelectedFile) {
       return;
     }
 
-    const handleExportUpdate = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
+    // Use static exports if available
+    if (staticExports.length > 0) {
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
-        // Handle export ready events
-        if (data.type === 'export_ready') {
-          console.log('Export update received:', data);
+      // Look for files that might match this conversation or are recent
+      let matchingExport = conversationId
+        ? staticExports.find((exp) => exp.filename.includes(conversationId))
+        : undefined;
 
-          // Refresh export data using the new hook
-          refreshExports();
-
-          // Update preview URL if this is an HTML export
-          if (data.format === 'html' && data.exportUrl) {
-            setCurrentPreviewUrl(data.exportUrl + '?t=' + Date.now());
-          }
-        }
-      } catch (error) {
-        console.error('Error parsing export update event:', error);
+      // If no direct conversation match, try date-based matching
+      if (!matchingExport) {
+        matchingExport = staticExports.find(
+          (exp) => exp.dateCreated === today || exp.dateCreated === yesterday,
+        );
       }
-    };
 
-    // Set up EventSource for conversation updates (using conversationId instead of bookId)
-    const eventSource = new EventSource(`/api/book-updates/stream/${conversationId}`);
-    eventSourceRef.current = eventSource;
-
-    eventSource.addEventListener('message', handleExportUpdate);
-    eventSource.addEventListener('error', (error) => {
-      console.error('Export updates EventSource error:', error);
-    });
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      // If still no match, use the most recent file (sorted by filename which includes date)
+      if (!matchingExport && staticExports.length > 0) {
+        const sortedExports = [...staticExports].sort((a, b) =>
+          b.filename.localeCompare(a.filename),
+        );
+        matchingExport = sortedExports[0];
       }
-    };
-  }, [conversationId, refreshExports]);
+
+      if (matchingExport) {
+        const staticExportUrl = `${serverBase}/c/exports/${matchingExport.filename}`;
+        setCurrentPreviewUrl(staticExportUrl);
+      }
+    }
+  }, [previewUrl, staticExports, conversationId, serverBase, userSelectedFile]);
+
+  // Debug effect to track URL changes
+  useEffect(() => {
+    console.log('🔄 currentPreviewUrl changed to:', currentPreviewUrl);
+  }, [currentPreviewUrl]);
+
+  // Debug effect to track user selection
+  useEffect(() => {
+    console.log('👤 userSelectedFile changed to:', userSelectedFile);
+  }, [userSelectedFile]);
 
   const handleRefreshPreview = async () => {
     setIsLoading(true);
+    try {
+      // Clear current preview URL to force reload
+      setCurrentPreviewUrl('');
 
-    // Refresh export data using the new hook
-    refreshExports();
+      // Clear user selection to allow automatic URL selection after refresh
+      setUserSelectedFile(null);
 
-    // Force iframe reload by changing URL slightly
-    const currentUrl = currentPreviewUrl;
-    setCurrentPreviewUrl('');
-    setTimeout(() => {
-      setCurrentPreviewUrl(currentUrl + '?t=' + Date.now());
+      // Refresh static exports
+      await refreshStaticExports();
+
+      // The useEffect will automatically set the new URL when exports are refreshed
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 500);
+    } catch (error) {
+      console.error('Error refreshing preview:', error);
       setIsLoading(false);
-    }, 100);
+    }
   };
 
   const handleOpenInNewTab = () => {
@@ -185,53 +188,82 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
         </div>
 
         {/* Export info */}
-        {isLoadingExports && (
+        {isLoadingStaticExports && (
           <div className="mt-2 flex items-center gap-2 text-xs text-text-secondary">
             <div className="h-3 w-3 animate-spin rounded-full border border-gray-300 border-t-transparent"></div>
-            <span>Loading export history...</span>
+            <span>Loading exports...</span>
           </div>
         )}
-        {!isLoadingExports && availableExports.length > 0 && (
+
+        {/* Static Exports Section */}
+        {!isLoadingStaticExports && staticExports.length > 0 && (
           <div className="mt-2 space-y-1">
             <div className="flex items-center gap-2 text-xs text-text-secondary">
-              <span>📄 {availableExports.length} export(s) available</span>
-              <span>•</span>
-              <span>Latest: {new Date(availableExports[0].createdAt).toLocaleString()}</span>
+              <span>📁 Available Exports: {staticExports.length}</span>
+              {staticExports[0]?.dateCreated && (
+                <>
+                  <span>•</span>
+                  <span>Latest: {staticExports[0].dateCreated}</span>
+                </>
+              )}
             </div>
-            {selectedExportVersion && (
-              <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-300">
-                <span>🎯 Viewing: {selectedExportVersion.format.toUpperCase()}</span>
-                <span>•</span>
-                <span>{new Date(selectedExportVersion.timestamp).toLocaleString()}</span>
-              </div>
-            )}
-            {!selectedExportVersion && (
-              <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-300">
-                <span>📄 Showing latest export</span>
-              </div>
-            )}
             <div className="flex flex-wrap gap-1">
-              {availableExports.slice(0, 5).map((exp) => (
-                <span
-                  key={exp._id}
-                  className="inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-1 text-xs text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                  title={`${exp.filename} - Version ${exp.version} (${exp.format.toUpperCase()})`}
-                >
-                  <span>{exp.format.toUpperCase()}</span>
-                  <span className="text-blue-600 dark:text-blue-300">v{exp.version}</span>
-                </span>
-              ))}
-              {availableExports.length > 5 && (
+              {staticExports.map((exp) => {
+                const isCurrentlyViewed = currentPreviewUrl.includes(exp.filename);
+                return (
+                  <button
+                    key={exp.filename}
+                    onClick={() => {
+                      console.log('=== BUTTON CLICKED ===');
+                      console.log('Filename:', exp.filename);
+                      console.log('Current preview URL before:', currentPreviewUrl);
+                      console.log('Server base:', serverBase);
+
+                      setPreviewError(null);
+
+                      // Mark this file as user-selected to prevent automatic URL changes
+                      setUserSelectedFile(exp.filename);
+
+                      // Clear current URL first to force iframe reload
+                      console.log('Clearing current URL...');
+                      setCurrentPreviewUrl('');
+
+                      // Set new URL after a brief delay
+                      setTimeout(() => {
+                        const fullUrl = `${serverBase}/c/exports/${exp.filename}`;
+                        console.log('Constructed URL:', fullUrl);
+                        console.log('Setting preview URL to:', fullUrl);
+                        setCurrentPreviewUrl(fullUrl);
+                      }, 100);
+                    }}
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-green-200 dark:hover:bg-green-800 ${
+                      isCurrentlyViewed
+                        ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
+                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                    }`}
+                    title={`${exp.title || exp.filename} - Click to preview`}
+                  >
+                    <span>📄</span>
+                    <span>{exp.title || exp.filename.replace('.html', '')}</span>
+                    {exp.dateCreated && (
+                      <span className="text-green-600 dark:text-green-300">{exp.dateCreated}</span>
+                    )}
+                  </button>
+                );
+              })}
+              {staticExports.length > 4 && (
                 <span className="text-xs text-text-secondary">
-                  +{availableExports.length - 5} more
+                  +{staticExports.length - 4} more
                 </span>
               )}
             </div>
           </div>
         )}
-        {!isLoadingExports && availableExports.length === 0 && conversationId && (
+
+        {/* No exports message */}
+        {!isLoadingStaticExports && staticExports.length === 0 && conversationId && (
           <div className="mt-2 text-xs text-text-secondary">
-            <span>📄 No exports available for this conversation</span>
+            <span>📄 No exports available</span>
           </div>
         )}
       </div>
@@ -261,7 +293,7 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
           </div>
         )}
 
-        {conversationId && (isLoading || isLoadingExports) && (
+        {conversationId && (isLoading || isLoadingStaticExports) && (
           <div className="flex h-full items-center justify-center text-gray-500">
             <div className="flex items-center gap-2">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
@@ -270,37 +302,76 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
           </div>
         )}
 
-        {conversationId && !isLoading && !isLoadingExports && currentPreviewUrl && (
-          <div className="h-full w-full">
-            <iframe
-              key={currentPreviewUrl} // Force re-render when URL changes
-              title="book-preview"
-              src={currentPreviewUrl}
-              className="h-full w-full border-0"
-              referrerPolicy="no-referrer"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-              style={{ backgroundColor: 'white' }}
-            />
-          </div>
-        )}
+        {conversationId &&
+          !isLoading &&
+          !isLoadingStaticExports &&
+          currentPreviewUrl &&
+          !previewError && (
+            <div className="h-full w-full">
+              <iframe
+                key={currentPreviewUrl} // Force re-render when URL changes
+                title="book-preview"
+                src={currentPreviewUrl}
+                className="h-full w-full border-0"
+                referrerPolicy="no-referrer"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                style={{ backgroundColor: 'white' }}
+                onLoad={() => {
+                  setPreviewError(null);
+                  console.log('✅ IFRAME LOADED SUCCESSFULLY:', currentPreviewUrl);
+                }}
+                onError={(e) => {
+                  setPreviewError('Failed to load preview');
+                  console.error('❌ IFRAME FAILED TO LOAD:', currentPreviewUrl);
+                  console.error('Error details:', e);
+                }}
+              />
+            </div>
+          )}
 
-        {conversationId && !isLoading && !isLoadingExports && !currentPreviewUrl && (
+        {conversationId && !isLoading && !isLoadingStaticExports && previewError && (
           <div className="flex h-full items-center justify-center text-gray-500">
             <div className="text-center">
-              <div className="mb-4 text-6xl">⚠️</div>
+              <div className="mb-4 text-6xl">❌</div>
               <h3 className="mb-2 text-xl font-medium text-gray-900 dark:text-gray-100">
-                Preview Unavailable
+                Preview Error
               </h3>
-              <p className="mb-4 text-gray-600 dark:text-gray-400">
-                No book exports available for this conversation
-              </p>
-              <Button onClick={handleRefreshPreview} className="flex items-center gap-1">
+              <p className="mb-4 text-gray-600 dark:text-gray-400">{previewError}</p>
+              <Button
+                onClick={() => {
+                  setPreviewError(null);
+                  handleRefreshPreview();
+                }}
+                className="flex items-center gap-1"
+              >
                 <RefreshCw className="h-4 w-4" />
                 Try Again
               </Button>
             </div>
           </div>
         )}
+
+        {conversationId &&
+          !isLoading &&
+          !isLoadingStaticExports &&
+          !currentPreviewUrl &&
+          !previewError && (
+            <div className="flex h-full items-center justify-center text-gray-500">
+              <div className="text-center">
+                <div className="mb-4 text-6xl">⚠️</div>
+                <h3 className="mb-2 text-xl font-medium text-gray-900 dark:text-gray-100">
+                  Preview Unavailable
+                </h3>
+                <p className="mb-4 text-gray-600 dark:text-gray-400">
+                  No book exports available for this conversation
+                </p>
+                <Button onClick={handleRefreshPreview} className="flex items-center gap-1">
+                  <RefreshCw className="h-4 w-4" />
+                  Try Again
+                </Button>
+              </div>
+            </div>
+          )}
       </div>
     </div>
   );

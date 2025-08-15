@@ -57,8 +57,8 @@ export default function BookCreationPanel({ className = '' }: BookCreationPanelP
   const handlePreviewBook = useCallback(
     async (bookId: string) => {
       selectBook(bookId);
-      // Set the preview URL to the default export
-      setPreviewUrl('/c/exports/cruel-hearts-preview.html');
+      // Clear any existing preview URL to trigger loading from exports
+      setPreviewUrl(null);
     },
     [selectBook, setPreviewUrl],
   );
@@ -92,7 +92,7 @@ export default function BookCreationPanel({ className = '' }: BookCreationPanelP
             const result = await response.json();
             if (result.success) {
               // Set preview URL to the generated export file with cache buster
-              setPreviewUrl(`/c/exports/${filename}?t=${Date.now()}`);
+              setPreviewUrl(`/c/exports/${filename}`);
             } else {
               console.error('Export failed:', result.error);
             }
@@ -102,9 +102,7 @@ export default function BookCreationPanel({ className = '' }: BookCreationPanelP
         }
       } else {
         // Direct URL - set as preview URL with cache buster to force reload
-        const urlWithCacheBuster = url.includes('?')
-          ? `${url}&t=${Date.now()}`
-          : `${url}?t=${Date.now()}`;
+        const urlWithCacheBuster = url;
         setPreviewUrl(urlWithCacheBuster);
       }
     },
