@@ -7,14 +7,22 @@ import { ValidationError } from '../../../types/errors.js';
 import { ILogger } from '../../core/Logger.js';
 import { IToolHandler } from '../../interfaces/index.js';
 import { ImageService } from '../../services/ImageService.js';
+import { ContextAwareImageService } from '../../services/ContextAwareImageService.js';
+import { NarrativeConsistencyService } from '../../services/NarrativeConsistencyService.js';
 
 export class ImageToolHandlers {
     private logger: ILogger;
     private imageService: ImageService;
+    private contextAwareImageService?: ContextAwareImageService;
 
-    constructor(logger: ILogger, imageService: ImageService) {
+    constructor(logger: ILogger, imageService: ImageService, narrativeService?: NarrativeConsistencyService) {
         this.logger = logger.child('ImageToolHandlers');
         this.imageService = imageService;
+        
+        // Initialize context-aware image service if narrative service is available
+        if (narrativeService) {
+            this.contextAwareImageService = new ContextAwareImageService(logger, imageService, narrativeService);
+        }
     }
 
     getTools(): IToolHandler[] {
@@ -142,6 +150,74 @@ export class ImageToolHandlers {
                 },
                 handler: this.handleManageUserStylePreferences.bind(this),
             },
+            
+            // Scene-aware image generation tool
+            {
+                name: 'generate_scene_aware_image',
+                description: 'Generate an image with enhanced scene analysis from page content, including automatic extraction of visual elements, atmosphere, and composition details',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        bookId: { type: 'string', description: 'Book ID' },
+                        chapterId: { type: 'string', description: 'Chapter ID' },
+                        pageId: { type: 'string', description: 'Page ID for scene analysis' },
+                        prompt: { type: 'string', description: 'Base image description/prompt' },
+                        enhanceWithSceneAnalysis: { 
+                            type: 'boolean', 
+                            description: 'Whether to enhance prompt with automatic scene analysis',
+                            default: true 
+                        },
+                        includeAtmosphere: { 
+                            type: 'boolean', 
+                            description: 'Include atmospheric elements (weather, lighting, time of day)',
+                            default: true 
+                        },
+                        includeObjects: { 
+                            type: 'boolean', 
+                            description: 'Include important objects from scene',
+                            default: true 
+                        },
+                        includeActions: { 
+                            type: 'boolean', 
+                            description: 'Include character actions for dynamic composition',
+                            default: false 
+                        },
+                        style: { type: 'string', description: 'Image style override (optional)' },
+                        userId: { type: 'string', description: 'User ID for preferences (optional)' }
+                    },
+                    required: ['bookId', 'chapterId', 'pageId', 'prompt']
+                },
+                handler: this.handleGenerateSceneAwareImage.bind(this)
+            },
+            
+            // New character-consistent image generation tool
+            {
+                name: 'generate_character_consistent_image',
+                description: 'Generate an image with specific character consistency using narrative database',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        bookId: { type: 'string', description: 'Book ID' },
+                        chapterId: { type: 'string', description: 'Chapter ID' },
+                        pageId: { type: 'string', description: 'Page ID (optional)' },
+                        prompt: { type: 'string', description: 'Image description/prompt' },
+                        characterIds: { 
+                            type: 'array', 
+                            items: { type: 'string' },
+                            description: 'Character IDs to include with consistent descriptions' 
+                        },
+                        worldElementIds: { 
+                            type: 'array', 
+                            items: { type: 'string' },
+                            description: 'World element IDs to include (optional)' 
+                        },
+                        style: { type: 'string', description: 'Image style override (optional)' },
+                        userId: { type: 'string', description: 'User ID for preferences (optional)' }
+                    },
+                    required: ['bookId', 'chapterId', 'prompt', 'characterIds']
+                },
+                handler: this.handleGenerateCharacterConsistentImage.bind(this)
+            }
         ];
     }
 
@@ -159,17 +235,34 @@ export class ImageToolHandlers {
             }
 
             try {
-                const result = await this.imageService.generateContextualImage({
-                    bookId: args.bookId,
-                    chapterId: args.chapterId,
-                    pageId: args.pageId,
-                    pageNumber: args.pageNumber,
-                    prompt: args.prompt,
-                    style: args.style,
-                    userStylePreference: args.userStylePreference,
-                    forceUserPrompt: args.forceUserPrompt,
-                    userId: args.userId,
-                });
+                // Use context-aware image service if available, otherwise use standard service
+                const result = this.contextAwareImageService 
+                    ? await this.contextAwareImageService.generateContextualImage({
+                        bookId: args.bookId,
+                        chapterId: args.chapterId,
+                        pageId: args.pageId,
+                        pageNumber: args.pageNumber,
+                        prompt: args.prompt,
+                        style: args.style,
+                        userStylePreference: args.userStylePreference,
+                        forceUserPrompt: args.forceUserPrompt,
+                        userId: args.userId,
+                        includeCharacterContext: true,
+                        includeWorldContext: true,
+                        includeTimelineContext: true,
+                        includeSpecContext: true
+                    })
+                    : await this.imageService.generateContextualImage({
+                        bookId: args.bookId,
+                        chapterId: args.chapterId,
+                        pageId: args.pageId,
+                        pageNumber: args.pageNumber,
+                        prompt: args.prompt,
+                        style: args.style,
+                        userStylePreference: args.userStylePreference,
+                        forceUserPrompt: args.forceUserPrompt,
+                        userId: args.userId,
+                    });
 
                 // Check if user style input is needed
                 if (result.needsUserStyleInput) {
@@ -343,6 +436,155 @@ export class ImageToolHandlers {
         } catch (error) {
             this.logger.error('Failed to manage user style preferences', error as Error, { args });
             throw error;
+        }
+    }
+
+    async handleGenerateSceneAwareImage(args: any): Promise<any> {
+        try {
+            if (!this.contextAwareImageService) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: '❌ Scene-aware image generation requires context-aware image service to be enabled.'
+                    }]
+                };
+            }
+
+            const result = await this.contextAwareImageService.generateContextualImage({
+                bookId: args.bookId,
+                chapterId: args.chapterId,
+                pageId: args.pageId,
+                prompt: args.prompt,
+                style: args.style,
+                userId: args.userId,
+                includeCharacterContext: true,
+                includeWorldContext: true,
+                includeTimelineContext: args.includeAtmosphere !== false,
+                includeSpecContext: true
+            });
+
+            if (result.needsUserStyleInput) {
+                const styleOptions = result.availableStyles?.map(style => 
+                    `• **${style.name}**: ${style.description} (${style.ageRating})`
+                ).join('\n') || '';
+                
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `🎨 **Style Selection Required**\n\nThe system needs your input to choose an appropriate image style.\n\n**Available Styles:**\n${styleOptions}\n\nPlease specify your preferred style using the 'userStylePreference' parameter and try again.`
+                    }]
+                };
+            }
+
+            let responseText = `🎬 **Scene-Aware Image Generated Successfully!**\n\n`;
+            responseText += `**Image URL:** ${result.imageUrl}\n\n`;
+            
+            if (result.contextUsed) {
+                responseText += `**Enhanced Context Applied:**\n`;
+                
+                if (result.contextUsed.characters.length > 0) {
+                    responseText += `• **Characters:** ${result.contextUsed.characters.map(c => `${c.name} (${c.traits.join(', ')})`).join('; ')}\n`;
+                }
+                
+                if (result.contextUsed.worldElements.length > 0) {
+                    responseText += `• **World Elements:** ${result.contextUsed.worldElements.map(e => `${e.name} - ${e.visualDetails}`).join('; ')}\n`;
+                }
+                
+                if (result.contextUsed.timelineContext) {
+                    responseText += `• **Timeline Context:** ${result.contextUsed.timelineContext}\n`;
+                }
+            }
+            
+            if (result.enhancedPrompt && result.originalPrompt) {
+                responseText += `\n**Scene Analysis Enhancement:**\n`;
+                responseText += `• **Original:** ${result.originalPrompt}\n`;
+                responseText += `• **Enhanced:** ${result.enhancedPrompt.length > 250 ? result.enhancedPrompt.substring(0, 250) + '...' : result.enhancedPrompt}\n`;
+            }
+            
+            if (result.attachedToPageId) {
+                responseText += `\n✅ **Image attached to page:** ${result.attachedToPageId}`;
+            }
+
+            return { content: [{ type: 'text', text: responseText }] };
+        } catch (error) {
+            const errorMessage = `❌ **Error generating scene-aware image:** ${(error as Error).message}`;
+            this.logger.error('Scene-aware image generation failed', error as Error, args);
+            return { content: [{ type: 'text', text: errorMessage }] };
+        }
+    }
+
+    async handleGenerateCharacterConsistentImage(args: any): Promise<any> {
+        try {
+            if (!this.contextAwareImageService) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: '❌ Character-consistent image generation requires narrative consistency service to be enabled.'
+                    }]
+                };
+            }
+
+            const result = await this.contextAwareImageService.generateContextualImage({
+                bookId: args.bookId,
+                chapterId: args.chapterId,
+                pageId: args.pageId,
+                prompt: args.prompt,
+                style: args.style,
+                userId: args.userId,
+                includeCharacterContext: true,
+                includeWorldContext: true,
+                includeSpecContext: true,
+                specificCharacters: args.characterIds,
+                specificWorldElements: args.worldElementIds
+            });
+
+            if (result.needsUserStyleInput) {
+                const styleOptions = result.availableStyles?.map(style => 
+                    `• **${style.name}**: ${style.description} (${style.ageRating})`
+                ).join('\n') || '';
+                
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `🎨 **Style Selection Required**\n\nThe system needs your input to choose an appropriate image style.\n\n**Available Styles:**\n${styleOptions}\n\nPlease specify your preferred style using the 'userStylePreference' parameter and try again.`
+                    }]
+                };
+            }
+
+            let responseText = `🎨 **Character-Consistent Image Generated Successfully!**\n\n`;
+            responseText += `**Image URL:** ${result.imageUrl}\n\n`;
+            
+            if (result.contextUsed) {
+                responseText += `**Narrative Context Applied:**\n`;
+                
+                if (result.contextUsed.characters.length > 0) {
+                    responseText += `• **Characters:** ${result.contextUsed.characters.map(c => `${c.name} (${c.traits.join(', ')})`).join('; ')}\n`;
+                }
+                
+                if (result.contextUsed.worldElements.length > 0) {
+                    responseText += `• **World Elements:** ${result.contextUsed.worldElements.map(e => `${e.name} - ${e.visualDetails}`).join('; ')}\n`;
+                }
+                
+                if (result.contextUsed.timelineContext) {
+                    responseText += `• **Timeline Context:** ${result.contextUsed.timelineContext}\n`;
+                }
+            }
+            
+            if (result.enhancedPrompt && result.originalPrompt) {
+                responseText += `\n**Prompt Enhancement:**\n`;
+                responseText += `• **Original:** ${result.originalPrompt}\n`;
+                responseText += `• **Enhanced:** ${result.enhancedPrompt.length > 200 ? result.enhancedPrompt.substring(0, 200) + '...' : result.enhancedPrompt}\n`;
+            }
+            
+            if (result.attachedToPageId) {
+                responseText += `\n✅ **Image attached to page:** ${result.attachedToPageId}`;
+            }
+
+            return { content: [{ type: 'text', text: responseText }] };
+        } catch (error) {
+            const errorMessage = `❌ **Error generating character-consistent image:** ${(error as Error).message}`;
+            this.logger.error('Character-consistent image generation failed', error as Error, args);
+            return { content: [{ type: 'text', text: errorMessage }] };
         }
     }
 }

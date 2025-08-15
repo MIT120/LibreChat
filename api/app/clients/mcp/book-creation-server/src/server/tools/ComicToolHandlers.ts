@@ -7,15 +7,18 @@ import { ILogger } from '../../core/Logger.js';
 import { IBookService, IToolHandler } from '../../interfaces/index.js';
 import { ToolExecutor } from '../ToolExecutor.js';
 import { CreateBookRequest, VocabularyLevel, SentenceStructure, WritingTone, WritingVoice } from '../../../types/book.js';
+import { NarrativeConsistencyService } from '../../services/NarrativeConsistencyService.js';
 
 export class ComicToolHandlers {
     private logger: ILogger;
     private bookService: IBookService;
     private comicProjects: Map<string, any> = new Map();
+    private narrativeService?: NarrativeConsistencyService;
 
-    constructor(logger: ILogger, bookService: IBookService) {
+    constructor(logger: ILogger, bookService: IBookService, narrativeService?: NarrativeConsistencyService) {
         this.logger = logger.child('ComicToolHandlers');
         this.bookService = bookService;
+        this.narrativeService = narrativeService;
     }
 
     getTools(): IToolHandler[] {
@@ -429,6 +432,32 @@ export class ComicToolHandlers {
             this.comicProjects.set(input.comic_id, comic);
         }
 
+        // Register character in narrative database if service available
+        if (this.narrativeService) {
+            try {
+                await this.narrativeService.upsertCharacter(
+                    input.comic_id,
+                    input.comic_id, // using comic_id as conversationId
+                    {
+                        characterId: character.id,
+                        name: input.name,
+                        role: input.role || 'supporting',
+                        physicalTraits: {
+                            description: input.description || '',
+                            visualTraits: input.visual_traits || [],
+                            distinctiveFeatures: input.distinctive_features || []
+                        },
+                        personality: {
+                            coreTraits: input.personality_traits || [],
+                            goals: input.motivations ? [{ description: input.motivations, priority: 'primary' }] : []
+                        }
+                    }
+                );
+            } catch (error) {
+                this.logger.warn('Failed to register comic character in narrative database', error as Error);
+            }
+        }
+
         this.logger.info(`Created comic character: ${character.name}`, { characterId: character.id });
         
         return character;
@@ -445,6 +474,53 @@ export class ComicToolHandlers {
         if (comic) {
             comic.pages.push(page);
             this.comicProjects.set(input.comic_id, comic);
+        }
+
+        // Record page creation and panel events in timeline if service available
+        if (this.narrativeService) {
+            try {
+                // Record page creation
+                await this.narrativeService.recordTimelineEvent(
+                    input.comic_id,
+                    input.comic_id, // using comic_id as conversationId
+                    {
+                        name: `Comic Page ${input.page_number}: ${input.page_title}`,
+                        description: `Created comic page with ${input.panels?.length || 0} panels`,
+                        type: 'plot_point',
+                        timing: {
+                            sequenceNumber: input.page_number,
+                            relativeTime: `Page ${input.page_number}`
+                        },
+                        participants: [],
+                        location: input.location ? { locationName: input.location } : undefined,
+                        impact: {
+                            plotSignificance: 'minor'
+                        }
+                    },
+                    {
+                        chapterId: input.comic_id, // using comic_id as chapterId for comics
+                        pageId: page.id
+                    }
+                );
+
+                // Register location if specified
+                if (input.location) {
+                    await this.narrativeService.upsertWorldElement(
+                        input.comic_id,
+                        input.comic_id,
+                        {
+                            name: input.location,
+                            type: 'location',
+                            description: `Comic page location: ${input.location}`,
+                            visualDetails: {
+                                atmosphere: input.mood || 'neutral'
+                            }
+                        }
+                    );
+                }
+            } catch (error) {
+                this.logger.warn('Failed to record comic page in narrative database', error as Error);
+            }
         }
 
         this.logger.info(`Created comic page script: Page ${page.page_number}`, { pageId: page.id });

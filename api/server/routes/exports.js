@@ -411,6 +411,102 @@ router.get('/static/download/:filename', async (req, res) => {
 });
 
 /**
+ * Save HTML content to exports directory
+ * POST /api/exports/save-html
+ */
+router.post('/save-html', requireJwtAuth, async (req, res) => {
+  try {
+    const { htmlContent, filename } = req.body;
+    const userId = req.user.id;
+    const path = require('path');
+
+    logger.info('Saving HTML content to exports', {
+      userId,
+      filename,
+      contentLength: htmlContent?.length,
+    });
+
+    // Validate input
+    if (!htmlContent || typeof htmlContent !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'HTML content is required',
+      });
+    }
+
+    if (!filename || typeof filename !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Filename is required',
+      });
+    }
+
+    // Validate filename (basic security check)
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid filename',
+      });
+    }
+
+    // Ensure filename has .html extension
+    const sanitizedFilename = filename.endsWith('.html') ? filename : `${filename}.html`;
+
+    // Get the exports directory path
+    const exportsDir = path.join(process.cwd(), 'exports');
+    const filePath = path.join(exportsDir, sanitizedFilename);
+
+    // Ensure exports directory exists
+    try {
+      await fs.mkdir(exportsDir, { recursive: true });
+    } catch (mkdirError) {
+      logger.error('Failed to create exports directory', {
+        exportsDir,
+        error: mkdirError.message,
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create exports directory',
+      });
+    }
+
+    // Write the HTML content to file
+    await fs.writeFile(filePath, htmlContent, 'utf8');
+
+    // Get file stats for response
+    const stats = await fs.stat(filePath);
+
+    logger.info('HTML content saved successfully', {
+      userId,
+      filename: sanitizedFilename,
+      filePath,
+      size: stats.size,
+    });
+
+    res.json({
+      success: true,
+      filename: sanitizedFilename,
+      filePath: filePath,
+      size: stats.size,
+      url: `/c/exports/${sanitizedFilename}`,
+      downloadUrl: `/api/exports/static/download/${sanitizedFilename}`,
+      message: 'HTML content saved successfully',
+    });
+  } catch (error) {
+    logger.error('Failed to save HTML content', {
+      error: error.message,
+      userId: req.user?.id,
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to save HTML content',
+      message: error.message,
+    });
+  }
+});
+
+/**
  * Get export statistics for a conversation
  * GET /api/exports/conversation/:conversationId/stats
  */

@@ -28,6 +28,10 @@ import { WritingAssistantService } from './services/WritingAssistantService.js';
 import { PlotAnalysisService } from './services/PlotAnalysisService.js';
 import { ContentEnhancementService } from './services/ContentEnhancementService.js';
 
+// Import narrative consistency services
+import { NarrativeConsistencyService } from './services/NarrativeConsistencyService.js';
+import { ConsistencyValidationService } from './services/ConsistencyValidationService.js';
+
 // Import server
 import { MCPServer } from './server/MCPServer.js';
 
@@ -159,6 +163,19 @@ async function registerServices(logger: Logger): Promise<void> {
         container.registerSingleton(
             'ContentEnhancementService',
             ContentEnhancementService,
+            [SERVICE_TOKENS.LOGGER]
+        );
+
+        // Narrative consistency services
+        container.registerSingleton(
+            'NarrativeConsistencyService',
+            NarrativeConsistencyService,
+            [SERVICE_TOKENS.LOGGER, SERVICE_TOKENS.DATABASE_SERVICE]
+        );
+
+        container.registerSingleton(
+            'ConsistencyValidationService',
+            ConsistencyValidationService,
             [SERVICE_TOKENS.LOGGER]
         );
 

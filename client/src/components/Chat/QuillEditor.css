@@ -1,0 +1,176 @@
+/* Custom styles for React-Quill editor */
+.book-editor .ql-container {
+  font-size: 14px;
+  height: calc(100% - 42px) !important;
+  overflow-y: auto !important;
+  border: none;
+}
+
+.book-editor .ql-editor {
+  padding: 20px;
+  line-height: 1.6;
+  overflow-y: auto !important;
+  max-height: none !important;
+  min-height: 400px;
+}
+
+.book-editor .ql-toolbar {
+  border-bottom: 1px solid #e5e7eb;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  flex-shrink: 0;
+  background: #f9fafb;
+}
+
+.book-editor .ql-editor img {
+  max-width: 100%;
+  height: auto;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  border: 1px solid #e5e7eb;
+}
+
+.book-editor .ql-editor img:hover {
+  box-shadow: 0 0 0 2px #3b82f6;
+  transform: scale(1.02);
+}
+
+/* Handle broken/expired images */
+.book-editor .ql-editor img[src*="blob.core.windows.net"] {
+  position: relative;
+}
+
+.book-editor .ql-editor img[src*="blob.core.windows.net"]::after {
+  content: "⚠️ Image expired (Azure blob URL has timed out)";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fee2e2;
+  color: #dc2626;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid #fecaca;
+  display: none;
+}
+
+.book-editor .ql-editor img[src*="blob.core.windows.net"]:not([src^="data:"]):not([complete]) {
+  background: #f9fafb;
+  border: 2px dashed #d1d5db;
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Expired images styling */
+.book-editor .ql-editor img[data-expired="true"] {
+  border: 2px dashed #f59e0b;
+  background: linear-gradient(45deg, #fef3c7 25%, transparent 25%), 
+              linear-gradient(-45deg, #fef3c7 25%, transparent 25%), 
+              linear-gradient(45deg, transparent 75%, #fef3c7 75%), 
+              linear-gradient(-45deg, transparent 75%, #fef3c7 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  min-height: 100px;
+  opacity: 0.7;
+  position: relative;
+}
+
+.book-editor .ql-editor img[data-expired="true"]::before {
+  content: "⚠️ Image Expired";
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #f59e0b;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  z-index: 10;
+}
+
+/* Fallback for broken images */
+.book-editor .ql-editor img[src*="blob.core.windows.net"]:not([src^="data:"]) {
+  background: linear-gradient(45deg, #f9fafb 25%, transparent 25%), 
+              linear-gradient(-45deg, #f9fafb 25%, transparent 25%), 
+              linear-gradient(45deg, transparent 75%, #f9fafb 75%), 
+              linear-gradient(-45deg, transparent 75%, #f9fafb 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  min-height: 100px;
+}
+
+.book-editor .ql-editor img.ql-image-resize {
+  position: relative;
+}
+
+/* Style the image resize handles */
+.book-editor .ql-image-resize .ql-resize-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #3b82f6;
+  border: 1px solid #ffffff;
+  border-radius: 50%;
+}
+
+.book-editor .ql-image-resize .ql-resize-handle.nw {
+  top: -4px;
+  left: -4px;
+  cursor: nw-resize;
+}
+
+.book-editor .ql-image-resize .ql-resize-handle.ne {
+  top: -4px;
+  right: -4px;
+  cursor: ne-resize;
+}
+
+.book-editor .ql-image-resize .ql-resize-handle.sw {
+  bottom: -4px;
+  left: -4px;
+  cursor: sw-resize;
+}
+
+.book-editor .ql-image-resize .ql-resize-handle.se {
+  bottom: -4px;
+  right: -4px;
+  cursor: se-resize;
+}
+
+/* Custom scrollbar for better UX */
+.book-editor .ql-editor::-webkit-scrollbar {
+  width: 8px;
+}
+
+.book-editor .ql-editor::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.book-editor .ql-editor::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.book-editor .ql-editor::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Ensure proper height inheritance */
+.book-editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.book-editor .quill {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}

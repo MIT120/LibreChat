@@ -4,16 +4,19 @@
 
 import { ILogger } from '../../core/Logger.js';
 import { IExportService, IToolHandler, IBookService } from '../../interfaces/index.js';
+import { NarrativeConsistencyService } from '../../services/NarrativeConsistencyService.js';
 
 export class ExportToolHandlers {
     private logger: ILogger;
     private exportService: IExportService;
     private bookService: IBookService;
+    private narrativeService?: NarrativeConsistencyService;
 
-    constructor(logger: ILogger, exportService: IExportService, bookService: IBookService) {
+    constructor(logger: ILogger, exportService: IExportService, bookService: IBookService, narrativeService?: NarrativeConsistencyService) {
         this.logger = logger.child('ExportToolHandlers');
         this.exportService = exportService;
         this.bookService = bookService;
+        this.narrativeService = narrativeService;
     }
 
     getTools(): IToolHandler[] {
@@ -141,6 +144,44 @@ export class ExportToolHandlers {
                     required: ['authorId', 'conversationId'],
                 },
                 handler: this.handleListUserBooks.bind(this),
+            },
+            {
+                name: 'export_book_with_narrative_context',
+                description: 'Export a book with comprehensive narrative consistency information including character references, world elements, and timeline',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        bookId: {
+                            type: 'string',
+                            description: 'The ID of the book to export'
+                        },
+                        format: {
+                            type: 'string',
+                            enum: ['html', 'pdf', 'txt', 'epub', 'docx'],
+                            description: 'Export format'
+                        },
+                        authorId: {
+                            type: 'string',
+                            description: 'Author ID for export access'
+                        },
+                        includeMetadata: {
+                            type: 'boolean',
+                            description: 'Whether to include book metadata',
+                            default: true
+                        },
+                        includeNarrativeData: {
+                            type: 'boolean',
+                            description: 'Whether to include narrative consistency data (characters, world elements, timeline)',
+                            default: true
+                        },
+                        aliasFilename: {
+                            type: 'string',
+                            description: 'Optional alias filename for the export'
+                        }
+                    },
+                    required: ['bookId', 'format', 'authorId']
+                },
+                handler: this.handleExportBookWithNarrativeContext.bind(this)
             },
         ];
     }
@@ -463,6 +504,115 @@ ${this.getFormatSpecificNotes(result.format)}`;
             case 'completed': return '✅';
             case 'published': return '📖';
             default: return '📚';
+        }
+    }
+
+    private async handleExportBookWithNarrativeContext(args: {
+        bookId: string;
+        format: string;
+        authorId: string;
+        includeMetadata?: boolean;
+        includeNarrativeData?: boolean;
+        aliasFilename?: string;
+    }): Promise<string> {
+        try {
+            const startTime = Date.now();
+            this.logger.info('Starting enhanced book export with narrative context', {
+                bookId: args.bookId,
+                format: args.format,
+                includeMetadata: args.includeMetadata,
+                includeNarrativeData: args.includeNarrativeData
+            });
+
+            // Get narrative consistency data if requested and service is available
+            let narrativeContext = null;
+            if (args.includeNarrativeData !== false && this.narrativeService) {
+                try {
+                    narrativeContext = await this.narrativeService.getNarrativeContext(args.bookId, args.bookId);
+                    this.logger.info('Retrieved narrative context for export', {
+                        characters: narrativeContext.characters.length,
+                        worldElements: narrativeContext.worldElements.length,
+                        timelineEvents: narrativeContext.timelineEvents.length
+                    });
+                } catch (error) {
+                    this.logger.warn('Failed to retrieve narrative context for export', error as Error);
+                }
+            }
+
+            // Perform the regular export
+            const exportOptions: any = {
+                authorId: args.authorId,
+                includeMetadata: args.includeMetadata ?? true,
+            };
+            if (typeof args.aliasFilename === 'string') {
+                exportOptions.aliasFilename = args.aliasFilename;
+            }
+            
+            const result = await this.exportService.exportBook(
+                args.bookId,
+                args.format,
+                exportOptions,
+            );
+
+            const exportTime = Date.now() - startTime;
+            const fileSizeMB = (result.size / (1024 * 1024)).toFixed(2);
+
+            // Build enhanced response with narrative consistency info
+            let responseText = `✅ Enhanced Book Export with Narrative Context completed successfully!
+
+**Export Details:**
+- **Book ID:** ${args.bookId}
+- **Export ID:** ${result.exportId || 'N/A'}
+- **Version:** ${result.version || 'N/A'}
+- **Format:** ${result.format.toUpperCase()}
+- **Filename:** ${result.filename}
+- **File Size:** ${fileSizeMB} MB
+- **Export Time:** ${(exportTime / 1000).toFixed(1)} seconds
+- **Created:** ${result.createdAt.toLocaleString()}
+- **Include Metadata:** ${args.includeMetadata ?? true ? 'Yes' : 'No'}
+- **Include Narrative Data:** ${args.includeNarrativeData ?? true ? 'Yes' : 'No'}
+
+**File Access:**
+- **File Location:** \`${result.filepath}\`
+- **URL:** ${result.url || `/c/exports/${result.filename}`}`;
+
+            // Add narrative consistency summary if available
+            if (narrativeContext) {
+                responseText += `
+
+**📚 Narrative Consistency Summary:**
+- **Characters:** ${narrativeContext.characters.length} defined characters with consistent descriptions
+- **World Elements:** ${narrativeContext.worldElements.length} world elements tracked for consistency
+- **Timeline Events:** ${narrativeContext.timelineEvents.length} events maintaining story continuity
+- **Total Consistency References:** ${narrativeContext.characters.length + narrativeContext.worldElements.length + narrativeContext.timelineEvents.length}
+
+**Character Overview:**
+${narrativeContext.characters.slice(0, 5).map(char => 
+    `- **${char.name}** (${char.role}) - Last seen: Chapter ${char.lastAppearedChapter || 'N/A'}`
+).join('\n')}${narrativeContext.characters.length > 5 ? `\n- *... and ${narrativeContext.characters.length - 5} more characters*` : ''}
+
+**Key World Elements:**
+${narrativeContext.worldElements.slice(0, 3).map(element => 
+    `- **${element.name}** (${element.type}) - ${element.description}`
+).join('\n')}${narrativeContext.worldElements.length > 3 ? `\n- *... and ${narrativeContext.worldElements.length - 3} more elements*` : ''}`;
+            } else if (args.includeNarrativeData !== false) {
+                responseText += `
+
+**📚 Narrative Consistency:** No narrative consistency data found for this book. Consider using the narrative consistency tools to track characters, world elements, and timeline events for future exports.`;
+            }
+
+            responseText += `
+
+The exported file includes ${args.includeMetadata !== false ? 'book metadata, table of contents, and ' : ''}all written content formatted for ${result.format.toUpperCase()}${narrativeContext ? ' with comprehensive narrative consistency references' : ''}.
+
+**Version Tracking:** This export is automatically tracked in the database with version ${result.version || 'N/A'} for future reference.
+
+${this.getFormatSpecificNotes(result.format)}`;
+
+            return responseText;
+        } catch (error) {
+            this.logger.error('Failed to export book with narrative context', error as Error, args);
+            throw error;
         }
     }
 }

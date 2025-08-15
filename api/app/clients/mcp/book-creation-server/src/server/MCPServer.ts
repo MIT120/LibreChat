@@ -28,6 +28,8 @@ import { PageToolHandlers } from './tools/PageToolHandlers.js';
 import PlanningToolHandlers from './tools/PlanningToolHandlers.js';
 import WritingAssistantToolHandlers from './tools/WritingAssistantToolHandlers.js';
 import ContentEnhancementToolHandlers from './tools/ContentEnhancementToolHandlers.js';
+import { NarrativeConsistencyToolHandlers } from './tools/NarrativeConsistencyToolHandlers.js';
+import { ConsistencyAwarePageToolHandlers } from './tools/ConsistencyAwarePageToolHandlers.js';
 
 export class MCPServer extends BaseService implements IMCPServer {
     private server: Server;
@@ -146,14 +148,18 @@ export class MCPServer extends BaseService implements IMCPServer {
         const exportService = this.serviceContainer.resolve(SERVICE_TOKENS.EXPORT_SERVICE) as any;
         const imageService = this.serviceContainer.resolve(SERVICE_TOKENS.IMAGE_SERVICE) as any;
 
+        // Get narrative consistency services
+        const narrativeConsistencyService = this.serviceContainer.resolve('NarrativeConsistencyService') as any;
+        const consistencyValidationService = this.serviceContainer.resolve('ConsistencyValidationService') as any;
+
         // Register tool handler groups
         const toolHandlerGroups = [
-            new BookToolHandlers(this.logger, bookService),
-            new ChapterToolHandlers(this.logger, bookService),
-            new PageToolHandlers(this.logger, bookService),
-            new ComicToolHandlers(this.logger, bookService),
-            new ImageToolHandlers(this.logger, imageService),
-            new ExportToolHandlers(this.logger, exportService, bookService),
+            new BookToolHandlers(this.logger, bookService, narrativeConsistencyService),
+            new ChapterToolHandlers(this.logger, bookService, narrativeConsistencyService),
+            new PageToolHandlers(this.logger, bookService, narrativeConsistencyService),
+            new ComicToolHandlers(this.logger, bookService, narrativeConsistencyService),
+            new ImageToolHandlers(this.logger, imageService, narrativeConsistencyService),
+            new ExportToolHandlers(this.logger, exportService, bookService, narrativeConsistencyService),
             // New planning & analysis tools
             new PlanningToolHandlers(this.logger, bookService),
             new AnalysisToolHandlers(
@@ -172,6 +178,9 @@ export class MCPServer extends BaseService implements IMCPServer {
                 this.serviceContainer.resolve('ContentEnhancementService') as any,
                 this.logger
             ),
+            // Narrative consistency tools
+            new NarrativeConsistencyToolHandlers(this.logger, narrativeConsistencyService),
+            new ConsistencyAwarePageToolHandlers(this.logger, bookService, narrativeConsistencyService),
         ];
 
         for (const handlerGroup of toolHandlerGroups) {

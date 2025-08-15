@@ -7,14 +7,17 @@ import { CreatePageRequest, UpdatePageRequest } from '../../../types/book.js';
 import { ILogger } from '../../core/Logger.js';
 import { IPageService, IToolHandler } from '../../interfaces/index.js';
 import { ToolExecutor } from '../ToolExecutor.js';
+import { NarrativeConsistencyService } from '../../services/NarrativeConsistencyService.js';
 
 export class PageToolHandlers {
     private logger: ILogger;
     private pageService: IPageService;
+    private narrativeService?: NarrativeConsistencyService;
 
-    constructor(logger: ILogger, pageService: IPageService) {
+    constructor(logger: ILogger, pageService: IPageService, narrativeService?: NarrativeConsistencyService) {
         this.logger = logger.child('PageToolHandlers');
         this.pageService = pageService;
+        this.narrativeService = narrativeService;
     }
 
     getTools(): IToolHandler[] {
@@ -49,9 +52,59 @@ export class PageToolHandlers {
                         logger: this.logger,
                         schema,
                         args,
-                        perform: (input) => this.pageService.createPage(input as CreatePageRequest),
+                        perform: async (input) => {
+                            const pageRequest = input as CreatePageRequest;
+                            
+                            // Create the page first
+                            const page = await this.pageService.createPage(pageRequest);
+                            
+                            // Add narrative consistency tracking if service available
+                            if (this.narrativeService) {
+                                try {
+                                    // Validate consistency
+                                    const consistencyResult = await this.narrativeService.validateConsistency(
+                                        pageRequest.conversationId, // Using conversationId as bookId
+                                        pageRequest.content,
+                                        { chapterId: pageRequest.chapterId, pageId: page.pageId, title: pageRequest.title }
+                                    );
+                                    
+                                    // Log consistency issues
+                                    if (!consistencyResult.isConsistent) {
+                                        this.logger.warn('Page created with consistency issues', {
+                                            pageId: page.pageId,
+                                            violations: consistencyResult.violations.length
+                                        });
+                                    }
+                                    
+                                    // Add consistency info to page object for formatting
+                                    (page as any).consistencyCheck = {
+                                        isConsistent: consistencyResult.isConsistent,
+                                        violations: consistencyResult.violations.length,
+                                        criticalIssues: consistencyResult.violations.filter(v => v.severity === 'critical').length
+                                    };
+                                } catch (error) {
+                                    this.logger.warn('Consistency check failed during page creation', error as Error);
+                                }
+                            }
+                            
+                            return page;
+                        },
                         format: (page) => {
-                            return `✅ Page created successfully!\n\n**Page Details:**\n- **Page ID:** ${page.pageId}\n- **Chapter ID:** ${page.chapterId}\n- **Page Number:** ${page.pageNumber}\n- **Title:** ${page.title}\n- **Word Count:** ${page.wordCount.toLocaleString()}\n- **Status:** ${page.status}\n- **Created:** ${new Date(page.createdAt).toLocaleDateString()}\n\n**Content Preview:**\n${page.content.length > 200 ? page.content.substring(0, 200) + '...' : page.content}\n\n${page.notes ? `**Notes:** ${page.notes}` : ''}`;
+                            let result = `✅ Page created successfully!\n\n**Page Details:**\n- **Page ID:** ${page.pageId}\n- **Chapter ID:** ${page.chapterId}\n- **Page Number:** ${page.pageNumber}\n- **Title:** ${page.title}\n- **Word Count:** ${page.wordCount.toLocaleString()}\n- **Status:** ${page.status}\n- **Created:** ${new Date(page.createdAt).toLocaleDateString()}`;
+                            
+                            // Add consistency information if available
+                            if ((page as any).consistencyCheck) {
+                                const check = (page as any).consistencyCheck;
+                                result += `\n\n**Consistency Check:**\n- **Status:** ${check.isConsistent ? '✅ Consistent' : '⚠️ Issues Found'}\n- **Total Issues:** ${check.violations}\n- **Critical Issues:** ${check.criticalIssues}`;
+                                
+                                if (!check.isConsistent) {
+                                    result += '\n- **Recommendation:** Use `validate_consistency` tool for detailed analysis';
+                                }
+                            }
+                            
+                            result += `\n\n**Content Preview:**\n${page.content.length > 200 ? page.content.substring(0, 200) + '...' : page.content}\n\n${page.notes ? `**Notes:** ${page.notes}` : ''}`;
+                            
+                            return result;
                         },
                     });
                 },
