@@ -13,7 +13,7 @@ import {
 
 import { AuthorizationError, DatabaseError, NotFoundError, ValidationError } from '../../types/errors.js';
 import { BaseService, ServiceHealth, ServiceHealthStatus } from '../core/BaseService.js';
-import { ILogger } from '../core/Logger.js';
+import { ILogger } from '../interfaces/ILogger.js';
 import { ServiceContainer } from '../core/ServiceContainer.js';
 import { IMCPServer, IToolHandler, SERVICE_TOKENS } from '../interfaces/index.js';
 
@@ -30,6 +30,13 @@ import WritingAssistantToolHandlers from './tools/WritingAssistantToolHandlers.j
 import ContentEnhancementToolHandlers from './tools/ContentEnhancementToolHandlers.js';
 import { NarrativeConsistencyToolHandlers } from './tools/NarrativeConsistencyToolHandlers.js';
 import { ConsistencyAwarePageToolHandlers } from './tools/ConsistencyAwarePageToolHandlers.js';
+import { CharacterToolHandlers } from './tools/CharacterToolHandlers.js';
+import { WorkspaceToolHandlers } from './tools/WorkspaceToolHandlers.js';
+import { TimelineToolHandlers } from './tools/TimelineToolHandlers.js';
+import { CompatibilityToolHandlers } from './tools/CompatibilityToolHandlers.js';
+import { RevisionToolHandlers } from './tools/RevisionToolHandlers.js';
+import { ConversationToolHandlers } from './tools/ConversationToolHandlers.js';
+import { UtilityToolHandlers } from './tools/UtilityToolHandlers.js';
 
 export class MCPServer extends BaseService implements IMCPServer {
     private server: Server;
@@ -132,7 +139,7 @@ export class MCPServer extends BaseService implements IMCPServer {
                     this.logger.debug('Service initialized', { service: String(serviceKey) });
                 }
             } catch (error) {
-                this.logger.error('Failed to initialize service', error as Error, { service: String(serviceKey) });
+                this.logger.error('Failed to initialize service', { error: error as Error, service: String(serviceKey) });
                 throw error;
             }
         }
@@ -181,6 +188,19 @@ export class MCPServer extends BaseService implements IMCPServer {
             // Narrative consistency tools
             new NarrativeConsistencyToolHandlers(this.logger, narrativeConsistencyService),
             new ConsistencyAwarePageToolHandlers(this.logger, bookService, narrativeConsistencyService),
+            // Character management tools
+            new CharacterToolHandlers(
+                this.logger,
+                this.serviceContainer.resolve('ContentEnhancementService') as any,
+                narrativeConsistencyService,
+                imageService
+            ),
+            // NovelCrafter-like features
+            new WorkspaceToolHandlers(this.logger),
+            new TimelineToolHandlers(this.logger),
+            new RevisionToolHandlers(this.logger),
+            new ConversationToolHandlers(this.logger),
+            new UtilityToolHandlers(this.logger),
         ];
 
         for (const handlerGroup of toolHandlerGroups) {
@@ -261,7 +281,7 @@ export class MCPServer extends BaseService implements IMCPServer {
                     };
                 }
             } catch (error) {
-                this.logger.error('Tool execution failed', error as Error, { tool: name, args });
+                this.logger.error('Tool execution failed', { error: error as Error, tool: name, args });
 
                 // Convert application errors to MCP errors
                 if (error instanceof ValidationError) {
@@ -286,7 +306,7 @@ export class MCPServer extends BaseService implements IMCPServer {
         });
 
         process.on('unhandledRejection', (reason, promise) => {
-            this.logger.error('Unhandled rejection', reason as Error, { promise });
+            this.logger.error('Unhandled rejection', { error: reason as Error, promise });
             process.exit(1);
         });
 
@@ -429,17 +449,17 @@ export class MCPServer extends BaseService implements IMCPServer {
             // Use HTTP request to notify the main server
             // Note: This is done asynchronously to not block the tool response
             this.notifyBookUpdateService(notificationData).catch((error) => {
-                this.logger.warn('Failed to notify book update service', { 
+                this.logger.warn('Failed to notify book update service', {
                     error: (error as Error).message,
                     toolName,
-                    bookId 
+                    bookId
                 });
             });
-            
+
         } catch (error) {
-            this.logger.warn('Error in emitUpdateNotification', { 
+            this.logger.warn('Error in emitUpdateNotification', {
                 error: (error as Error).message,
-                toolName 
+                toolName
             });
         }
     }
@@ -449,7 +469,7 @@ export class MCPServer extends BaseService implements IMCPServer {
      */
     private async notifyBookUpdateService(data: any): Promise<void> {
         const serverHost = process.env.SERVER_HOST || 'http://localhost:3080';
-        
+
         try {
             const response = await fetch(`${serverHost}/api/book-updates/notify`, {
                 method: 'POST',
@@ -464,9 +484,9 @@ export class MCPServer extends BaseService implements IMCPServer {
             }
         } catch (error) {
             // Log but don't throw - we don't want notification failures to break tool execution
-            this.logger.debug('Book update notification failed', { 
+            this.logger.debug('Book update notification failed', {
                 error: (error as Error).message,
-                data 
+                data
             });
         }
     }

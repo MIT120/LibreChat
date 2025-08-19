@@ -103,7 +103,7 @@ export class BookImportService extends BaseService {
      * Import a book from file path or buffer
      */
     async importBook(
-        filePath: string, 
+        filePath: string,
         options: ImportOptions = {}
     ): Promise<ImportResult> {
         return this.executeWithLogging('importBook', async () => {
@@ -115,7 +115,7 @@ export class BookImportService extends BaseService {
                 // Validate file
                 const fileStats = await fs.stat(filePath);
                 const maxSize = options.maxFileSize || this.MAX_FILE_SIZE;
-                
+
                 if (fileStats.size > maxSize) {
                     throw new ValidationError(`File too large: ${fileStats.size} bytes (max: ${maxSize})`, [
                         { field: 'fileSize', message: 'File exceeds maximum size limit', code: 'FILE_TOO_LARGE' }
@@ -178,7 +178,7 @@ export class BookImportService extends BaseService {
 
                 return result;
             } catch (error) {
-                this.logger.error('Book import failed', error as Error, { filePath });
+                this.logger.error('Book import failed', { error: error as Error, filePath });
                 throw error;
             }
         }, { filePath });
@@ -191,7 +191,7 @@ export class BookImportService extends BaseService {
         try {
             // Mock implementation - in reality would use epub-parser
             const fileBuffer = await fs.readFile(filePath);
-            
+
             // Simulated EPUB parsing
             const metadata: BookMetadata = {
                 title: "Imported EPUB Book",
@@ -233,7 +233,7 @@ export class BookImportService extends BaseService {
         try {
             // Mock implementation - in reality would use pdf-parse
             const fileBuffer = await fs.readFile(filePath);
-            
+
             // Simulated PDF parsing
             const metadata: BookMetadata = {
                 title: "Imported PDF Book",
@@ -278,7 +278,7 @@ export class BookImportService extends BaseService {
         try {
             // Mock implementation - in reality would use docx-parser
             const fileBuffer = await fs.readFile(filePath);
-            
+
             const metadata: BookMetadata = {
                 title: "Imported DOCX Document",
                 author: ["Unknown Author"],
@@ -358,7 +358,7 @@ export class BookImportService extends BaseService {
     private async importMOBI(filePath: string, options: ImportOptions): Promise<ImportResult> {
         try {
             const fileBuffer = await fs.readFile(filePath);
-            
+
             // Mock implementation - MOBI is complex format
             const metadata: BookMetadata = {
                 title: "Imported MOBI Book",
@@ -391,7 +391,7 @@ export class BookImportService extends BaseService {
      */
     private extractChaptersFromText(text: string): Array<{ title: string; content: string }> {
         const chapters: Array<{ title: string; content: string }> = [];
-        
+
         // Common chapter patterns
         const chapterPatterns = [
             /^Chapter\s+\d+/gmi,
@@ -402,7 +402,7 @@ export class BookImportService extends BaseService {
         ];
 
         let chapterSplits: number[] = [0];
-        
+
         for (const pattern of chapterPatterns) {
             const matches = Array.from(text.matchAll(pattern));
             if (matches.length > 1) {
@@ -425,11 +425,11 @@ export class BookImportService extends BaseService {
             const start = chapterSplits[i];
             const end = i < chapterSplits.length - 1 ? chapterSplits[i + 1] : text.length;
             const chapterText = text.substring(start, end).trim();
-            
+
             if (chapterText.length > 50) { // Minimum chapter length
                 const firstLine = chapterText.split('\n')[0].trim();
                 const title = firstLine.length > 0 && firstLine.length < 100 ? firstLine : `Chapter ${i + 1}`;
-                
+
                 chapters.push({
                     title,
                     content: chapterText
@@ -482,11 +482,11 @@ export class BookImportService extends BaseService {
      */
     private async analyzeContent(content: string): Promise<{ wordCount: number; subjects: string[] }> {
         const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
-        
+
         // Extract subjects/themes from content
         const subjects: string[] = [];
         const contentLower = content.toLowerCase();
-        
+
         // Common subject patterns
         if (contentLower.includes('love') || contentLower.includes('relationship')) {
             subjects.push('relationships');
@@ -508,14 +508,14 @@ export class BookImportService extends BaseService {
      * Create a book from imported content
      */
     async createBookFromImport(
-        importResult: ImportResult, 
+        importResult: ImportResult,
         authorId: string,
         additionalMetadata?: Partial<BookMetadata>
     ): Promise<string> {
         return this.executeWithLogging('createBookFromImport', async () => {
             // This would integrate with BookService to create a new book
             // using the imported content and metadata
-            
+
             const bookData = {
                 title: additionalMetadata?.title || importResult.metadata.title,
                 subtitle: additionalMetadata?.description || importResult.metadata.description,
@@ -535,7 +535,7 @@ export class BookImportService extends BaseService {
 
             // Mock book creation - would use actual BookService
             const bookId = `imported_${Date.now()}`;
-            
+
             this.logger.info('Book created from import', {
                 bookId,
                 title: bookData.title,
@@ -561,7 +561,7 @@ export class BookImportService extends BaseService {
 
         try {
             const stats = await fs.stat(filePath);
-            
+
             if (!stats.isFile()) {
                 errors.push('Path is not a file');
             }
@@ -600,7 +600,7 @@ export class BookImportService extends BaseService {
         try {
             const files = await fs.readdir(tempDir);
             const oldFiles = [];
-            
+
             for (const file of files) {
                 const filePath = path.join(tempDir, file);
                 try {

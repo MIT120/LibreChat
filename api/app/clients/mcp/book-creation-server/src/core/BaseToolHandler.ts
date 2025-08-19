@@ -3,7 +3,7 @@
  */
 
 import { z, ZodSchema } from 'zod';
-import { ILogger } from './Logger.js';
+import { ILogger } from '../interfaces/ILogger.js';
 import { IToolHandler } from '../interfaces/index.js';
 import { ToolExecutor } from '../server/ToolExecutor.js';
 
@@ -80,25 +80,25 @@ export abstract class BaseToolHandler {
     ): string {
         const timestamp = new Date().toLocaleDateString();
         let response = `✅ ${entityType} ${action} successfully!\n\n`;
-        
+
         if (entity._id) {
             response += `**${entityType} ID:** ${entity._id}\n`;
         }
-        
+
         if (entity.title || entity.name) {
             response += `**Title:** ${entity.title || entity.name}\n`;
         }
-        
+
         if (entity.status) {
             response += `**Status:** ${entity.status}\n`;
         }
-        
+
         response += `**${action === 'created' ? 'Created' : 'Updated'}:** ${timestamp}\n`;
-        
+
         if (additionalInfo) {
             response += `\n${additionalInfo}`;
         }
-        
+
         return response;
     }
 
@@ -117,14 +117,14 @@ export abstract class BaseToolHandler {
         }
 
         let response = `📚 **${entityType}s**\n\n`;
-        
+
         if (totalCount !== undefined) {
             response += `Found ${totalCount} ${entityType.toLowerCase()}(s)\n`;
         }
-        
+
         if (pagination) {
             response += `Showing ${items.length} of ${totalCount || items.length} ` +
-                       `(${pagination.offset + 1}-${pagination.offset + items.length})\n\n`;
+                `(${pagination.offset + 1}-${pagination.offset + items.length})\n\n`;
         }
 
         items.forEach((item, index) => {

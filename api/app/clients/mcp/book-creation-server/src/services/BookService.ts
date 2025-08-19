@@ -906,7 +906,7 @@ export class BookService extends BaseService implements IBookService, IChapterSe
                 await this.updateBookWordCount(chapter.bookId);
             }
         } catch (error) {
-            this.logger.error('Failed to update chapter word count', error as Error, { chapterId });
+            this.logger.error('Failed to update chapter word count', { error: error as Error, chapterId });
         }
     }
 
@@ -920,7 +920,7 @@ export class BookService extends BaseService implements IBookService, IChapterSe
                 updatedAt: new Date(),
             });
         } catch (error) {
-            this.logger.error('Failed to update book word count', error as Error, { bookId });
+            this.logger.error('Failed to update book word count', { error: error as Error, bookId });
         }
     }
 

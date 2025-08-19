@@ -51,7 +51,7 @@ export class ChapterToolHandlers extends BaseToolHandler {
 
     private async handleCreateChapter(input: CreateChapterRequest): Promise<ChapterResponse> {
         const chapter = await this.chapterService.createChapter(input);
-        
+
         // Record chapter creation in timeline if narrative service available
         if (this.narrativeService) {
             try {
@@ -73,7 +73,7 @@ export class ChapterToolHandlers extends BaseToolHandler {
                     },
                     {
                         chapterId: chapter._id,
-                        pageId: '',
+                        pageId: undefined, // No pageId for chapter-level events
                         scenePosition: 'opening'
                     }
                 );
@@ -81,7 +81,7 @@ export class ChapterToolHandlers extends BaseToolHandler {
                 this.logger.warn('Failed to record chapter creation in timeline', error as Error);
             }
         }
-        
+
         return chapter;
     }
 
@@ -89,11 +89,22 @@ export class ChapterToolHandlers extends BaseToolHandler {
         return await this.chapterService.getChapter(id, options?.includePages);
     }
 
-    private async handleListChapters(input: { bookId: string }): Promise<{ data: ChapterResponse[]; pagination: any }> {
+    private async handleListChapters(input: { bookId: string; limit?: number; offset?: number }): Promise<{ data: ChapterResponse[]; pagination: any }> {
         const chapters = await this.chapterService.listChapters(input.bookId);
+
+        // Apply pagination if provided
+        const limit = input.limit || chapters.length;
+        const offset = input.offset || 0;
+        const paginatedChapters = chapters.slice(offset, offset + limit);
+
         return {
-            data: chapters,
-            pagination: { total: chapters.length, offset: 0, limit: chapters.length, hasMore: false }
+            data: paginatedChapters,
+            pagination: {
+                total: chapters.length,
+                offset: offset,
+                limit: limit,
+                hasMore: (offset + limit) < chapters.length
+            }
         };
     }
 

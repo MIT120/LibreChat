@@ -4,11 +4,11 @@
 
 import { BaseService } from '../core/BaseService.js';
 import { ILogger } from '../core/Logger.js';
-import { 
-    CharacterEvolution, 
-    WorldElement, 
-    TimelineEvent, 
-    ConsistencyViolation 
+import {
+    CharacterEvolution,
+    WorldElement,
+    TimelineEvent,
+    ConsistencyViolation
 } from '../../models/NarrativeElements.js';
 import { DatabaseError, NotFoundError, ValidationError } from '../../types/errors.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -112,27 +112,27 @@ export class NarrativeConsistencyService extends BaseService {
      * Get comprehensive narrative context for a specific book location
      */
     async getNarrativeContext(
-        bookId: string, 
-        chapterId: string, 
+        bookId: string,
+        chapterId: string,
         pageId?: string
     ): Promise<NarrativeContext> {
         return this.executeWithLogging('getNarrativeContext', async () => {
             try {
                 // Get all characters for this book
                 const characters = await this.getBookCharacters(bookId);
-                
+
                 // Get world elements
                 const worldElements = await this.getBookWorldElements(bookId);
-                
+
                 // Get timeline context
                 const timeline = await this.getTimelineContext(bookId, chapterId, pageId);
-                
+
                 // Get active relationships
                 const activeRelationships = await this.getActiveRelationships(bookId);
-                
+
                 // Get consistency guidelines from book spec
                 const consistencyGuidelines = await this.getConsistencyGuidelines(bookId);
-                
+
                 return {
                     bookId,
                     chapterId,
@@ -169,7 +169,7 @@ export class NarrativeConsistencyService extends BaseService {
         return this.executeWithLogging('upsertCharacter', async () => {
             try {
                 const characterId = characterData.characterId || uuidv4();
-                
+
                 // Check if character already exists
                 const existingCharacter = await CharacterEvolution.findOne({
                     bookId,
@@ -242,10 +242,10 @@ export class NarrativeConsistencyService extends BaseService {
         return this.executeWithLogging('upsertWorldElement', async () => {
             try {
                 const elementId = elementData.elementId || uuidv4();
-                
+
                 // Check if element exists
                 const existingElement = await WorldElement.findOne({ elementId });
-                
+
                 if (existingElement) {
                     // Update existing element
                     Object.assign(existingElement, {
@@ -255,7 +255,7 @@ export class NarrativeConsistencyService extends BaseService {
                         connections: elementData.connections || existingElement.connections,
                         consistencyRules: elementData.consistencyRules || existingElement.consistencyRules
                     });
-                    
+
                     if (context) {
                         existingElement.appearances.push({
                             chapterId: context.chapterId,
@@ -265,7 +265,7 @@ export class NarrativeConsistencyService extends BaseService {
                             functionalRole: context.functionalRole
                         });
                     }
-                    
+
                     await existingElement.save();
                     return this.buildWorldElementReference(existingElement);
                 } else {
@@ -293,7 +293,7 @@ export class NarrativeConsistencyService extends BaseService {
                             functionalRole: context.functionalRole
                         }] : []
                     });
-                    
+
                     await worldElement.save();
                     return this.buildWorldElementReference(worldElement);
                 }
@@ -327,12 +327,12 @@ export class NarrativeConsistencyService extends BaseService {
                 worldChanges?: Array<{ elementId: string; changeType: string; description: string }>;
             };
         },
-        storyPlacement: { chapterId: string; pageId: string; scenePosition?: string }
+        storyPlacement: { chapterId: string; pageId?: string; scenePosition?: string }
     ): Promise<void> {
         return this.executeWithLogging('recordTimelineEvent', async () => {
             try {
                 const eventId = uuidv4();
-                
+
                 const timelineEvent = new TimelineEvent({
                     eventId,
                     bookId,
@@ -346,24 +346,26 @@ export class NarrativeConsistencyService extends BaseService {
                     impact: eventData.impact || { plotSignificance: 'minor' },
                     storyPlacement: {
                         chapterId: storyPlacement.chapterId,
-                        pageId: storyPlacement.pageId,
+                        pageId: storyPlacement.pageId || undefined,
                         scenePosition: storyPlacement.scenePosition || 'middle'
                     },
                     causality: { causes: [], effects: [] },
                     narrativeConnections: { foreshadowedBy: [], foreshadows: [], callbacks: [] }
                 });
-                
+
                 await timelineEvent.save();
-                
-                // Update character appearances
-                for (const participant of eventData.participants) {
-                    await this.updateCharacterAppearance(
-                        participant.characterId,
-                        storyPlacement.chapterId,
-                        storyPlacement.pageId,
-                        'major',
-                        eventData.description
-                    );
+
+                // Update character appearances (only if pageId is provided)
+                if (storyPlacement.pageId) {
+                    for (const participant of eventData.participants) {
+                        await this.updateCharacterAppearance(
+                            participant.characterId,
+                            storyPlacement.chapterId,
+                            storyPlacement.pageId,
+                            'major',
+                            eventData.description
+                        );
+                    }
                 }
             } catch (error) {
                 throw new DatabaseError(`Failed to record timeline event: ${(error as Error).message}`);
@@ -383,51 +385,51 @@ export class NarrativeConsistencyService extends BaseService {
             try {
                 // Get narrative context
                 const narrativeContext = await this.getNarrativeContext(
-                    bookId, 
-                    context.chapterId, 
+                    bookId,
+                    context.chapterId,
                     context.pageId
                 );
-                
+
                 const violations: Array<{ type: string; severity: string; description: string; suggestions: string[] }> = [];
                 const warnings: string[] = [];
                 const suggestions: string[] = [];
-                
+
                 // Check character consistency
                 for (const character of narrativeContext.characters) {
                     const characterMentions = this.findCharacterMentions(content, character.name);
                     if (characterMentions.length > 0) {
                         const characterViolations = await this.validateCharacterConsistency(
-                            character, 
-                            content, 
+                            character,
+                            content,
                             characterMentions
                         );
                         violations.push(...characterViolations);
                     }
                 }
-                
+
                 // Check world element consistency
                 for (const element of narrativeContext.worldElements) {
                     const elementMentions = this.findElementMentions(content, element.name);
                     if (elementMentions.length > 0) {
                         const elementViolations = await this.validateWorldElementConsistency(
-                            element, 
-                            content, 
+                            element,
+                            content,
                             elementMentions
                         );
                         violations.push(...elementViolations);
                     }
                 }
-                
+
                 // Check timeline consistency
                 const timelineViolations = await this.validateTimelineConsistency(
-                    narrativeContext.timeline, 
+                    narrativeContext.timeline,
                     content
                 );
                 violations.push(...timelineViolations);
-                
+
                 // Generate suggestions based on context
                 suggestions.push(...this.generateConsistencySuggestions(narrativeContext, content));
-                
+
                 return {
                     isConsistent: violations.filter(v => v.severity === 'critical').length === 0,
                     violations,
@@ -450,7 +452,7 @@ export class NarrativeConsistencyService extends BaseService {
             { $group: { _id: '$characterId', latest: { $first: '$$ROOT' } } },
             { $replaceRoot: { newRoot: '$latest' } }
         ]);
-        
+
         return characters.map(char => this.buildCharacterReference(char));
     }
 
@@ -466,26 +468,26 @@ export class NarrativeConsistencyService extends BaseService {
      * Get timeline context for a specific location in the story
      */
     private async getTimelineContext(
-        bookId: string, 
-        chapterId: string, 
+        bookId: string,
+        chapterId: string,
         pageId?: string
     ): Promise<TimelineContext> {
         // Get current and nearby events
         const allEvents = await TimelineEvent.find({ bookId })
             .sort({ 'timing.sequenceNumber': 1 });
-        
+
         // Find current position in timeline
         let currentPosition = 0;
         if (pageId) {
-            const currentEvent = allEvents.find(e => 
-                e.storyPlacement.chapterId === chapterId && 
+            const currentEvent = allEvents.find(e =>
+                e.storyPlacement.chapterId === chapterId &&
                 e.storyPlacement.pageId === pageId
             );
             if (currentEvent) {
                 currentPosition = currentEvent.timing.sequenceNumber;
             }
         }
-        
+
         // Get recent and upcoming events
         const recentEvents = allEvents
             .filter(e => e.timing.sequenceNumber <= currentPosition)
@@ -496,7 +498,7 @@ export class NarrativeConsistencyService extends BaseService {
                 timing: e.timing,
                 significance: e.impact.plotSignificance
             }));
-            
+
         const upcomingEvents = allEvents
             .filter(e => e.timing.sequenceNumber > currentPosition)
             .slice(0, 3)
@@ -505,7 +507,7 @@ export class NarrativeConsistencyService extends BaseService {
                 name: e.name,
                 expectedTiming: e.timing.relativeTime || 'upcoming'
             }));
-        
+
         return {
             recentEvents,
             upcomingEvents,
@@ -532,7 +534,7 @@ export class NarrativeConsistencyService extends BaseService {
             { $group: { _id: '$characterId', latest: { $first: '$$ROOT' } } },
             { $replaceRoot: { newRoot: '$latest' } }
         ]);
-        
+
         const relationships: Array<{
             character1: string;
             character2: string;
@@ -540,7 +542,7 @@ export class NarrativeConsistencyService extends BaseService {
             strength: number;
             recentChanges: string[];
         }> = [];
-        
+
         for (const character of characters) {
             for (const relationship of character.relationships || []) {
                 relationships.push({
@@ -552,7 +554,7 @@ export class NarrativeConsistencyService extends BaseService {
                 });
             }
         }
-        
+
         return relationships;
     }
 

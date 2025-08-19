@@ -124,6 +124,11 @@ const startServer = async () => {
   app.use('/api/legal-documents', routes.legalDocuments);
   app.use('/api/book-updates', routes.bookUpdates);
   app.use('/api/exports', routes.exports);
+  app.use('/api/conversations', routes.conversations);
+  app.use('/api/revisions', routes.revisions);
+  app.use('/api/workspaces', routes.workspaces);
+  app.use('/api/timelines', routes.timelines);
+  app.use('/api/characters', routes.characters);
 
   // Add the error controller one more time after all routes
   app.use(errorController);

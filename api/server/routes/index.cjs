@@ -29,6 +29,11 @@ const mcp = require('./mcp');
 const legalDocuments = require('./legal-documents');
 const bookUpdates = require('./bookUpdates');
 const exportsRoute = require('./exports');
+const conversations = require('./conversations');
+const revisions = require('./revisions');
+const workspaces = require('./workspaces');
+const timelines = require('./timelines');
+const characters = require('./characters');
 
 module.exports = {
   edit,
@@ -62,4 +67,9 @@ module.exports = {
   legalDocuments,
   bookUpdates,
   exports: exportsRoute,
+  conversations,
+  revisions,
+  workspaces,
+  timelines,
+  characters,
 };

@@ -2,14 +2,14 @@
  * Base service class with common functionality
  */
 
-import { ILogger } from './Logger.js';
+import { ILogger } from '../interfaces/ILogger.js';
 
 export abstract class BaseService {
     protected logger: ILogger;
     protected initialized: boolean = false;
 
     constructor(logger: ILogger) {
-        this.logger = logger.child(this.constructor.name);
+        this.logger = (logger as any).child ? (logger as any).child(this.constructor.name) : logger;
     }
 
     /**
@@ -96,7 +96,7 @@ export abstract class BaseService {
      * Log method error
      */
     protected logMethodError(methodName: string, error: Error, params?: Record<string, any>): void {
-        this.logger.error(`Error in ${methodName}`, error, params);
+        this.logger.error(`Error in ${methodName}`, { error, params });
     }
 
     /**

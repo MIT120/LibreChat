@@ -1,6 +1,6 @@
 import { ZodSchema } from 'zod';
 import { ValidationError } from '../../types/errors.js';
-import { ILogger } from '../core/Logger.js';
+import { ILogger } from '../interfaces/ILogger.js';
 
 type ToolExecutorParams<TInput, TResult> = {
     name: string;
@@ -8,7 +8,7 @@ type ToolExecutorParams<TInput, TResult> = {
     schema: ZodSchema<TInput>;
     args: unknown;
     perform: (validated: TInput) => Promise<TResult>;
-    format: (result: TResult, validated: TInput) => Promise<any> | any; // string or MCP content array
+    format?: (result: TResult, validated: TInput) => Promise<any> | any; // string or MCP content array
 };
 
 export class ToolExecutor {
@@ -32,7 +32,7 @@ export class ToolExecutor {
         const result = await perform(validated);
 
         logger.debug(`Executing tool: ${name}: formatting output`);
-        return await format(result, validated);
+        return format ? await format(result, validated) : result;
     }
 }
 

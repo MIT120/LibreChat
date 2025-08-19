@@ -1,12 +1,19 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { RefreshCw, ExternalLink, Download, Edit, Eye, Save } from 'lucide-react';
+import { RefreshCw, ExternalLink, Download, Edit, Eye, Save, MessageSquare, Loader2, CheckCircle, X, AlertCircle } from 'lucide-react';
 import { Button } from '~/components/ui';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
+import { Input } from '~/components/ui/Input';
+import { Textarea } from '~/components/ui/Textarea';
+import { Label } from '~/components/ui/label';
+import { Switch } from '~/components/ui/switch';
 import { useBookContext } from '~/components/SidePanel/Books';
 import { useStaticExports } from '~/hooks/useStaticExports';
 import { useExports, useAutoRefreshExports } from '~/hooks/useExports';
 import { useAuthContext } from '~/hooks/AuthContext';
+import { useChatContext } from '~/Providers/ChatContext';
 import { debounce } from 'lodash';
+import { cn } from '~/utils';
 
 // React-Quill import with CSS and modules
 import ReactQuill, { Quill } from 'react-quill';
@@ -23,10 +30,32 @@ type BookPreviewProps = {
   className?: string;
 };
 
+// Types for text editing
+interface TextSelection {
+  startOffset: number;
+  endOffset: number;
+  selectedText: string;
+  contextBefore?: string;
+  contextAfter?: string;
+}
+
+interface TextChange {
+  id: string;
+  selection: TextSelection;
+  originalText: string;
+  newText: string;
+  reason?: string;
+  timestamp: Date;
+  status: 'pending' | 'applying' | 'applied' | 'failed';
+}
+
 export default function BookPreview({ className = '' }: BookPreviewProps) {
   const { conversationId } = useParams();
-  const { selectedBookId, previewUrl } = useBookContext();
+  const { selectedBookId, previewUrl, refreshExports } = useBookContext();
   const { user } = useAuthContext();
+  const { ask } = useChatContext();
+
+  // Existing state
   const [currentPreviewUrl, setCurrentPreviewUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -38,6 +67,20 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasExpiredImages, setHasExpiredImages] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // New state for interactive editing
+  const [isInteractiveMode, setIsInteractiveMode] = useState(false);
+  const [selectedText, setSelectedText] = useState<TextSelection | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [newText, setNewText] = useState('');
+  const [changeReason, setChangeReason] = useState('');
+  const [isApplyingChange, setIsApplyingChange] = useState(false);
+  const [recentChanges, setRecentChanges] = useState<TextChange[]>([]);
+  const [parsedContent, setParsedContent] = useState<string>('');
+
+  // Refs for interactive mode
+  const contentRef = useRef<HTMLDivElement>(null);
+  const selectionRef = useRef<Selection | null>(null);
 
   // Construct server base URL for static exports
   const serverBase = useMemo(() => {
@@ -70,7 +113,7 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
   });
 
   // Auto-refresh exports when conversation changes
-  const { refreshExports } = useAutoRefreshExports(conversationId);
+  const { refreshExports: autoRefreshExports } = useAutoRefreshExports(conversationId);
 
   // Create a ref for the Quill editor
   const quillRef = useRef<ReactQuill>(null);
@@ -89,7 +132,7 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
         reader.onload = () => {
           const imageUrl = reader.result as string;
           const quill = quillRef.current?.getEditor();
-          
+
           if (quill) {
             // Get the current cursor position
             const range = quill.getSelection();
@@ -105,6 +148,239 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
       }
     };
   }, []);
+
+  // Handle text selection in interactive mode
+  const handleTextSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      setSelectedText(null);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const selectedText = selection.toString().trim();
+
+    if (selectedText.length === 0) {
+      setSelectedText(null);
+      return;
+    }
+
+    // Get the full content to calculate offsets
+    const contentElement = contentRef.current;
+    if (!contentElement) return;
+
+    const textContent = contentElement.textContent || '';
+    const startOffset = getTextOffset(contentElement, range.startContainer, range.startOffset);
+    const endOffset = getTextOffset(contentElement, range.endContainer, range.endOffset);
+
+    // Get context around selection
+    const contextLength = 100;
+    const contextBefore = textContent.substring(Math.max(0, startOffset - contextLength), startOffset);
+    const contextAfter = textContent.substring(endOffset, Math.min(textContent.length, endOffset + contextLength));
+
+    setSelectedText({
+      startOffset,
+      endOffset,
+      selectedText,
+      contextBefore,
+      contextAfter
+    });
+
+    selectionRef.current = selection;
+  }, []);
+
+  // Helper function to get text offset
+  const getTextOffset = (root: Node, node: Node, offset: number): number => {
+    let textOffset = 0;
+    const walker = document.createTreeWalker(
+      root,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+
+    let currentNode;
+    while (currentNode = walker.nextNode()) {
+      if (currentNode === node) {
+        return textOffset + offset;
+      }
+      textOffset += currentNode.textContent?.length || 0;
+    }
+    return textOffset;
+  };
+
+  // Call MCP tool to update content
+  const callMCPUpdateTool = useCallback(async (content: string) => {
+    try {
+      const response = await fetch(`/api/mcp/book-creation/tools/update_chapter/call`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          arguments: {
+            chapterId: 'main', // Use a default chapter ID - this should be improved
+            content,
+            authorId: user?.id,
+            conversationId
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`MCP call failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Failed to call MCP tool:', error);
+      throw error;
+    }
+  }, [user?.id, conversationId]);
+
+  // Send change to chat
+  const sendChangeToChat = useCallback((change: TextChange) => {
+    if (!ask || !conversationId) return;
+
+    const changeMessage = `📝 **Book Edit Applied**
+
+**Original text:** "${change.originalText}"
+
+**Updated to:** "${change.newText}"
+
+${change.reason ? `**Reason:** ${change.reason}` : ''}
+
+**Applied at:** ${change.timestamp.toLocaleTimeString()}`;
+
+    ask({
+      text: changeMessage,
+      conversationId
+    });
+  }, [ask, conversationId]);
+
+  // Apply text change
+  const applyTextChange = useCallback(async () => {
+    if (!selectedText || !newText.trim()) return;
+
+    const change: TextChange = {
+      id: `change_${Date.now()}`,
+      selection: selectedText,
+      originalText: selectedText.selectedText,
+      newText: newText.trim(),
+      reason: changeReason.trim() || undefined,
+      timestamp: new Date(),
+      status: 'pending'
+    };
+
+    setRecentChanges(prev => [change, ...prev.slice(0, 9)]); // Keep last 10 changes
+    setIsApplyingChange(true);
+
+    try {
+      // Update change status
+      change.status = 'applying';
+      setRecentChanges(prev => prev.map(c => c.id === change.id ? change : c));
+
+      // Calculate new content with the change applied
+      const newContent = parsedContent.substring(0, selectedText.startOffset) +
+        newText +
+        parsedContent.substring(selectedText.endOffset);
+
+      // Call MCP to update the content
+      await callMCPUpdateTool(newContent);
+
+      // Update change status to applied
+      change.status = 'applied';
+      setRecentChanges(prev => prev.map(c => c.id === change.id ? change : c));
+
+      // Update local content
+      setParsedContent(newContent);
+
+      // Send to chat
+      sendChangeToChat(change);
+
+      // Refresh exports to show updated content
+      refreshExports();
+
+      // Clean up
+      setShowEditDialog(false);
+      setSelectedText(null);
+      setNewText('');
+      setChangeReason('');
+
+      // Clear selection
+      if (selectionRef.current) {
+        selectionRef.current.removeAllRanges();
+      }
+
+    } catch (error) {
+      console.error('Failed to apply text change:', error);
+      change.status = 'failed';
+      setRecentChanges(prev => prev.map(c => c.id === change.id ? change : c));
+    } finally {
+      setIsApplyingChange(false);
+    }
+  }, [selectedText, newText, changeReason, parsedContent, callMCPUpdateTool, sendChangeToChat, refreshExports]);
+
+  // Open edit dialog
+  const openEditDialog = useCallback(() => {
+    if (!selectedText) return;
+    setNewText(selectedText.selectedText);
+    setChangeReason('');
+    setShowEditDialog(true);
+  }, [selectedText]);
+
+  // Parse HTML content for interactive mode
+  const parseContentForInteractiveMode = useCallback(async () => {
+    if (!currentPreviewUrl) return;
+
+    try {
+      const response = await fetch(currentPreviewUrl);
+      if (response.ok) {
+        const content = await response.text();
+
+        // Parse the HTML document
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(content, 'text/html');
+
+        // Extract text content from body, preserving some structure
+        const bodyContent = doc.body;
+        if (bodyContent) {
+          // Convert HTML to readable text while preserving paragraph structure
+          const textContent = bodyContent.innerText || bodyContent.textContent || '';
+          setParsedContent(textContent);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to parse content for interactive mode:', error);
+    }
+  }, [currentPreviewUrl]);
+
+  // Effect to parse content when switching to interactive mode
+  useEffect(() => {
+    if (isInteractiveMode && currentPreviewUrl) {
+      parseContentForInteractiveMode();
+    }
+  }, [isInteractiveMode, currentPreviewUrl, parseContentForInteractiveMode]);
+
+  // Effect to add event listeners for text selection
+  useEffect(() => {
+    if (!isInteractiveMode) return;
+
+    const contentElement = contentRef.current;
+    if (!contentElement) return;
+
+    // Handle text selection
+    const handleMouseUp = () => {
+      setTimeout(handleTextSelection, 10);
+    };
+
+    contentElement.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      contentElement.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isInteractiveMode, handleTextSelection]);
 
   // Quill editor configuration with image support
   const quillModules = useMemo(() => ({
@@ -158,15 +434,15 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
       if (response.ok) {
         const content = await response.text();
         console.log('🔍 Original HTML content:', content.substring(0, 500) + '...');
-        
+
         // Parse the HTML document
         const parser = new DOMParser();
         const doc = parser.parseFromString(content, 'text/html');
-        
+
         // Handle image URLs and detect expired Azure blob URLs
         const images = doc.querySelectorAll('img[src]');
         let hasExpiredImages = false;
-        
+
         images.forEach((img) => {
           const src = img.getAttribute('src');
           if (src) {
@@ -186,7 +462,7 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
                 }
               }
             }
-            
+
             // Convert relative URLs to absolute
             if (!src.startsWith('http') && !src.startsWith('data:')) {
               const absoluteUrl = new URL(src, currentPreviewUrl).href;
@@ -195,14 +471,14 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
             }
           }
         });
-        
+
         if (hasExpiredImages) {
           console.log('⚠️ Some images have expired Azure blob URLs and may not display correctly');
           setHasExpiredImages(true);
         } else {
           setHasExpiredImages(false);
         }
-        
+
         // Extract body content with absolute URLs
         const bodyContent = doc.body.innerHTML || content;
         console.log('📄 Processed body content:', bodyContent.substring(0, 300) + '...');
@@ -232,11 +508,11 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
 
     // Clear any previous save errors
     setSaveError(null);
-    
+
     try {
       // Generate filename if not provided
       const saveFilename = filename || userSelectedFile || `book_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.html`;
-      
+
       const response = await fetch('/api/exports/save-html', {
         method: 'POST',
         headers: {
@@ -255,13 +531,13 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
 
       const result = await response.json();
       console.log('Content saved successfully:', result);
-      
+
       // Update last save time
       setLastSaveTime(new Date());
-      
+
       // Refresh static exports to show the new file
       refreshStaticExports();
-      
+
       return result;
     } catch (error) {
       console.error('Error saving content:', error);
@@ -314,7 +590,7 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
     if (htmlContent && isEditMode) {
       debouncedAutoSave(htmlContent);
     }
-    
+
     // Cleanup debounced function on unmount
     return () => {
       debouncedAutoSave.cancel();
@@ -582,11 +858,10 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
                         setCurrentPreviewUrl(exp.url);
                       }, 100);
                     }}
-                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-blue-200 dark:hover:bg-blue-800 ${
-                      isCurrentlyViewed
-                        ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
-                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                    }`}
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-blue-200 dark:hover:bg-blue-800 ${isCurrentlyViewed
+                      ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                      }`}
                     title={`${exp.filename} - Click to preview (${exp.format})`}
                   >
                     <span>📄</span>
@@ -645,11 +920,10 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
                         setCurrentPreviewUrl(fullUrl);
                       }, 100);
                     }}
-                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-green-200 dark:hover:bg-green-800 ${
-                      isCurrentlyViewed
-                        ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
-                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                    }`}
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-green-200 dark:hover:bg-green-800 ${isCurrentlyViewed
+                      ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
+                      : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                      }`}
                     title={`${exp.title || exp.filename} - Click to preview`}
                   >
                     <span>📄</span>
@@ -722,53 +996,146 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
           !isLoadingConversationExports &&
           currentPreviewUrl &&
           !previewError && (
-            <div className="h-full w-full">
-              {isEditMode ? (
-                // Edit Mode - React-Quill Editor
-                <div className="book-editor h-full w-full bg-white">
-                  {hasExpiredImages && (
-                    <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-2">
-                      <div className="flex">
-                        <div className="ml-3">
-                          <p className="text-sm text-yellow-700">
-                            ⚠️ <strong>Some images may not display correctly</strong> - Azure blob URLs have expired. 
-                            You can replace them with new images using the image button in the toolbar.
-                          </p>
-                        </div>
+            <div className="h-full w-full flex">
+              <div className="flex-1">
+                {isInteractiveMode ? (
+                  // Interactive Edit Mode - Text selection and editing
+                  <div className="h-full flex flex-col bg-white">
+                    {/* Header with selection info */}
+                    {selectedText && (
+                      <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border-b border-blue-200">
+                        <span className="text-sm text-blue-700">
+                          {selectedText.selectedText.length} chars selected
+                        </span>
+                        <Button
+                          size="sm"
+                          onClick={openEditDialog}
+                          className="h-7"
+                        >
+                          <Edit className="h-3 w-3 mr-1" />
+                          Edit Text
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Content */}
+                    <div className="flex-1 overflow-auto p-8">
+                      <div
+                        ref={contentRef}
+                        className="prose prose-lg max-w-none select-text"
+                        style={{
+                          fontSize: '16px',
+                          lineHeight: 1.6,
+                          fontFamily: '"Georgia", "Times New Roman", serif'
+                        }}
+                      >
+                        <div dangerouslySetInnerHTML={{ __html: parsedContent.replace(/\n/g, '<br />') }} />
                       </div>
                     </div>
-                  )}
-                  <ReactQuill
-                    ref={quillRef}
-                    value={htmlContent}
-                    onChange={setHtmlContent}
-                    modules={quillModules}
-                    formats={quillFormats}
-                    theme="snow"
-                    placeholder="Click here to start editing... You can add text, images, and format content."
+                  </div>
+                ) : isEditMode ? (
+                  // Edit Mode - React-Quill Editor
+                  <div className="book-editor h-full w-full bg-white">
+                    {hasExpiredImages && (
+                      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-2">
+                        <div className="flex">
+                          <div className="ml-3">
+                            <p className="text-sm text-yellow-700">
+                              ⚠️ <strong>Some images may not display correctly</strong> - Azure blob URLs have expired.
+                              You can replace them with new images using the image button in the toolbar.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <ReactQuill
+                      ref={quillRef}
+                      value={htmlContent}
+                      onChange={setHtmlContent}
+                      modules={quillModules}
+                      formats={quillFormats}
+                      theme="snow"
+                      placeholder="Click here to start editing... You can add text, images, and format content."
+                    />
+                  </div>
+                ) : (
+                  // Preview Mode - Regular Iframe
+                  <iframe
+                    ref={iframeRef}
+                    key={currentPreviewUrl} // Force re-render when URL changes
+                    title="book-preview"
+                    src={currentPreviewUrl}
+                    className="h-full w-full border-0"
+                    referrerPolicy="no-referrer"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                    style={{ backgroundColor: 'white' }}
+                    onLoad={() => {
+                      setPreviewError(null);
+                      console.log('✅ IFRAME LOADED SUCCESSFULLY:', currentPreviewUrl);
+                    }}
+                    onError={(e) => {
+                      setPreviewError('Failed to load preview');
+                      console.error('❌ IFRAME FAILED TO LOAD:', currentPreviewUrl);
+                      console.error('Error details:', e);
+                    }}
                   />
+                )}
+              </div>
+
+              {/* Changes Panel for Interactive Mode */}
+              {isInteractiveMode && recentChanges.length > 0 && (
+                <div className="w-80 border-l bg-gray-50 flex flex-col">
+                  <div className="p-4 border-b bg-white">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold">Recent Changes</h3>
+                      <span className="text-xs text-gray-500">{recentChanges.length} changes</span>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-auto p-4 space-y-3">
+                    {recentChanges.map((change) => (
+                      <div key={change.id} className="bg-white p-3 rounded-lg border transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {change.status === 'pending' && <AlertCircle className="h-4 w-4 text-yellow-500" />}
+                            {change.status === 'applying' && <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />}
+                            {change.status === 'applied' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                            {change.status === 'failed' && <X className="h-4 w-4 text-red-500" />}
+                            <span className="text-xs font-medium capitalize">{change.status}</span>
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            {change.timestamp.toLocaleTimeString()}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div>
+                            <p className="text-xs text-gray-600">Original:</p>
+                            <p className="text-sm bg-red-50 p-2 rounded text-red-800 line-clamp-2">
+                              "{change.originalText}"
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-gray-600">Updated to:</p>
+                            <p className="text-sm bg-green-50 p-2 rounded text-green-800 line-clamp-2">
+                              "{change.newText}"
+                            </p>
+                          </div>
+
+                          {change.reason && (
+                            <div>
+                              <p className="text-xs text-gray-600">Reason:</p>
+                              <p className="text-xs text-gray-500 line-clamp-2">
+                                {change.reason}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                // Preview Mode - Regular Iframe
-                <iframe
-                  ref={iframeRef}
-                  key={currentPreviewUrl} // Force re-render when URL changes
-                  title="book-preview"
-                  src={currentPreviewUrl}
-                  className="h-full w-full border-0"
-                  referrerPolicy="no-referrer"
-                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                  style={{ backgroundColor: 'white' }}
-                  onLoad={() => {
-                    setPreviewError(null);
-                    console.log('✅ IFRAME LOADED SUCCESSFULLY:', currentPreviewUrl);
-                  }}
-                  onError={(e) => {
-                    setPreviewError('Failed to load preview');
-                    console.error('❌ IFRAME FAILED TO LOAD:', currentPreviewUrl);
-                    console.error('Error details:', e);
-                  }}
-                />
               )}
             </div>
           )}
@@ -822,6 +1189,72 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
             </div>
           )}
       </div>
+
+      {/* Edit Dialog for Interactive Mode */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Selected Text</DialogTitle>
+            <DialogDescription>
+              Make changes to the selected text. Your changes will be applied to the book and sent to the chat.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Original Text Preview */}
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <Label className="text-xs text-gray-600">Original Text:</Label>
+              <p className="text-sm mt-1 italic">
+                "{selectedText?.selectedText}"
+              </p>
+            </div>
+
+            {/* New Text */}
+            <div className="space-y-2">
+              <Label>New Text</Label>
+              <Textarea
+                value={newText}
+                onChange={(e) => setNewText(e.target.value)}
+                placeholder="Enter the new text..."
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+
+            {/* Reason */}
+            <div className="space-y-2">
+              <Label>Reason for Change (Optional)</Label>
+              <Input
+                value={changeReason}
+                onChange={(e) => setChangeReason(e.target.value)}
+                placeholder="Why are you making this change?"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={applyTextChange}
+              disabled={!newText.trim() || newText === selectedText?.selectedText || isApplyingChange}
+            >
+              {isApplyingChange ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Applying...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Apply Change
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

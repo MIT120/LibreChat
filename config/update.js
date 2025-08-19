@@ -73,19 +73,18 @@ async function validateDockerRunning() {
     execSync('git fetch origin', { stdio: 'inherit' });
 
     // Switch to main branch
-    console.purple('Switching to main branch...');
-    execSync('git checkout main', { stdio: 'inherit' });
+    // console.purple('Switching to main branch...');
+    // execSync('git checkout main', { stdio: 'inherit' });
 
     // Git pull origin main
-    console.purple('Pulling the latest code from main...');
-    execSync('git pull origin main', { stdio: 'inherit' });
+    // console.purple('Pulling the latest code from main...');
+    execSync('git pull origin', { stdio: 'inherit' });
   }
 
   if (docker) {
     console.purple('Removing previously made Docker container...');
-    const downCommand = `${sudo}docker compose ${
-      singleCompose ? '-f ./docs/dev/single-compose.yml ' : ''
-    }down`;
+    const downCommand = `${sudo}docker compose ${singleCompose ? '-f ./docs/dev/single-compose.yml ' : ''
+      }down`;
     console.orange(downCommand);
     execSync(downCommand, { stdio: 'inherit' });
     console.purple('Pruning all LibreChat Docker images...');
@@ -99,9 +98,8 @@ async function validateDockerRunning() {
     console.purple('Removing all unused dangling Docker images...');
     execSync(`${sudo}docker image prune -f`, { stdio: 'inherit' });
     console.purple('Building new LibreChat image...');
-    const buildCommand = `${sudo}docker compose ${
-      singleCompose ? '-f ./docs/dev/single-compose.yml ' : ''
-    }build --no-cache`;
+    const buildCommand = `${sudo}docker compose ${singleCompose ? '-f ./docs/dev/single-compose.yml ' : ''
+      }build --no-cache`;
     console.orange(buildCommand);
     execSync(buildCommand, { stdio: 'inherit' });
   } else {
@@ -123,9 +121,8 @@ async function validateDockerRunning() {
 
   let startCommand = 'npm run backend';
   if (docker) {
-    startCommand = `${sudo}docker compose ${
-      singleCompose ? '-f ./docs/dev/single-compose.yml ' : ''
-    }up`;
+    startCommand = `${sudo}docker compose ${singleCompose ? '-f ./docs/dev/single-compose.yml ' : ''
+      }up`;
   }
   console.green('Your LibreChat app is now up to date! Start the app with the following command:');
   console.purple(startCommand);

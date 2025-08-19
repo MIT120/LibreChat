@@ -222,13 +222,13 @@ export class InfluencerHistoryService extends BaseService {
 
             // Collect data from all platforms
             const allPosts: InfluencerPost[] = [];
-            const platformsToTrack = options?.platforms || 
+            const platformsToTrack = options?.platforms ||
                 config.platforms.map(p => p.platform);
 
             for (const platformConfig of config.platforms) {
                 if (platformsToTrack.includes(platformConfig.platform)) {
                     const posts = await this.scrapeInfluencerPosts(
-                        platformConfig, 
+                        platformConfig,
                         config.trackingSettings,
                         options?.dateRange
                     );
@@ -243,8 +243,8 @@ export class InfluencerHistoryService extends BaseService {
             const habits = await this.analyzeInfluencerHabits(allPosts, config);
 
             // Generate analytics
-            const analytics = options?.includeAnalytics !== false ? 
-                await this.generateInfluencerAnalytics(allPosts) : 
+            const analytics = options?.includeAnalytics !== false ?
+                await this.generateInfluencerAnalytics(allPosts) :
                 this.getBasicAnalytics();
 
             // Calculate trends
@@ -255,7 +255,7 @@ export class InfluencerHistoryService extends BaseService {
                 platform: config.platforms[0].platform,
                 handle: config.platforms[0].handle,
                 trackingPeriod: {
-                    startDate: options?.dateRange?.from || 
+                    startDate: options?.dateRange?.from ||
                         new Date(Date.now() - config.trackingSettings.lookbackDays * 24 * 60 * 60 * 1000),
                     endDate: options?.dateRange?.to || new Date()
                 },
@@ -329,26 +329,23 @@ export class InfluencerHistoryService extends BaseService {
         try {
             // First, map the influencer's profile to discover content structure
             const mapResponse = await this.mapInfluencerProfile(platformConfig.url);
-            
+
             // Then crawl specific post URLs
             const crawlResponse = await this.crawlInfluencerContent(
-                platformConfig.url, 
+                platformConfig.url,
                 settings.lookbackDays
             );
 
             // Process the crawled data into structured posts
             const posts = await this.processCrawledData(
-                crawlResponse, 
-                platformConfig.platform, 
+                crawlResponse,
+                platformConfig.platform,
                 dateRange
             );
 
             return posts;
         } catch (error) {
-            this.logger.error('Failed to scrape influencer posts', error as Error, {
-                platform: platformConfig.platform,
-                url: platformConfig.url
-            });
+            this.logger.error('Failed to scrape influencer posts', { error: error as Error, platform: platformConfig.platform, url: platformConfig.url });
             // Fallback to mock data
             return this.getMockPosts(platformConfig.platform);
         }
@@ -420,8 +417,8 @@ export class InfluencerHistoryService extends BaseService {
      * Process raw crawled data into structured posts
      */
     private async processCrawledData(
-        crawlData: FirecrawlCrawlResponse, 
-        platform: string, 
+        crawlData: FirecrawlCrawlResponse,
+        platform: string,
         dateRange?: { from: Date; to: Date }
     ): Promise<InfluencerPost[]> {
         if (!crawlData.success || !crawlData.data) {
@@ -433,7 +430,7 @@ export class InfluencerHistoryService extends BaseService {
         for (const page of crawlData.data) {
             try {
                 const post = await this.extractPostFromPage(page, platform);
-                
+
                 // Apply date filtering
                 if (dateRange) {
                     if (post.publishedDate < dateRange.from || post.publishedDate > dateRange.to) {
@@ -455,26 +452,26 @@ export class InfluencerHistoryService extends BaseService {
      */
     private async extractPostFromPage(page: any, platform: string): Promise<InfluencerPost> {
         const postId = this.generatePostId(page.url);
-        
+
         // Extract publication date
         const publishedDate = this.extractPublishDate(page.metadata, page.markdown);
-        
+
         // Extract engagement metrics (platform-specific)
         const engagement = this.extractEngagementMetrics(page.markdown, platform);
-        
+
         // Extract hashtags and mentions
         const hashtags = this.extractHashtags(page.markdown);
         const mentions = this.extractMentions(page.markdown);
-        
+
         // Extract media URLs
         const mediaUrls = this.extractMediaUrls(page.html || page.markdown);
-        
+
         // Determine content type
         const contentType = this.determineContentType(page.metadata, mediaUrls);
-        
+
         // Analyze sentiment
         const sentiment = await this.analyzeSentiment(page.markdown);
-        
+
         // Extract topics
         const topics = await this.extractTopics(page.markdown);
 
@@ -609,14 +606,14 @@ export class InfluencerHistoryService extends BaseService {
     // Analysis methods for habits and patterns
     private analyzePostingFrequency(posts: InfluencerPost[]): InfluencerHabit {
         const dailyPosts = new Map<string, number>();
-        
+
         posts.forEach(post => {
             const dateKey = post.publishedDate.toDateString();
             dailyPosts.set(dateKey, (dailyPosts.get(dateKey) || 0) + 1);
         });
 
         const averageDaily = Array.from(dailyPosts.values()).reduce((sum, count) => sum + count, 0) / dailyPosts.size;
-        
+
         let frequency: string;
         if (averageDaily >= 3) frequency = 'Multiple times daily';
         else if (averageDaily >= 1) frequency = 'Daily';
@@ -644,7 +641,7 @@ export class InfluencerHistoryService extends BaseService {
         posts.forEach(post => {
             const hour = post.publishedDate.getHours();
             const engagement = post.engagement.likes + post.engagement.comments + post.engagement.shares;
-            
+
             const current = hourlyEngagement.get(hour) || { totalEngagement: 0, posts: 0 };
             hourlyEngagement.set(hour, {
                 totalEngagement: current.totalEngagement + engagement,
@@ -673,7 +670,7 @@ export class InfluencerHistoryService extends BaseService {
 
     private analyzeContentThemes(posts: InfluencerPost[]): InfluencerHabit {
         const themeCount = new Map<string, number>();
-        
+
         posts.forEach(post => {
             post.topics.forEach(topic => {
                 themeCount.set(topic, (themeCount.get(topic) || 0) + 1);
@@ -701,7 +698,7 @@ export class InfluencerHistoryService extends BaseService {
     }
 
     private analyzeEngagementPatterns(posts: InfluencerPost[]): InfluencerHabit {
-        const avgEngagement = posts.reduce((sum, post) => 
+        const avgEngagement = posts.reduce((sum, post) =>
             sum + post.engagement.likes + post.engagement.comments + post.engagement.shares, 0) / posts.length;
 
         return {
@@ -720,7 +717,7 @@ export class InfluencerHistoryService extends BaseService {
     }
 
     private analyzeCollaborationTrends(posts: InfluencerPost[]): InfluencerHabit {
-        const collaborations = posts.filter(post => post.mentions.length > 0 || 
+        const collaborations = posts.filter(post => post.mentions.length > 0 ||
             post.content.toLowerCase().includes('collab') ||
             post.content.toLowerCase().includes('partnership'));
 
@@ -743,13 +740,13 @@ export class InfluencerHistoryService extends BaseService {
 
     private calculateTrend(values: number[]): 'increasing' | 'decreasing' | 'stable' | 'cyclical' {
         if (values.length < 3) return 'stable';
-        
+
         const recent = values.slice(-5);
         const older = values.slice(0, 5);
-        
+
         const recentAvg = recent.reduce((sum, val) => sum + val, 0) / recent.length;
         const olderAvg = older.reduce((sum, val) => sum + val, 0) / older.length;
-        
+
         if (recentAvg > olderAvg * 1.1) return 'increasing';
         if (recentAvg < olderAvg * 0.9) return 'decreasing';
         return 'stable';
@@ -757,13 +754,13 @@ export class InfluencerHistoryService extends BaseService {
 
     private async generateInfluencerAnalytics(posts: InfluencerPost[]): Promise<InfluencerTimeline['analytics']> {
         const totalPosts = posts.length;
-        const totalEngagement = posts.reduce((sum, post) => 
+        const totalEngagement = posts.reduce((sum, post) =>
             sum + post.engagement.likes + post.engagement.comments + post.engagement.shares, 0);
         const averageEngagement = totalEngagement / totalPosts;
 
         const topPerformingPosts = posts
-            .sort((a, b) => (b.engagement.likes + b.engagement.comments + b.engagement.shares) - 
-                           (a.engagement.likes + a.engagement.comments + a.engagement.shares))
+            .sort((a, b) => (b.engagement.likes + b.engagement.comments + b.engagement.shares) -
+                (a.engagement.likes + a.engagement.comments + a.engagement.shares))
             .slice(0, 5);
 
         const contentCategories: Record<string, number> = {};
@@ -774,9 +771,9 @@ export class InfluencerHistoryService extends BaseService {
         });
 
         // Calculate posting frequency
-        const dateRange = posts.length > 0 ? 
+        const dateRange = posts.length > 0 ?
             (posts[0].publishedDate.getTime() - posts[posts.length - 1].publishedDate.getTime()) / (1000 * 60 * 60 * 24) : 1;
-        
+
         const postingFrequency = {
             daily: totalPosts / Math.max(dateRange, 1),
             weekly: (totalPosts / Math.max(dateRange, 1)) * 7,

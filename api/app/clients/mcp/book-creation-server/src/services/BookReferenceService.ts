@@ -179,7 +179,7 @@ export class BookReferenceService extends BaseService {
             }
 
             const jwtToken = generateShortLivedToken(userId);
-            
+
             try {
                 const response = await axios.post(
                     `${process.env.RAG_API_URL}/query`,
@@ -198,7 +198,7 @@ export class BookReferenceService extends BaseService {
 
                 return response.data.results || [];
             } catch (error) {
-                this.logger.error('Failed to query RAG system', error as Error, { query, userId });
+                this.logger.error('Failed to query RAG system', { error: error as Error, query, userId });
                 return [];
             }
         }, { query, userId });
@@ -287,7 +287,7 @@ export class BookReferenceService extends BaseService {
 
             return response.data;
         } catch (error) {
-            this.logger.error('Failed to search Open Library', error as Error, { query });
+            this.logger.error('Failed to search Open Library', { error: error as Error, query });
             return { docs: [], numFound: 0, start: 0 };
         }
     }
@@ -325,7 +325,7 @@ export class BookReferenceService extends BaseService {
 
             return reference;
         } catch (error) {
-            this.logger.error('Failed to create book reference', error as Error, { docKey: doc.key });
+            this.logger.error('Failed to create book reference', { error: error as Error, docKey: doc.key });
             return null;
         }
     }
@@ -407,7 +407,7 @@ export class BookReferenceService extends BaseService {
                 const content = await this.scrapeBookContent(reference);
                 if (content) {
                     reference.contentSample = content.substring(0, 2000); // First 2k chars for analysis
-                    
+
                     // Store in RAG system
                     const ragFileId = await this.storeInRAG(reference, content, bookId);
                     if (ragFileId) {
@@ -485,7 +485,7 @@ export class BookReferenceService extends BaseService {
             );
 
             const result: FirecrawlScrapeResult = response.data;
-            
+
             if (result.success && result.data?.content) {
                 // Clean and extract main text content
                 return this.cleanScrapedContent(result.data.content);
@@ -493,7 +493,7 @@ export class BookReferenceService extends BaseService {
 
             return null;
         } catch (error) {
-            this.logger.error('Firecrawl scraping failed', error as Error, { url });
+            this.logger.error('Firecrawl scraping failed', { error: error as Error, url });
             return null;
         }
     }
@@ -521,7 +521,7 @@ export class BookReferenceService extends BaseService {
         try {
             const searchUrl = `https://www.gutenberg.org/ebooks/search/?query=${encodeURIComponent(reference.title)}`;
             const searchContent = await this.scrapeWithFirecrawl(searchUrl);
-            
+
             if (searchContent) {
                 // Extract book URLs from search results and scrape the first match
                 const bookUrlMatch = searchContent.match(/\/ebooks\/(\d+)/);
@@ -534,7 +534,7 @@ export class BookReferenceService extends BaseService {
         } catch (error) {
             this.logger.debug('Gutenberg search failed', { error: error as Error, title: reference.title });
         }
-        
+
         return null;
     }
 
@@ -563,10 +563,10 @@ export class BookReferenceService extends BaseService {
         try {
             // Create a synthetic file ID for the reference
             const fileId = `book_ref_${reference.id}`;
-            
+
             // Store in RAG with metadata
             const jwtToken = generateShortLivedToken('system'); // Use system token for book references
-            
+
             const response = await axios.post(
                 `${process.env.RAG_API_URL}/embed_text`,
                 {
@@ -604,9 +604,7 @@ export class BookReferenceService extends BaseService {
 
             return null;
         } catch (error) {
-            this.logger.error('Failed to store reference in RAG', error as Error, {
-                referenceId: reference.id
-            });
+            this.logger.error('Failed to store reference in RAG', { error: error as Error, referenceId: reference.id });
             return null;
         }
     }
@@ -645,12 +643,12 @@ export class BookReferenceService extends BaseService {
 
     private inferTone(subjects: string[], title: string): string | undefined {
         const allText = [...subjects, title].join(' ').toLowerCase();
-        
+
         if (allText.includes('humor') || allText.includes('comedy')) return 'humorous';
         if (allText.includes('dark') || allText.includes('gothic')) return 'serious';
         if (allText.includes('romantic') || allText.includes('love')) return 'romantic';
         if (allText.includes('adventure') || allText.includes('action')) return 'adventurous';
-        
+
         return undefined;
     }
 
@@ -712,7 +710,7 @@ export class BookReferenceService extends BaseService {
 
     private findCachedReferences(request: StyleAnalysisRequest): BookReference[] {
         const cached: BookReference[] = [];
-        
+
         for (const reference of this.referenceBooks.values()) {
             if (reference.similarity.overallScore >= (request.minSimilarityScore || 0.6)) {
                 const similarity = this.calculateSimilarityToRequest(reference, request);
@@ -805,7 +803,7 @@ export class BookReferenceService extends BaseService {
         // Sentence length analysis
         const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 5);
         const avgSentenceLength = sentences.reduce((sum, s) => sum + s.split(' ').length, 0) / sentences.length;
-        
+
         if (avgSentenceLength < 10) {
             patterns.push('Short, concise sentences for clarity and pace');
         } else if (avgSentenceLength > 20) {
@@ -817,7 +815,7 @@ export class BookReferenceService extends BaseService {
         // Dialogue analysis
         const dialogueMatches = content.match(/["'][^"']*["']/g) || [];
         const dialogueRatio = dialogueMatches.length / sentences.length;
-        
+
         if (dialogueRatio > 0.3) {
             patterns.push('Heavy use of dialogue to drive narrative');
         } else if (dialogueRatio > 0.1) {
@@ -829,7 +827,7 @@ export class BookReferenceService extends BaseService {
         // Descriptive language analysis
         const descriptiveWords = content.match(/\b(beautiful|gorgeous|magnificent|terrible|awful|bright|dark|mysterious|gentle|harsh|vivid|dull)\b/gi) || [];
         const descriptiveRatio = descriptiveWords.length / content.split(' ').length;
-        
+
         if (descriptiveRatio > 0.02) {
             patterns.push('Rich descriptive language with vivid imagery');
         } else {

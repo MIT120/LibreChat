@@ -5,55 +5,93 @@ import {
   CreatePromptForm,
   EmptyPromptPreview,
 } from '~/components/Prompts';
+// Book Creation Components
+import WorkspaceDashboard from '~/components/Workspace/WorkspaceDashboard';
+import WorkspaceOverview from '~/components/Workspace/WorkspaceOverview';
+import EnhancedWritingEnvironment from '~/components/Writing/EnhancedWritingEnvironment';
+import ScenePlanningBoard from '~/components/Planning/ScenePlanningBoard';
+import TimelineView from '~/components/StoryPlanning/TimelineView';
+import InteractiveBookPreview from '~/components/BookPreview/InteractiveBookPreview';
 import DashboardRoute from './Layouts/Dashboard';
+
+// Additional Book Creation Components
+import BookLibrary from '~/components/BookCreation/BookLibrary';
+import BookEditor from '~/components/BookCreation/BookEditor';
+
+// Placeholder components for missing views
+const WorkspaceView = () => <div>Workspace View - Coming Soon</div>;
+const WritingStudio = () => <div>Writing Studio - Coming Soon</div>;
+const PlanningView = () => <div>Planning View - Coming Soon</div>;
+const BookPreviewView = () => <div>Book Preview View - Coming Soon</div>;
 
 const dashboardRoutes = {
   path: 'd/*',
   element: <DashboardRoute />,
   children: [
-    /*
     {
-      element: <FileDashboardView />,
+      path: 'workspace/*',
+      element: <WorkspaceDashboard />,
       children: [
         {
           index: true,
-          element: <EmptyVectorStorePreview />,
+          element: <WorkspaceOverview />,
         },
         {
-          path: ':vectorStoreId',
-          element: <DataTableFilePreview />,
+          path: ':workspaceId',
+          element: <WorkspaceView />,
         },
       ],
     },
     {
-      path: 'files/*',
-      element: <FilesListView />,
+      path: 'writing/*',
+      element: <WritingStudio />,
       children: [
         {
           index: true,
-          element: <EmptyFilePreview />,
+          element: <EnhancedWritingEnvironment />,
         },
         {
-          path: ':fileId',
-          element: <FilePreview />,
+          path: ':bookId',
+          element: <EnhancedWritingEnvironment />,
         },
       ],
     },
     {
-      path: 'vector-stores/*',
-      element: <VectorStoreView />,
+      path: 'planning/*',
+      element: <PlanningView />,
       children: [
         {
           index: true,
-          element: <EmptyVectorStorePreview />,
+          element: <ScenePlanningBoard />,
         },
         {
-          path: ':vectorStoreId',
-          element: <VectorStorePreview />,
+          path: 'scenes/:bookId',
+          element: <ScenePlanningBoard />,
+        },
+        {
+          path: 'timeline/:bookId',
+          element: <TimelineView />,
         },
       ],
     },
-    */
+    {
+      path: 'books/*',
+      element: <BookPreviewView />,
+      children: [
+        {
+          index: true,
+          element: <BookLibrary />,
+        },
+        {
+          path: ':bookId/preview',
+          element: <InteractiveBookPreview />,
+        },
+        {
+          path: ':bookId/edit',
+          element: <BookEditor />,
+        },
+      ],
+    },
     {
       path: 'prompts/*',
       element: <PromptsView />,
@@ -74,7 +112,7 @@ const dashboardRoutes = {
     },
     {
       path: '*',
-      element: <Navigate to="/d/files" replace={true} />,
+      element: <Navigate to="/d/workspace" replace={true} />,
     },
   ],
 };

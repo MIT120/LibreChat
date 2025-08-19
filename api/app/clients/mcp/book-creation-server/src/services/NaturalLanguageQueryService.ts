@@ -280,7 +280,7 @@ export class NaturalLanguageQueryService extends BaseService {
             // Generate questions
             const questionCount = options.questionCount || 10;
             const questionTypes = options.questionTypes || ['multiple_choice', 'true_false', 'short_answer'];
-            
+
             const questions: QuizQuestion[] = [];
             const questionsPerTopic = Math.ceil(questionCount / targetTopics.length);
 
@@ -385,7 +385,7 @@ export class NaturalLanguageQueryService extends BaseService {
 
                 // Generate objectives at different Bloom's levels
                 const levels = options.taxonomyLevel ? [options.taxonomyLevel] : Object.keys(bloomsVerbs);
-                
+
                 for (const level of levels) {
                     const levelObjectives = this.generateObjectivesForLevel(
                         chapterContent,
@@ -433,7 +433,7 @@ export class NaturalLanguageQueryService extends BaseService {
 
             return response.data.results || [];
         } catch (error) {
-            this.logger.error('RAG query failed', error as Error, { question, userId });
+            this.logger.error('RAG query failed', { error: error as Error, question, userId });
             return [];
         }
     }
@@ -448,7 +448,7 @@ export class NaturalLanguageQueryService extends BaseService {
         // Analyze question intent
         const questionType = this.classifyQuestion(question);
         const questionTopics = this.extractQuestionTopics(question);
-        
+
         // Analyze content
         const contentTopics = this.extractContentTopics(content);
         const relevantSections = this.findRelevantSections(question, chapters, pages);
@@ -468,7 +468,7 @@ export class NaturalLanguageQueryService extends BaseService {
     private async generateAnswer(question: string, analysis: any, ragResults: any[]): Promise<string> {
         // This would integrate with an AI service to generate natural answers
         // For now, provide a structured response based on analysis
-        
+
         const questionType = analysis.questionType;
         const topics = analysis.topics;
         const relevantSections = analysis.relevantSections;
@@ -486,7 +486,7 @@ export class NaturalLanguageQueryService extends BaseService {
 
     private classifyQuestion(question: string): string {
         const questionLower = question.toLowerCase();
-        
+
         if (questionLower.includes('what') || questionLower.includes('who') || questionLower.includes('when')) {
             return 'factual';
         } else if (questionLower.includes('why') || questionLower.includes('how') || questionLower.includes('analyze')) {
@@ -502,7 +502,7 @@ export class NaturalLanguageQueryService extends BaseService {
         // Simple keyword extraction - would use NLP in production
         const words = question.toLowerCase().split(/\s+/);
         const stopWords = new Set(['what', 'who', 'when', 'where', 'why', 'how', 'is', 'are', 'the', 'a', 'an']);
-        
+
         return words
             .filter(word => word.length > 3 && !stopWords.has(word))
             .slice(0, 5);
@@ -512,13 +512,13 @@ export class NaturalLanguageQueryService extends BaseService {
         // Extract key topics from content using frequency analysis
         const words = content.toLowerCase().match(/\b\w{4,}\b/g) || [];
         const frequency: Record<string, number> = {};
-        
+
         words.forEach(word => {
             frequency[word] = (frequency[word] || 0) + 1;
         });
 
         return Object.entries(frequency)
-            .sort(([,a], [,b]) => b - a)
+            .sort(([, a], [, b]) => b - a)
             .slice(0, 10)
             .map(([word]) => word);
     }
@@ -526,14 +526,14 @@ export class NaturalLanguageQueryService extends BaseService {
     private findRelevantSections(question: string, chapters: any[], pages: any[]): any[] {
         const questionLower = question.toLowerCase();
         const questionWords = questionLower.split(/\s+/);
-        
+
         return pages
             .map(page => {
                 const contentLower = page.content.toLowerCase();
-                const matches = questionWords.filter(word => 
+                const matches = questionWords.filter(word =>
                     word.length > 3 && contentLower.includes(word)
                 ).length;
-                
+
                 return {
                     ...page,
                     relevanceScore: matches / questionWords.length,
@@ -547,17 +547,17 @@ export class NaturalLanguageQueryService extends BaseService {
     private findRelevantChapters(question: string, chapters: any[], pages: any[]): any[] {
         const questionLower = question.toLowerCase();
         const questionWords = questionLower.split(/\s+/).filter(w => w.length > 3);
-        
+
         return chapters.map(chapter => {
             const chapterPages = pages.filter(p => p.chapterId === chapter._id);
             const allContent = chapterPages.map(p => p.content).join(' ').toLowerCase();
-            
+
             const matches = questionWords.filter(word => allContent.includes(word)).length;
             const relevance = matches / questionWords.length;
-            
+
             // Extract excerpt
             const excerpt = this.extractRelevantExcerpt(questionWords, allContent);
-            
+
             return {
                 id: chapter._id,
                 title: chapter.title,
@@ -565,8 +565,8 @@ export class NaturalLanguageQueryService extends BaseService {
                 excerpt
             };
         })
-        .filter(chapter => chapter.relevance > 0)
-        .sort((a, b) => b.relevance - a.relevance);
+            .filter(chapter => chapter.relevance > 0)
+            .sort((a, b) => b.relevance - a.relevance);
     }
 
     private extractRelevantExcerpt(questionWords: string[], content: string): string {
@@ -574,7 +574,7 @@ export class NaturalLanguageQueryService extends BaseService {
         const sentences = content.split(/[.!?]+/);
         let bestSentence = '';
         let maxMatches = 0;
-        
+
         for (const sentence of sentences) {
             const matches = questionWords.filter(word => sentence.toLowerCase().includes(word)).length;
             if (matches > maxMatches) {
@@ -582,7 +582,7 @@ export class NaturalLanguageQueryService extends BaseService {
                 bestSentence = sentence.trim();
             }
         }
-        
+
         return bestSentence.substring(0, 200) + (bestSentence.length > 200 ? '...' : '');
     }
 
@@ -605,14 +605,14 @@ export class NaturalLanguageQueryService extends BaseService {
     private generateAnalyticalAnswer(question: string, analysis: any, ragResults: any[]): string {
         const topics = analysis.topics.slice(0, 3);
         const chapters = analysis.relevantSections.map((s: any) => s.chapter?.title).filter(Boolean);
-        
+
         return `This question involves analyzing ${topics.join(', ')}. Based on the content from chapters including ${chapters.slice(0, 3).join(', ')}, here's the analysis:\n\n[This would contain AI-generated analytical response based on the book content and themes identified.]`;
     }
 
     private generateSummaryAnswer(question: string, analysis: any): string {
         const book = analysis.book;
         const chapters = analysis.chapters;
-        
+
         return `Summary of "${book.title}":\n\nThis ${book.genre} book explores ${book.theme} across ${chapters.length} chapters. [Detailed summary would be generated here based on content analysis.]`;
     }
 
@@ -622,7 +622,7 @@ export class NaturalLanguageQueryService extends BaseService {
 
     private extractSources(analysis: any, ragResults: any[]): any[] {
         const sources: any[] = [];
-        
+
         // Add chapter sources
         analysis.relevantSections.slice(0, 3).forEach((section: any) => {
             sources.push({
@@ -651,9 +651,9 @@ export class NaturalLanguageQueryService extends BaseService {
     private generateFollowUpQuestions(question: string, analysis: any): string[] {
         const topics = analysis.topics.slice(0, 2);
         const questionType = analysis.questionType;
-        
+
         const followUps: string[] = [];
-        
+
         if (questionType === 'factual') {
             followUps.push(`How does ${topics[0]} relate to the main theme?`);
             followUps.push(`What other examples of ${topics[0]} appear in the book?`);
@@ -661,25 +661,25 @@ export class NaturalLanguageQueryService extends BaseService {
             followUps.push(`What are the implications of this analysis?`);
             followUps.push(`How does this compare to other parts of the book?`);
         }
-        
+
         followUps.push(`Can you tell me more about ${topics[0] || 'the main theme'}?`);
-        
+
         return followUps.slice(0, 3);
     }
 
     private calculateConfidence(analysis: any, ragResults: any[]): number {
         const hasRelevantSections = analysis.relevantSections.length > 0;
         const hasRAGResults = ragResults.length > 0;
-        const topicMatch = analysis.questionTopics.some((qt: string) => 
+        const topicMatch = analysis.questionTopics.some((qt: string) =>
             analysis.contentTopics.includes(qt)
         );
-        
+
         let confidence = 0.3; // Base confidence
-        
+
         if (hasRelevantSections) confidence += 0.3;
         if (hasRAGResults) confidence += 0.2;
         if (topicMatch) confidence += 0.2;
-        
+
         return Math.min(confidence, 1.0);
     }
 
@@ -688,23 +688,23 @@ export class NaturalLanguageQueryService extends BaseService {
         // Generate summary based on type
         const wordCount = content.split(/\s+/).length;
         const targetLength = type === 'brief' ? 100 : type === 'detailed' ? 500 : 300;
-        
+
         // This would use AI to generate actual summaries
         return `This ${book.genre} book "${book.title}" explores ${book.theme}. [AI-generated summary of ${targetLength} words would be provided here based on the content analysis.]`;
     }
 
     private extractKeyPoints(content: string, chapters: any[]): string[] {
         // Extract key points using chapter titles and content analysis
-        const points = chapters.slice(0, 5).map(chapter => 
+        const points = chapters.slice(0, 5).map(chapter =>
             `Chapter ${chapter.chapterNumber}: ${chapter.title} - [Key point extracted from content]`
         );
-        
+
         return points;
     }
 
     private extractThemes(content: string, book: any): string[] {
         const themes = [book.theme];
-        
+
         // Add detected themes from content
         const themeKeywords = {
             'love': ['love', 'heart', 'romance', 'relationship'],
@@ -728,11 +728,11 @@ export class NaturalLanguageQueryService extends BaseService {
     private extractCharacters(content: string): Array<{ name: string; description: string }> {
         // Simple character extraction - would use NER in production
         const characters: Array<{ name: string; description: string }> = [];
-        
+
         // Look for patterns like "John said" or "Mary thought"
         const speakingPattern = /([A-Z][a-z]+)\s+(said|thought|asked|replied|whispered)/g;
         const matches = content.matchAll(speakingPattern);
-        
+
         const characterNames = new Set<string>();
         for (const match of matches) {
             characterNames.add(match[1]);
@@ -749,20 +749,20 @@ export class NaturalLanguageQueryService extends BaseService {
     }
 
     private extractPlotPoints(content: string, chapters: any[]): string[] {
-        return chapters.slice(0, 3).map(chapter => 
+        return chapters.slice(0, 3).map(chapter =>
             `Chapter ${chapter.chapterNumber}: [Plot point extracted from ${chapter.title}]`
         );
     }
 
     private assessDifficulty(content: string): 'easy' | 'medium' | 'hard' {
         const sentences = content.split(/[.!?]+/);
-        const avgWordsPerSentence = sentences.reduce((sum, s) => 
+        const avgWordsPerSentence = sentences.reduce((sum, s) =>
             sum + s.split(/\s+/).length, 0) / sentences.length;
-        
+
         const words = content.split(/\s+/);
         const longWords = words.filter(word => word.length > 6).length;
         const longWordRatio = longWords / words.length;
-        
+
         if (avgWordsPerSentence < 12 && longWordRatio < 0.15) {
             return 'easy';
         } else if (avgWordsPerSentence < 18 && longWordRatio < 0.25) {
@@ -774,7 +774,7 @@ export class NaturalLanguageQueryService extends BaseService {
 
     private extractQuizTopics(content: string, book: any, chapters: any[]): string[] {
         const topics = [book.theme, book.genre];
-        
+
         // Add chapter titles as topics
         chapters.forEach(chapter => {
             topics.push(chapter.title);
@@ -796,13 +796,13 @@ export class NaturalLanguageQueryService extends BaseService {
         types: string[]
     ): Promise<QuizQuestion[]> {
         const questions: QuizQuestion[] = [];
-        
+
         for (let i = 0; i < count; i++) {
             const type = types[i % types.length] as QuizQuestion['type'];
-            const questionDifficulty = difficulty === 'mixed' 
+            const questionDifficulty = difficulty === 'mixed'
                 ? ['easy', 'medium', 'hard'][i % 3] as QuizQuestion['difficulty']
                 : difficulty as QuizQuestion['difficulty'];
-            
+
             const question = this.generateQuestionForTopic(topic, content, type, questionDifficulty);
             if (question) {
                 questions.push(question);
@@ -819,7 +819,7 @@ export class NaturalLanguageQueryService extends BaseService {
         difficulty: QuizQuestion['difficulty']
     ): QuizQuestion | null {
         const id = `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
+
         switch (type) {
             case 'multiple_choice':
                 return {
@@ -837,7 +837,7 @@ export class NaturalLanguageQueryService extends BaseService {
                     difficulty,
                     topic
                 };
-                
+
             case 'true_false':
                 return {
                     id,
@@ -848,7 +848,7 @@ export class NaturalLanguageQueryService extends BaseService {
                     difficulty,
                     topic
                 };
-                
+
             case 'short_answer':
                 return {
                     id,
@@ -859,7 +859,7 @@ export class NaturalLanguageQueryService extends BaseService {
                     difficulty,
                     topic
                 };
-                
+
             case 'essay':
                 return {
                     id,
@@ -870,7 +870,7 @@ export class NaturalLanguageQueryService extends BaseService {
                     difficulty,
                     topic
                 };
-                
+
             default:
                 return null;
         }
@@ -905,7 +905,7 @@ export class NaturalLanguageQueryService extends BaseService {
     ): Array<{ objective: string; level: string; chapter: string; assessmentSuggestion: string }> {
         const objectives = [];
         const verb = verbs[Math.floor(Math.random() * verbs.length)];
-        
+
         // Generate 1-2 objectives per chapter/level
         objectives.push({
             objective: `Students will be able to ${verb} key concepts from ${chapterTitle}`,

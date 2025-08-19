@@ -25,7 +25,7 @@ export interface ImageRecord {
 export class ImageService extends BaseService {
     private styleAnalyzer: ImageStyleAnalyzer;
     private styleConfig: ImageStyleConfig;
-    
+
     constructor(logger: ILogger) {
         super(logger);
         this.styleAnalyzer = new ImageStyleAnalyzer(logger);
@@ -105,14 +105,14 @@ export class ImageService extends BaseService {
         userStylePreference?: string; // User-provided style when auto-detection is not confident
         forceUserPrompt?: boolean; // Force user to choose style regardless of confidence
         userId?: string; // User ID for applying preferences
-    }): Promise<{ 
-        imageUrl: string; 
-        imageBase64?: string; 
+    }): Promise<{
+        imageUrl: string;
+        imageBase64?: string;
         attachedToPageId?: string;
         styleAnalysis?: StyleAnalysisResult;
         needsUserStyleInput?: boolean;
         availableStyles?: Array<{ name: string; description: string; ageRating: string }>;
-    }>{
+    }> {
         return this.executeWithLogging('generateContextualImage', async () => {
             const openaiApiKey = process.env.OPENAI_API_KEY;
             if (!openaiApiKey) {
@@ -131,15 +131,15 @@ export class ImageService extends BaseService {
             // Apply user preferences if userId provided
             let adjustedStyle = styleAnalysis.primaryStyle;
             let adjustedConfidenceThreshold = styleAnalysis.confidenceScore;
-            
+
             if (args.userId) {
                 adjustedStyle = this.styleConfig.applyUserPreferences(
-                    args.userId, 
-                    styleAnalysis.primaryStyle, 
-                    book.genre, 
+                    args.userId,
+                    styleAnalysis.primaryStyle,
+                    book.genre,
                     book.targetAudience
                 );
-                
+
                 // Get user's confidence threshold
                 const confidenceThreshold = this.styleConfig.getConfidenceThreshold(args.userId);
                 adjustedConfidenceThreshold = Math.max(styleAnalysis.confidenceScore, confidenceThreshold);
@@ -147,8 +147,8 @@ export class ImageService extends BaseService {
 
             // Check if we need user input for style selection
             const needsUserInput = (
-                styleAnalysis.fallbackToUserPrompt || 
-                args.forceUserPrompt || 
+                styleAnalysis.fallbackToUserPrompt ||
+                args.forceUserPrompt ||
                 adjustedConfidenceThreshold < 0.5 ||
                 !adjustedStyle // Style was filtered out by user preferences
             ) && !args.userStylePreference;
@@ -243,9 +243,9 @@ export class ImageService extends BaseService {
                 });
             }
 
-            return { 
-                imageUrl, 
-                imageBase64, 
+            return {
+                imageUrl,
+                imageBase64,
                 attachedToPageId,
                 styleAnalysis,
                 needsUserStyleInput: false
@@ -269,7 +269,7 @@ export class ImageService extends BaseService {
             if (!book) {
                 throw new Error(`Book not found: ${bookId}`);
             }
-            
+
             return this.styleAnalyzer.analyzeBookForImageStyle(book);
         }, { bookId });
     }
@@ -304,16 +304,16 @@ export class ImageService extends BaseService {
 
     private buildDallePrompt(prompt: string, style?: string, styleModifiers: string[] = []): string {
         const styleName = style || 'children_book_illustration';
-        
+
         // Get the base DALL-E prompt for this style from the style config
         const styleConfig = this.styleAnalyzer['styleConfig']?.styles[styleName];
         let basePrompt = styleConfig?.dallePrompt || 'professional illustration, high quality, detailed artwork';
-        
+
         // Add style modifiers if any
         if (styleModifiers.length > 0) {
             basePrompt += `, ${styleModifiers.join(', ')}`;
         }
-        
+
         // Combine user prompt with style directives
         return `${prompt}. ${basePrompt}`;
     }
@@ -442,11 +442,7 @@ export class ImageService extends BaseService {
 
             return pageToUpdate.pageId as string;
         } catch (error) {
-            this.logger.error('Failed to store image in page', error as Error, {
-                pageId: ref.pageId,
-                pageNumber: ref.pageNumber,
-                chapterId: ref.chapterId,
-            });
+            this.logger.error('Failed to store image in page', { error: error as Error, pageId: ref.pageId, pageNumber: ref.pageNumber, chapterId: ref.chapterId });
             // do not throw; attachment failure should not block tool response
             return undefined;
         }

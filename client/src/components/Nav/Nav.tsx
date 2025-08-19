@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useMemo, memo, lazy, Suspense, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
+import { useLocation } from 'react-router-dom';
 import { PermissionTypes, Permissions } from 'librechat-data-provider';
 import type { ConversationListResponse } from 'librechat-data-provider';
 import type { InfiniteQueryObserverResult } from '@tanstack/react-query';
@@ -19,6 +20,7 @@ import { cn } from '~/utils';
 import store from '~/store';
 
 const BookmarkNav = lazy(() => import('./Bookmarks/BookmarkNav'));
+const BookCreationNav = lazy(() => import('./BookCreationNav'));
 const AccountSettings = lazy(() => import('./AccountSettings'));
 
 const NAV_WIDTH_DESKTOP = '260px';
@@ -53,7 +55,11 @@ const Nav = memo(
     setNavVisible: React.Dispatch<React.SetStateAction<boolean>>;
   }) => {
     const localize = useLocalize();
+    const location = useLocation();
     const { isAuthenticated } = useAuthContext();
+
+    // Check if we're in dashboard mode (book creation features)
+    const isDashboardMode = location.pathname.startsWith('/d/');
 
     const [navWidth, setNavWidth] = useState(NAV_WIDTH_DESKTOP);
     const isSmallScreen = useMediaQuery('(max-width: 768px)');
@@ -200,32 +206,54 @@ const Nav = memo(
                 className={`flex h-full flex-col transition-opacity duration-200 ease-in-out ${navVisible ? 'opacity-100' : 'opacity-0'}`}
               >
                 <div className="flex h-full flex-col">
-                  <nav
-                    id="chat-history-nav"
-                    aria-label={localize('com_ui_chat_history')}
-                    className="flex h-full flex-col px-2 pb-3.5 md:px-3"
-                  >
-                    <div className="flex flex-1 flex-col" ref={outerContainerRef}>
-                      <MemoNewChat
-                        subHeaders={subHeaders}
-                        toggleNav={toggleNavVisible}
-                        headerButtons={headerButtons}
-                        isSmallScreen={isSmallScreen}
-                      />
-                      <Conversations
-                        conversations={conversations}
-                        moveToTop={moveToTop}
-                        toggleNav={itemToggleNav}
-                        containerRef={listRef}
-                        loadMoreConversations={loadMoreConversations}
-                        isLoading={isFetchingNextPage || showLoading || isLoading}
-                        isSearchLoading={isSearchLoading}
-                      />
-                    </div>
-                    <Suspense fallback={null}>
-                      <AccountSettings />
-                    </Suspense>
-                  </nav>
+                  {isDashboardMode ? (
+                    // Book Creation Navigation
+                    <nav
+                      id="book-creation-nav"
+                      aria-label="Book Creation Navigation"
+                      className="flex h-full flex-col px-2 pb-3.5 md:px-3"
+                    >
+                      <div className="flex flex-1 flex-col">
+                        <Suspense fallback={<div>Loading...</div>}>
+                          <BookCreationNav
+                            collapsed={isSmallScreen ? false : undefined}
+                            onToggleCollapse={toggleNavVisible}
+                          />
+                        </Suspense>
+                      </div>
+                      <Suspense fallback={null}>
+                        <AccountSettings />
+                      </Suspense>
+                    </nav>
+                  ) : (
+                    // Regular Chat Navigation
+                    <nav
+                      id="chat-history-nav"
+                      aria-label={localize('com_ui_chat_history')}
+                      className="flex h-full flex-col px-2 pb-3.5 md:px-3"
+                    >
+                      <div className="flex flex-1 flex-col" ref={outerContainerRef}>
+                        <MemoNewChat
+                          subHeaders={subHeaders}
+                          toggleNav={toggleNavVisible}
+                          headerButtons={headerButtons}
+                          isSmallScreen={isSmallScreen}
+                        />
+                        <Conversations
+                          conversations={conversations}
+                          moveToTop={moveToTop}
+                          toggleNav={itemToggleNav}
+                          containerRef={listRef}
+                          loadMoreConversations={loadMoreConversations}
+                          isLoading={isFetchingNextPage || showLoading || isLoading}
+                          isSearchLoading={isSearchLoading}
+                        />
+                      </div>
+                      <Suspense fallback={null}>
+                        <AccountSettings />
+                      </Suspense>
+                    </nav>
+                  )}
                 </div>
               </div>
             </div>
