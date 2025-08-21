@@ -1,19 +1,34 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { RefreshCw, ExternalLink, Download, Edit, Eye, Save, MessageSquare, Loader2, CheckCircle, X, AlertCircle } from 'lucide-react';
+import {
+  RefreshCw,
+  ExternalLink,
+  Download,
+  Edit,
+  Eye,
+  Save,
+  Loader2,
+  CheckCircle,
+  X,
+  AlertCircle,
+} from 'lucide-react';
 import { Button } from '~/components/ui';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '~/components/ui/Dialog';
 import { Input } from '~/components/ui/Input';
 import { Textarea } from '~/components/ui/Textarea';
 import { Label } from '~/components/ui/label';
-import { Switch } from '~/components/ui/switch';
 import { useBookContext } from '~/components/SidePanel/Books';
 import { useStaticExports } from '~/hooks/useStaticExports';
 import { useExports, useAutoRefreshExports } from '~/hooks/useExports';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useChatContext } from '~/Providers/ChatContext';
 import { debounce } from 'lodash';
-import { cn } from '~/utils';
 
 // React-Quill import with CSS and modules
 import ReactQuill, { Quill } from 'react-quill';
@@ -22,6 +37,10 @@ import './QuillEditor.css';
 
 // Import image resize module
 import ImageResize from 'quill-image-resize-module-react';
+
+// Import new text selection components
+import TextSelectionBubble from './TextSelectionBubble';
+import InlineTextInput from './InlineTextInput';
 
 // Register the image resize module
 Quill.register('modules/imageResize', ImageResize);
@@ -81,6 +100,17 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
   // Refs for interactive mode
   const contentRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<Selection | null>(null);
+
+  // New state for enhanced text selection
+  const [showSelectionBubble, setShowSelectionBubble] = useState(false);
+  const [showInlineInput, setShowInlineInput] = useState(false);
+  const [selectionRect, setSelectionRect] = useState<DOMRect | null>(null);
+  const [globalSelectedText, setGlobalSelectedText] = useState<string>('');
+  const [globalSelectionContext, setGlobalSelectionContext] = useState<{
+    before: string;
+    after: string;
+  }>({ before: '', after: '' });
+  const [isProcessingRequest, setIsProcessingRequest] = useState(false);
 
   // Construct server base URL for static exports
   const serverBase = useMemo(() => {
@@ -175,15 +205,21 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
 
     // Get context around selection
     const contextLength = 100;
-    const contextBefore = textContent.substring(Math.max(0, startOffset - contextLength), startOffset);
-    const contextAfter = textContent.substring(endOffset, Math.min(textContent.length, endOffset + contextLength));
+    const contextBefore = textContent.substring(
+      Math.max(0, startOffset - contextLength),
+      startOffset,
+    );
+    const contextAfter = textContent.substring(
+      endOffset,
+      Math.min(textContent.length, endOffset + contextLength),
+    );
 
     setSelectedText({
       startOffset,
       endOffset,
       selectedText,
       contextBefore,
-      contextAfter
+      contextAfter,
     });
 
     selectionRef.current = selection;
@@ -192,15 +228,10 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
   // Helper function to get text offset
   const getTextOffset = (root: Node, node: Node, offset: number): number => {
     let textOffset = 0;
-    const walker = document.createTreeWalker(
-      root,
-      NodeFilter.SHOW_TEXT,
-      null,
-      false
-    );
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
 
     let currentNode;
-    while (currentNode = walker.nextNode()) {
+    while ((currentNode = walker.nextNode())) {
       if (currentNode === node) {
         return textOffset + offset;
       }
@@ -209,41 +240,216 @@ export default function BookPreview({ className = '' }: BookPreviewProps) {
     return textOffset;
   };
 
-  // Call MCP tool to update content
-  const callMCPUpdateTool = useCallback(async (content: string) => {
-    try {
-      const response = await fetch(`/api/mcp/book-creation/tools/update_chapter/call`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          arguments: {
-            chapterId: 'main', // Use a default chapter ID - this should be improved
-            content,
-            authorId: user?.id,
-            conversationId
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`MCP call failed: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      return result;
-    } catch (error) {
-      console.error('Failed to call MCP tool:', error);
-      throw error;
+  // Helper function to clear selection
+  const clearSelection = useCallback(() => {
+    if (selectionRef.current) {
+      selectionRef.current.removeAllRanges();
     }
-  }, [user?.id, conversationId]);
+    setGlobalSelectedText('');
+    setSelectionRect(null);
+    setGlobalSelectionContext({ before: '', after: '' });
+  }, []);
+
+  // Enhanced text selection handler for both edit and preview modes
+  const handleEnhancedTextSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      setShowSelectionBubble(false);
+      setShowInlineInput(false);
+      setGlobalSelectedText('');
+      setSelectionRect(null);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const selectedText = selection.toString().trim();
+
+    if (selectedText.length === 0) {
+      setShowSelectionBubble(false);
+      setShowInlineInput(false);
+      setGlobalSelectedText('');
+      setSelectionRect(null);
+      return;
+    }
+
+    // Get the selection rectangle for positioning
+    const rect = range.getBoundingClientRect();
+    setSelectionRect(rect);
+    setGlobalSelectedText(selectedText);
+
+    // Get context around selection for better AI understanding
+    let contextBefore = '';
+    let contextAfter = '';
+
+    // Try to get context from the content
+    const container = range.commonAncestorContainer;
+    const rootElement = container.nodeType === Node.TEXT_NODE ? container.parentElement : container;
+
+    if (rootElement) {
+      const fullText = rootElement.textContent || '';
+      const selectedTextIndex = fullText.indexOf(selectedText);
+      if (selectedTextIndex !== -1) {
+        const contextLength = 150;
+        contextBefore = fullText.substring(
+          Math.max(0, selectedTextIndex - contextLength),
+          selectedTextIndex,
+        );
+        contextAfter = fullText.substring(
+          selectedTextIndex + selectedText.length,
+          Math.min(fullText.length, selectedTextIndex + selectedText.length + contextLength),
+        );
+      }
+    }
+
+    setGlobalSelectionContext({ before: contextBefore, after: contextAfter });
+
+    // Show the selection bubble immediately
+    setShowSelectionBubble(true);
+    setShowInlineInput(false);
+
+    // Also update the existing selectedText state for compatibility
+    if (isInteractiveMode && contentRef.current) {
+      const textContent = contentRef.current.textContent || '';
+      const startOffset = getTextOffset(
+        contentRef.current,
+        range.startContainer,
+        range.startOffset,
+      );
+      const endOffset = getTextOffset(contentRef.current, range.endContainer, range.endOffset);
+
+      setSelectedText({
+        startOffset,
+        endOffset,
+        selectedText,
+        contextBefore,
+        contextAfter,
+      });
+    }
+
+    selectionRef.current = selection;
+  }, [isInteractiveMode]);
+
+  // Handlers for the new text selection features
+  const handleAddToChat = useCallback(
+    async (text: string, context?: string) => {
+      if (!ask || !conversationId) return;
+
+      try {
+        setIsProcessingRequest(true);
+
+        // Create a message with the selected text and context
+        const message = context
+          ? `Please review this selected text from the book:\n\n"${text}"\n\nContext: ${context}`
+          : `Please review this selected text from the book:\n\n"${text}"`;
+
+        await ask({
+          text: message,
+          parentMessageId: undefined,
+          conversationId,
+        });
+
+        // Clear selection after successful submission
+        setShowSelectionBubble(false);
+        setShowInlineInput(false);
+        clearSelection();
+      } catch (error) {
+        console.error('Failed to add text to chat:', error);
+      } finally {
+        setIsProcessingRequest(false);
+      }
+    },
+    [ask, conversationId, clearSelection],
+  );
+
+  const handleAIEdit = useCallback((_text: string) => {
+    // Close bubble and show inline input for more detailed instructions
+    setShowSelectionBubble(false);
+    setShowInlineInput(true);
+  }, []);
+
+  const handleCopyText = useCallback((text: string) => {
+    // Copy text is handled by the bubble component
+    console.log('Text copied:', text.slice(0, 50) + '...');
+  }, []);
+
+  const handleInlineSubmit = useCallback(
+    async (instruction: string, action: 'chat' | 'edit') => {
+      if (!ask || !conversationId || !globalSelectedText) return;
+
+      try {
+        setIsProcessingRequest(true);
+
+        let message = '';
+        if (action === 'chat') {
+          message = `Regarding this selected text from the book: "${globalSelectedText}"\n\n${instruction}`;
+        } else {
+          message = `Please edit this selected text from the book: "${globalSelectedText}"\n\nInstructions: ${instruction}\n\nContext before: ${globalSelectionContext.before}\nContext after: ${globalSelectionContext.after}`;
+        }
+
+        await ask({
+          text: message,
+          parentMessageId: undefined,
+          conversationId,
+        });
+
+        // Clear selection and close input
+        setShowInlineInput(false);
+        setShowSelectionBubble(false);
+        clearSelection();
+      } catch (error) {
+        console.error('Failed to process inline request:', error);
+      } finally {
+        setIsProcessingRequest(false);
+      }
+    },
+    [ask, conversationId, globalSelectedText, globalSelectionContext, clearSelection],
+  );
+
+  const handleCloseSelection = useCallback(() => {
+    setShowSelectionBubble(false);
+    setShowInlineInput(false);
+    clearSelection();
+  }, [clearSelection]);
+
+  // Call MCP tool to update content
+  const callMCPUpdateTool = useCallback(
+    async (content: string) => {
+      try {
+        const response = await fetch(`/api/mcp/book-creation/tools/update_chapter/call`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            arguments: {
+              chapterId: 'main', // Use a default chapter ID - this should be improved
+              content,
+              authorId: user?.id,
+              conversationId,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`MCP call failed: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        return result;
+      } catch (error) {
+        console.error('Failed to call MCP tool:', error);
+        throw error;
+      }
+    },
+    [user?.id, conversationId],
+  );
 
   // Send change to chat
-  const sendChangeToChat = useCallback((change: TextChange) => {
-    if (!ask || !conversationId) return;
+  const sendChangeToChat = useCallback(
+    (change: TextChange) => {
+      if (!ask || !conversationId) return;
 
-    const changeMessage = `📝 **Book Edit Applied**
+      const changeMessage = `📝 **Book Edit Applied**
 
 **Original text:** "${change.originalText}"
 
@@ -253,11 +459,13 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
 
 **Applied at:** ${change.timestamp.toLocaleTimeString()}`;
 
-    ask({
-      text: changeMessage,
-      conversationId
-    });
-  }, [ask, conversationId]);
+      ask({
+        text: changeMessage,
+        conversationId,
+      });
+    },
+    [ask, conversationId],
+  );
 
   // Apply text change
   const applyTextChange = useCallback(async () => {
@@ -270,19 +478,20 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
       newText: newText.trim(),
       reason: changeReason.trim() || undefined,
       timestamp: new Date(),
-      status: 'pending'
+      status: 'pending',
     };
 
-    setRecentChanges(prev => [change, ...prev.slice(0, 9)]); // Keep last 10 changes
+    setRecentChanges((prev) => [change, ...prev.slice(0, 9)]); // Keep last 10 changes
     setIsApplyingChange(true);
 
     try {
       // Update change status
       change.status = 'applying';
-      setRecentChanges(prev => prev.map(c => c.id === change.id ? change : c));
+      setRecentChanges((prev) => prev.map((c) => (c.id === change.id ? change : c)));
 
       // Calculate new content with the change applied
-      const newContent = parsedContent.substring(0, selectedText.startOffset) +
+      const newContent =
+        parsedContent.substring(0, selectedText.startOffset) +
         newText +
         parsedContent.substring(selectedText.endOffset);
 
@@ -291,7 +500,7 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
 
       // Update change status to applied
       change.status = 'applied';
-      setRecentChanges(prev => prev.map(c => c.id === change.id ? change : c));
+      setRecentChanges((prev) => prev.map((c) => (c.id === change.id ? change : c)));
 
       // Update local content
       setParsedContent(newContent);
@@ -312,15 +521,22 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
       if (selectionRef.current) {
         selectionRef.current.removeAllRanges();
       }
-
     } catch (error) {
       console.error('Failed to apply text change:', error);
       change.status = 'failed';
-      setRecentChanges(prev => prev.map(c => c.id === change.id ? change : c));
+      setRecentChanges((prev) => prev.map((c) => (c.id === change.id ? change : c)));
     } finally {
       setIsApplyingChange(false);
     }
-  }, [selectedText, newText, changeReason, parsedContent, callMCPUpdateTool, sendChangeToChat, refreshExports]);
+  }, [
+    selectedText,
+    newText,
+    changeReason,
+    parsedContent,
+    callMCPUpdateTool,
+    sendChangeToChat,
+    refreshExports,
+  ]);
 
   // Open edit dialog
   const openEditDialog = useCallback(() => {
@@ -382,29 +598,120 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
     };
   }, [isInteractiveMode, handleTextSelection]);
 
+  // Enhanced text selection for all modes (edit, preview, interactive)
+  useEffect(() => {
+    const handleDocumentSelection = () => {
+      // Small delay to ensure selection is complete
+      setTimeout(handleEnhancedTextSelection, 10);
+    };
+
+    const handleClickOutside = (event: MouseEvent) => {
+      // Close selection UI when clicking outside
+      const target = event.target as Element;
+      if (!target.closest('.text-selection-bubble') && !target.closest('.inline-text-input')) {
+        setShowSelectionBubble(false);
+        setShowInlineInput(false);
+      }
+    };
+
+    // Add listeners based on current mode
+    if (isEditMode && quillRef.current) {
+      // For React-Quill editor
+      const quillEditor = quillRef.current.getEditor();
+      const quillContainer = quillEditor.root;
+
+      quillContainer.addEventListener('mouseup', handleDocumentSelection);
+      quillContainer.addEventListener('keyup', handleDocumentSelection);
+
+      // Cleanup function for Quill
+      return () => {
+        quillContainer.removeEventListener('mouseup', handleDocumentSelection);
+        quillContainer.removeEventListener('keyup', handleDocumentSelection);
+      };
+    } else if (!isEditMode && !isInteractiveMode && iframeRef.current) {
+      // For iframe preview mode
+      const iframe = iframeRef.current;
+
+      try {
+        // Wait for iframe to load, then add listeners to its document
+        const addIframeListeners = () => {
+          try {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (iframeDoc) {
+              iframeDoc.addEventListener('mouseup', handleDocumentSelection);
+              iframeDoc.addEventListener('keyup', handleDocumentSelection);
+
+              // Store cleanup function
+              iframe.dataset.listenersAdded = 'true';
+            }
+          } catch (error) {
+            console.log('Cannot access iframe content (cross-origin):', error);
+          }
+        };
+
+        if (iframe.contentDocument?.readyState === 'complete') {
+          addIframeListeners();
+        } else {
+          iframe.addEventListener('load', addIframeListeners);
+        }
+
+        // Cleanup function for iframe
+        return () => {
+          try {
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (iframeDoc) {
+              iframeDoc.removeEventListener('mouseup', handleDocumentSelection);
+              iframeDoc.removeEventListener('keyup', handleDocumentSelection);
+            }
+            iframe.removeEventListener('load', addIframeListeners);
+          } catch (error) {
+            console.log('Error during iframe cleanup:', error);
+          }
+        };
+      } catch (error) {
+        console.log('Error setting up iframe listeners:', error);
+        return () => {};
+      }
+    } else {
+      // For interactive mode or fallback to document
+      document.addEventListener('mouseup', handleDocumentSelection);
+      document.addEventListener('keyup', handleDocumentSelection);
+      document.addEventListener('click', handleClickOutside);
+
+      return () => {
+        document.removeEventListener('mouseup', handleDocumentSelection);
+        document.removeEventListener('keyup', handleDocumentSelection);
+        document.removeEventListener('click', handleClickOutside);
+      };
+    }
+  }, [isEditMode, isInteractiveMode, handleEnhancedTextSelection, currentPreviewUrl]);
+
   // Quill editor configuration with image support
-  const quillModules = useMemo(() => ({
-    toolbar: {
-      container: [
-        [{ header: [1, 2, 3, false] }],
-        ['bold', 'italic', 'underline', 'strike'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        [{ indent: '-1' }, { indent: '+1' }],
-        ['blockquote', 'code-block'],
-        ['link', 'image'],
-        [{ align: [] }],
-        [{ color: [] }, { background: [] }],
-        ['clean'],
-      ],
-      handlers: {
-        image: imageHandler,
+  const quillModules = useMemo(
+    () => ({
+      toolbar: {
+        container: [
+          [{ header: [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          [{ indent: '-1' }, { indent: '+1' }],
+          ['blockquote', 'code-block'],
+          ['link', 'image'],
+          [{ align: [] }],
+          [{ color: [] }, { background: [] }],
+          ['clean'],
+        ],
+        handlers: {
+          image: imageHandler,
+        },
       },
-    },
-    imageResize: {
-      parchment: Quill.import('parchment'),
-      modules: ['Resize', 'DisplaySize', 'Toolbar'],
-    },
-  }), [imageHandler]);
+      imageResize: {
+        parchment: Quill.import('parchment'),
+        modules: ['Resize', 'DisplaySize', 'Toolbar'],
+      },
+    }),
+    [imageHandler],
+  );
 
   const quillFormats = [
     'header',
@@ -458,7 +765,10 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
                   console.log('⚠️ Expired image detected:', src.substring(0, 100) + '...');
                   // Add a class to mark as expired
                   img.setAttribute('data-expired', 'true');
-                  img.setAttribute('title', 'This image URL has expired and may not display correctly');
+                  img.setAttribute(
+                    'title',
+                    'This image URL has expired and may not display correctly',
+                  );
                 }
               }
             }
@@ -511,7 +821,10 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
 
     try {
       // Generate filename if not provided
-      const saveFilename = filename || userSelectedFile || `book_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.html`;
+      const saveFilename =
+        filename ||
+        userSelectedFile ||
+        `book_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.html`;
 
       const response = await fetch('/api/exports/save-html', {
         method: 'POST',
@@ -791,8 +1104,6 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
           </div>
         </div>
 
-
-
         {/* Save status info */}
         {isEditMode && (
           <div className="mt-2 space-y-1">
@@ -858,10 +1169,11 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
                         setCurrentPreviewUrl(exp.url);
                       }, 100);
                     }}
-                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-blue-200 dark:hover:bg-blue-800 ${isCurrentlyViewed
-                      ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
-                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                      }`}
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-blue-200 dark:hover:bg-blue-800 ${
+                      isCurrentlyViewed
+                        ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    }`}
                     title={`${exp.filename} - Click to preview (${exp.format})`}
                   >
                     <span>📄</span>
@@ -920,10 +1232,11 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
                         setCurrentPreviewUrl(fullUrl);
                       }, 100);
                     }}
-                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-green-200 dark:hover:bg-green-800 ${isCurrentlyViewed
-                      ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
-                      : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                      }`}
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-green-200 dark:hover:bg-green-800 ${
+                      isCurrentlyViewed
+                        ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
+                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                    }`}
                     title={`${exp.title || exp.filename} - Click to preview`}
                   >
                     <span>📄</span>
@@ -996,23 +1309,19 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
           !isLoadingConversationExports &&
           currentPreviewUrl &&
           !previewError && (
-            <div className="h-full w-full flex">
+            <div className="flex h-full w-full">
               <div className="flex-1">
                 {isInteractiveMode ? (
                   // Interactive Edit Mode - Text selection and editing
-                  <div className="h-full flex flex-col bg-white">
+                  <div className="flex h-full flex-col bg-white">
                     {/* Header with selection info */}
                     {selectedText && (
-                      <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border-b border-blue-200">
+                      <div className="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2">
                         <span className="text-sm text-blue-700">
                           {selectedText.selectedText.length} chars selected
                         </span>
-                        <Button
-                          size="sm"
-                          onClick={openEditDialog}
-                          className="h-7"
-                        >
-                          <Edit className="h-3 w-3 mr-1" />
+                        <Button size="sm" onClick={openEditDialog} className="h-7">
+                          <Edit className="mr-1 h-3 w-3" />
                           Edit Text
                         </Button>
                       </div>
@@ -1026,10 +1335,14 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
                         style={{
                           fontSize: '16px',
                           lineHeight: 1.6,
-                          fontFamily: '"Georgia", "Times New Roman", serif'
+                          fontFamily: '"Georgia", "Times New Roman", serif',
                         }}
                       >
-                        <div dangerouslySetInnerHTML={{ __html: parsedContent.replace(/\n/g, '<br />') }} />
+                        <div
+                          dangerouslySetInnerHTML={{
+                            __html: parsedContent.replace(/\n/g, '<br />'),
+                          }}
+                        />
                       </div>
                     </div>
                   </div>
@@ -1037,12 +1350,13 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
                   // Edit Mode - React-Quill Editor
                   <div className="book-editor h-full w-full bg-white">
                     {hasExpiredImages && (
-                      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-2">
+                      <div className="mb-2 border-l-4 border-yellow-400 bg-yellow-50 p-3">
                         <div className="flex">
                           <div className="ml-3">
                             <p className="text-sm text-yellow-700">
-                              ⚠️ <strong>Some images may not display correctly</strong> - Azure blob URLs have expired.
-                              You can replace them with new images using the image button in the toolbar.
+                              ⚠️ <strong>Some images may not display correctly</strong> - Azure blob
+                              URLs have expired. You can replace them with new images using the
+                              image button in the toolbar.
                             </p>
                           </div>
                         </div>
@@ -1084,22 +1398,31 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
 
               {/* Changes Panel for Interactive Mode */}
               {isInteractiveMode && recentChanges.length > 0 && (
-                <div className="w-80 border-l bg-gray-50 flex flex-col">
-                  <div className="p-4 border-b bg-white">
+                <div className="flex w-80 flex-col border-l bg-gray-50">
+                  <div className="border-b bg-white p-4">
                     <div className="flex items-center justify-between">
                       <h3 className="font-semibold">Recent Changes</h3>
                       <span className="text-xs text-gray-500">{recentChanges.length} changes</span>
                     </div>
                   </div>
 
-                  <div className="flex-1 overflow-auto p-4 space-y-3">
+                  <div className="flex-1 space-y-3 overflow-auto p-4">
                     {recentChanges.map((change) => (
-                      <div key={change.id} className="bg-white p-3 rounded-lg border transition-colors">
-                        <div className="flex items-center justify-between mb-2">
+                      <div
+                        key={change.id}
+                        className="rounded-lg border bg-white p-3 transition-colors"
+                      >
+                        <div className="mb-2 flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {change.status === 'pending' && <AlertCircle className="h-4 w-4 text-yellow-500" />}
-                            {change.status === 'applying' && <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />}
-                            {change.status === 'applied' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                            {change.status === 'pending' && (
+                              <AlertCircle className="h-4 w-4 text-yellow-500" />
+                            )}
+                            {change.status === 'applying' && (
+                              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                            )}
+                            {change.status === 'applied' && (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                            )}
                             {change.status === 'failed' && <X className="h-4 w-4 text-red-500" />}
                             <span className="text-xs font-medium capitalize">{change.status}</span>
                           </div>
@@ -1111,14 +1434,14 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
                         <div className="space-y-2">
                           <div>
                             <p className="text-xs text-gray-600">Original:</p>
-                            <p className="text-sm bg-red-50 p-2 rounded text-red-800 line-clamp-2">
+                            <p className="line-clamp-2 rounded bg-red-50 p-2 text-sm text-red-800">
                               "{change.originalText}"
                             </p>
                           </div>
 
                           <div>
                             <p className="text-xs text-gray-600">Updated to:</p>
-                            <p className="text-sm bg-green-50 p-2 rounded text-green-800 line-clamp-2">
+                            <p className="line-clamp-2 rounded bg-green-50 p-2 text-sm text-green-800">
                               "{change.newText}"
                             </p>
                           </div>
@@ -1126,9 +1449,7 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
                           {change.reason && (
                             <div>
                               <p className="text-xs text-gray-600">Reason:</p>
-                              <p className="text-xs text-gray-500 line-clamp-2">
-                                {change.reason}
-                              </p>
+                              <p className="line-clamp-2 text-xs text-gray-500">{change.reason}</p>
                             </div>
                           )}
                         </div>
@@ -1190,23 +1511,51 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
           )}
       </div>
 
+      {/* Enhanced Text Selection Components */}
+      {globalSelectedText && selectionRect && (
+        <>
+          {/* Floating Selection Bubble */}
+          <TextSelectionBubble
+            selectedText={globalSelectedText}
+            selectionRect={selectionRect}
+            onAddToChat={handleAddToChat}
+            onAIEdit={handleAIEdit}
+            onCopy={handleCopyText}
+            onClose={handleCloseSelection}
+            contextBefore={globalSelectionContext.before}
+            contextAfter={globalSelectionContext.after}
+            className="text-selection-bubble"
+          />
+
+          {/* Inline Text Input */}
+          <InlineTextInput
+            selectedText={globalSelectedText}
+            selectionRect={selectionRect}
+            isVisible={showInlineInput}
+            onSubmit={handleInlineSubmit}
+            onClose={handleCloseSelection}
+            isProcessing={isProcessingRequest}
+            className="inline-text-input"
+          />
+        </>
+      )}
+
       {/* Edit Dialog for Interactive Mode */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Selected Text</DialogTitle>
             <DialogDescription>
-              Make changes to the selected text. Your changes will be applied to the book and sent to the chat.
+              Make changes to the selected text. Your changes will be applied to the book and sent
+              to the chat.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Original Text Preview */}
-            <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="rounded-lg bg-gray-50 p-3">
               <Label className="text-xs text-gray-600">Original Text:</Label>
-              <p className="text-sm mt-1 italic">
-                "{selectedText?.selectedText}"
-              </p>
+              <p className="mt-1 text-sm italic">"{selectedText?.selectedText}"</p>
             </div>
 
             {/* New Text */}
@@ -1232,22 +1581,24 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 mt-6">
+          <div className="mt-6 flex justify-end gap-3">
             <Button variant="outline" onClick={() => setShowEditDialog(false)}>
               Cancel
             </Button>
             <Button
               onClick={applyTextChange}
-              disabled={!newText.trim() || newText === selectedText?.selectedText || isApplyingChange}
+              disabled={
+                !newText.trim() || newText === selectedText?.selectedText || isApplyingChange
+              }
             >
               {isApplyingChange ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Applying...
                 </>
               ) : (
                 <>
-                  <Save className="h-4 w-4 mr-2" />
+                  <Save className="mr-2 h-4 w-4" />
                   Apply Change
                 </>
               )}

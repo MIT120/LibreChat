@@ -37,6 +37,7 @@ import { CompatibilityToolHandlers } from './tools/CompatibilityToolHandlers.js'
 import { RevisionToolHandlers } from './tools/RevisionToolHandlers.js';
 import { ConversationToolHandlers } from './tools/ConversationToolHandlers.js';
 import { UtilityToolHandlers } from './tools/UtilityToolHandlers.js';
+import { CodexToolHandlers } from './tools/CodexToolHandlers.js';
 
 export class MCPServer extends BaseService implements IMCPServer {
     private server: Server;
@@ -188,6 +189,8 @@ export class MCPServer extends BaseService implements IMCPServer {
             // Narrative consistency tools
             new NarrativeConsistencyToolHandlers(this.logger, narrativeConsistencyService),
             new ConsistencyAwarePageToolHandlers(this.logger, bookService, narrativeConsistencyService),
+            // Story Codex for context retrieval
+            new CodexToolHandlers(this.logger, this.serviceContainer.resolve('CodexRagService') as any),
             // Character management tools
             new CharacterToolHandlers(
                 this.logger,

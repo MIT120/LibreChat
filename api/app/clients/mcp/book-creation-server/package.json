@@ -16,7 +16,13 @@
         "test": "jest",
         "test:watch": "jest --watch",
         "clean": "rm -rf dist",
-        "type-check": "tsc --noEmit"
+        "type-check": "tsc --noEmit",
+        "codex:test": "node scripts/test-codex.js",
+        "codex:sync-all": "node scripts/sync-all-books.js",
+        "codex:sync-all-auto": "node scripts/sync-all-books.js --auto",
+        "codex:sync-book": "node scripts/sync-book.js",
+        "codex:list-books": "node scripts/sync-book.js",
+        "codex:help": "echo '📚 Codex Commands:\n  npm run codex:test - Test Codex functionality\n  npm run codex:sync-all - Sync all books (interactive)\n  npm run codex:sync-all-auto - Sync all books (automatic)\n  npm run codex:sync-book <bookId> - Sync specific book\n  npm run codex:list-books - List all available books'"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^0.6.0",

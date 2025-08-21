@@ -31,6 +31,7 @@ import { ContentEnhancementService } from './services/ContentEnhancementService.
 // Import narrative consistency services
 import { NarrativeConsistencyService } from './services/NarrativeConsistencyService.js';
 import { ConsistencyValidationService } from './services/ConsistencyValidationService.js';
+import { CodexRagService } from './services/CodexRagService.js';
 
 // Import server
 import { MCPServer } from './server/MCPServer.js';
@@ -176,6 +177,13 @@ async function registerServices(logger: Logger): Promise<void> {
         container.registerSingleton(
             'ConsistencyValidationService',
             ConsistencyValidationService,
+            [SERVICE_TOKENS.LOGGER]
+        );
+
+        // Codex RAG Service for story bible
+        container.registerSingleton(
+            'CodexRagService',
+            CodexRagService,
             [SERVICE_TOKENS.LOGGER]
         );
 
