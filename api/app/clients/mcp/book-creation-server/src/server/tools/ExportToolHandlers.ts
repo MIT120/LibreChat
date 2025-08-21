@@ -116,35 +116,7 @@ export class ExportToolHandlers {
                 },
                 handler: this.handleGetLatestExport.bind(this),
             },
-            {
-                name: 'list_user_books',
-                description: 'List all books for a user with basic information',
-                inputSchema: {
-                    type: 'object',
-                    properties: {
-                        authorId: {
-                            type: 'string',
-                            description: 'The unique identifier of the author',
-                        },
-                        conversationId: {
-                            type: 'string',
-                            description: 'Conversation identifier to scope books',
-                        },
-                        limit: {
-                            type: 'number',
-                            description: 'Maximum number of books to return',
-                            default: 50,
-                        },
-                        status: {
-                            type: 'string',
-                            enum: ['planning', 'outlining', 'writing', 'editing', 'review', 'completed', 'published'],
-                            description: 'Filter by book status (optional)',
-                        },
-                    },
-                    required: ['authorId', 'conversationId'],
-                },
-                handler: this.handleListUserBooks.bind(this),
-            },
+
             {
                 name: 'export_book_with_narrative_context',
                 description: 'Export a book with comprehensive narrative consistency information including character references, world elements, and timeline',
@@ -423,76 +395,7 @@ ${this.getFormatSpecificNotes(result.format)}`;
         }
     }
 
-    private async handleListUserBooks(args: {
-        authorId: string;
-        conversationId: string;
-        limit?: number;
-        status?: string;
-    }): Promise<string> {
-        try {
-            this.logger.info('Listing user books', {
-                authorId: args.authorId,
-                conversationId: args.conversationId,
-                limit: args.limit,
-                status: args.status
-            });
 
-            // Get books from the book service
-            const result = await this.bookService.listBooks({
-                authorId: args.authorId,
-                conversationId: args.conversationId,
-                limit: args.limit || 50,
-                status: args.status as any,
-            });
-            
-            const books = result.data;
-
-            if (books.length === 0) {
-                return `📚 No books found for author ${args.authorId}${args.status ? ` with status '${args.status}'` : ''}.
-
-**Get Started:**
-- Use \`create_book\` to create your first book
-- Start writing with the book creation tools`;
-            }
-
-            let response = `📚 **Books for Author ${args.authorId}**\n\n`;
-            response += `Found ${books.length} book${books.length > 1 ? 's' : ''}:\n\n`;
-
-            for (const book of books) {
-                const statusIcon = this.getStatusIcon(book.status);
-                const wordCount = book.currentWordCount || 0;
-                const targetWords = book.targetWordCount || 0;
-                const progress = targetWords > 0 ? Math.round((wordCount / targetWords) * 100) : 0;
-
-                response += `${statusIcon} **${book.title}**\n`;
-                response += `- **ID:** \`${book._id}\`\n`;
-                response += `- **Genre:** ${book.genre}\n`;
-                response += `- **Theme:** ${book.theme}\n`;
-                response += `- **Status:** ${book.status}\n`;
-                response += `- **Progress:** ${wordCount.toLocaleString()} words`;
-                if (targetWords > 0) {
-                    response += ` / ${targetWords.toLocaleString()} (${progress}%)`;
-                }
-                response += `\n`;
-                if (book.description) {
-                    response += `- **Description:** ${book.description.substring(0, 100)}${book.description.length > 100 ? '...' : ''}\n`;
-                }
-                response += `- **Created:** ${new Date(book.createdAt).toLocaleDateString()}\n`;
-                response += `- **Updated:** ${new Date(book.updatedAt).toLocaleDateString()}\n`;
-                response += `\n`;
-            }
-
-            response += `**Book Management:**\n`;
-            response += `- Use \`get_book\` with any book ID to view details\n`;
-            response += `- Use \`export_book\` to create downloadable versions\n`;
-            response += `- Use \`get_export_history\` to see previous exports`;
-
-            return response;
-        } catch (error) {
-            this.logger.error('Failed to list user books', error as Error, args);
-            throw error;
-        }
-    }
 
     private getStatusIcon(status: string): string {
         switch (status) {
