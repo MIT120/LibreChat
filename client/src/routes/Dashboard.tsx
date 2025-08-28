@@ -12,17 +12,19 @@ import EnhancedWritingEnvironment from '~/components/Writing/EnhancedWritingEnvi
 import ScenePlanningBoard from '~/components/Planning/ScenePlanningBoard';
 import TimelineView from '~/components/StoryPlanning/TimelineView';
 import InteractiveBookPreview from '~/components/BookPreview/InteractiveBookPreview';
+import StaticBookPreview from '~/components/BookPreview/StaticBookPreview';
+import EnhancedBookPreview from '~/components/BookPreview/EnhancedBookPreview';
 import DashboardRoute from './Layouts/Dashboard';
 
 // Additional Book Creation Components
 import BookLibrary from '~/components/BookCreation/BookLibrary';
 import BookEditor from '~/components/BookCreation/BookEditor';
+import OutlineEditor from '~/components/Planning/OutlineEditor';
 
 // Placeholder components for missing views
 const WorkspaceView = () => <div>Workspace View - Coming Soon</div>;
 const WritingStudio = () => <div>Writing Studio - Coming Soon</div>;
 const PlanningView = () => <div>Planning View - Coming Soon</div>;
-const BookPreviewView = () => <div>Book Preview View - Coming Soon</div>;
 
 const dashboardRoutes = {
   path: 'd/*',
@@ -72,15 +74,23 @@ const dashboardRoutes = {
           path: 'timeline/:bookId',
           element: <TimelineView />,
         },
+        {
+          path: 'outline/:bookId',
+          element: <OutlineEditor />,
+        },
       ],
     },
     {
       path: 'books/*',
-      element: <BookPreviewView />,
+      element: <EnhancedBookPreview />,
       children: [
         {
           index: true,
           element: <BookLibrary />,
+        },
+        {
+          path: 'preview',
+          element: <StaticBookPreview />,
         },
         {
           path: ':bookId/preview',

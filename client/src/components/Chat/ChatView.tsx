@@ -83,9 +83,6 @@ function ChatView({ index = 0 }: { index?: number }) {
     // Center book viewer with messages stacked above when needed
     content = (
       <div className="flex h-full w-full flex-col overflow-hidden">
-        <div className="h-10 shrink-0 border-b border-border-light bg-surface-primary px-3 py-2 text-sm font-medium text-text-secondary">
-          {/* Editor title intentionally blank to avoid literal string & missing key */}
-        </div>
         <div className="flex h-full w-full overflow-hidden">
           <div className="flex-1 overflow-hidden">
             <BookPreview className="h-full" />

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { MessageSquareQuote, ArrowRightToLine, Settings2, Database, Bookmark, FileText } from 'lucide-react';
+import { MessageSquareQuote, ArrowRightToLine, Settings2, Database, Bookmark, FileText, ScrollText, BookOpen, Users } from 'lucide-react';
 import {
   isAssistantsEndpoint,
   isAgentsEndpoint,
@@ -15,6 +15,9 @@ import BookmarkPanel from '~/components/SidePanel/Bookmarks/BookmarkPanel';
 import MemoryViewer from '~/components/SidePanel/Memories/MemoryViewer';
 import PanelSwitch from '~/components/SidePanel/Builder/PanelSwitch';
 import PromptsAccordion from '~/components/Prompts/PromptsAccordion';
+import TemplatesPanel from '~/components/SidePanel/Templates/TemplatesPanel';
+import BooksListPanel from '~/components/SidePanel/Books/BooksListPanel';
+import CharacterPanel from '~/components/SidePanel/Characters/CharacterPanel';
 import { Blocks, MCPIcon, AttachmentIcon } from '~/components/svg';
 import Parameters from '~/components/SidePanel/Parameters/Panel';
 import FilesPanel from '~/components/SidePanel/Files/Panel';
@@ -110,6 +113,33 @@ export default function useSideNavLinks({
       });
     }
 
+    // Add Templates panel
+    links.push({
+      title: 'Book Templates',
+      label: '',
+      icon: ScrollText,
+      id: 'templates',
+      Component: TemplatesPanel,
+    });
+
+    // Add Books List panel
+    links.push({
+      title: 'My Books',
+      label: '',
+      icon: BookOpen,
+      id: 'books-list',
+      Component: BooksListPanel,
+    });
+
+    // Add Characters panel for current book
+    links.push({
+      title: 'Book Characters',
+      label: '',
+      icon: Users,
+      id: 'book-characters',
+      Component: CharacterPanel,
+    });
+
     if (hasAccessToMemories && hasAccessToReadMemories) {
       links.push({
         title: 'com_ui_memories',
@@ -147,9 +177,9 @@ export default function useSideNavLinks({
     if (
       startupConfig?.mcpServers &&
       Object.keys(startupConfig.mcpServers).some(
-        (serverName) => 
-          serverName.includes('legal') || 
-          serverName.includes('book') || 
+        (serverName) =>
+          serverName.includes('legal') ||
+          serverName.includes('book') ||
           serverName.includes('bulgaria') ||
           serverName.includes('creation')
       )

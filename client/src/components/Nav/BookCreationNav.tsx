@@ -2,12 +2,18 @@
  * Book Creation Navigation - NovelCrafter-style navigation for book creation features
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSetRecoilState } from 'recoil';
+import { QueryKeys, Constants } from 'librechat-data-provider';
+import type { TMessage } from 'librechat-data-provider';
 import { Button } from '~/components/ui/Button';
 import SimpleBadge from '~/components/ui/SimpleBadge';
 import { Separator } from '~/components/ui/separator';
 import { cn } from '~/utils';
+import { useAuthContext, useNewConvo } from '~/hooks';
+import store from '~/store';
 
 // Icons
 import {
@@ -108,6 +114,13 @@ const navigationItems: NavItem[] = [
         description: 'Plan scenes, timelines, and story structure',
         children: [
             {
+                id: 'planning-outline',
+                label: 'Story Outline',
+                icon: Map,
+                path: '/d/planning/outline/:bookId',
+                description: 'Create and manage story structure with scenes and chapters',
+            },
+            {
                 id: 'planning-scenes',
                 label: 'Scene Planning',
                 icon: FileText,
@@ -161,6 +174,7 @@ export default function BookCreationNav({
 }: BookCreationNavProps) {
     const navigate = useNavigate();
     const location = useLocation();
+
     const [expandedItems, setExpandedItems] = useState<string[]>(['writing', 'books', 'planning']);
 
     const isActive = (path: string) => {

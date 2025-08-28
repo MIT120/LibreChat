@@ -21,3 +21,4 @@ export * from './memory';
 export * from './cs2';
 /* Book Creation */
 export * from './chapter';
+export * from './imageStyleConfig';

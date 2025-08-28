@@ -27,6 +27,7 @@ import { createTokenModel } from './token';
 import { createToolCallModel } from './toolCall';
 import { createTransactionModel } from './transaction';
 import { createUserModel } from './user';
+import { createImageStyleConfigModel } from './imageStyleConfig';
 
 /**
  * Creates all database models for all collections
@@ -62,5 +63,6 @@ export function createModels(mongoose: typeof import('mongoose')) {
     Book: createBookModel(mongoose),
     Chapter: createChapterModel(mongoose),
     Page: createPageModel(mongoose),
+    ImageStyleConfig: createImageStyleConfigModel(mongoose),
   };
 }

@@ -38,6 +38,7 @@ import { RevisionToolHandlers } from './tools/RevisionToolHandlers.js';
 import { ConversationToolHandlers } from './tools/ConversationToolHandlers.js';
 import { UtilityToolHandlers } from './tools/UtilityToolHandlers.js';
 import { CodexToolHandlers } from './tools/CodexToolHandlers.js';
+import { OutlineToolHandlers } from './tools/OutlineToolHandlers.js';
 
 export class MCPServer extends BaseService implements IMCPServer {
     private server: Server;
@@ -204,6 +205,8 @@ export class MCPServer extends BaseService implements IMCPServer {
             new RevisionToolHandlers(this.logger),
             new ConversationToolHandlers(this.logger),
             new UtilityToolHandlers(this.logger),
+            // Outline management tools
+            new OutlineToolHandlers(this.logger),
         ];
 
         for (const handlerGroup of toolHandlerGroups) {

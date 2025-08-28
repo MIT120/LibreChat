@@ -5,6 +5,8 @@
 import { ILogger } from '../core/Logger.js';
 import { BaseService } from '../core/BaseService.js';
 import { IBook, IWritingStyle, WritingTone, VocabularyLevel } from '../../types/book.js';
+import { ImageStyleConfigService, IImageStyleConfigService } from './ImageStyleConfigService.js';
+import type { IImageStyleConfig } from 'librechat-data-provider';
 
 export interface StyleAnalysisResult {
     primaryStyle: string;
@@ -15,30 +17,19 @@ export interface StyleAnalysisResult {
     reasoning: string;
 }
 
-export interface ImageStyleConfig {
-    styles: Record<string, {
-        description: string;
-        dallePrompt: string;
-        appropriateGenres: string[];
-        appropriateAudiences: string[];
-        ageRating: 'all-ages' | 'teen' | 'adult' | 'mature';
-        visualCharacteristics: string[];
-    }>;
-    genreMapping: Record<string, string[]>; // genre -> style preferences
-    audienceMapping: Record<string, string[]>; // audience -> style preferences
-    toneMapping: Record<string, string[]>; // tone -> style preferences
-}
+
 
 export class ImageStyleAnalyzer extends BaseService {
-    private styleConfig: ImageStyleConfig;
+    private styleConfigService: IImageStyleConfigService;
 
     constructor(logger: ILogger) {
         super(logger);
-        this.styleConfig = this.initializeStyleConfig();
+        this.styleConfigService = ImageStyleConfigService.getInstance(logger);
     }
 
     protected async onInitialize(): Promise<void> {
-        // No async initialization needed
+        // Initialize the style config service
+        await this.styleConfigService.initialize();
     }
 
     protected async onDispose(): Promise<void> {
@@ -58,8 +49,8 @@ export class ImageStyleAnalyzer extends BaseService {
      */
     async analyzeBookForImageStyle(book: IBook): Promise<StyleAnalysisResult> {
         return this.executeWithLogging('analyzeBookForImageStyle', async () => {
-            const result = this.performStyleAnalysis(book);
-            
+            const result = await this.performStyleAnalysis(book);
+
             this.logger.info('Style analysis completed', {
                 bookId: book._id,
                 bookTitle: book.title,
@@ -75,7 +66,7 @@ export class ImageStyleAnalyzer extends BaseService {
     /**
      * Analyze specific text content to determine if it's appropriate for current style
      */
-    analyzeContentAppropriatenesss(content: string, currentStyle: string): boolean {
+    async analyzeContentAppropriatenesss(content: string, currentStyle: string): Promise<boolean> {
         // Check for adult themes, violence, mature content
         const matureContentPatterns = [
             /\b(violence|blood|death|murder|kill|weapon|gun|knife|sword)\b/i,
@@ -85,10 +76,13 @@ export class ImageStyleAnalyzer extends BaseService {
         ];
 
         const hasMaturedContent = matureContentPatterns.some(pattern => pattern.test(content));
-        const style = this.styleConfig.styles[currentStyle];
-        
+
+        // Get current style configuration from database
+        const styleConfig = await this.styleConfigService.getActiveConfig();
+        const style = styleConfig.styles.get ? styleConfig.styles.get(currentStyle) : styleConfig.styles[currentStyle];
+
         if (!style) return true; // If style not found, allow it
-        
+
         // If content has mature themes but style is all-ages, it's inappropriate
         if (hasMaturedContent && style.ageRating === 'all-ages') {
             return false;
@@ -97,11 +91,14 @@ export class ImageStyleAnalyzer extends BaseService {
         return true;
     }
 
-    private performStyleAnalysis(book: IBook): StyleAnalysisResult {
+    private async performStyleAnalysis(book: IBook): Promise<StyleAnalysisResult> {
+        // Get current style configuration from database
+        const styleConfig = await this.styleConfigService.getActiveConfig();
+
         const analysis = {
-            genre: this.analyzeGenre(book.genre),
-            audience: this.analyzeAudience(book.targetAudience),
-            writingStyle: this.analyzeWritingStyle(book.writingStyle),
+            genre: this.analyzeGenre(book.genre, styleConfig),
+            audience: this.analyzeAudience(book.targetAudience, styleConfig),
+            writingStyle: this.analyzeWritingStyle(book.writingStyle, styleConfig),
             theme: this.analyzeTheme(book.theme),
             spec: this.analyzeBookSpec(book.spec)
         };
@@ -127,15 +124,15 @@ export class ImageStyleAnalyzer extends BaseService {
 
         // Determine primary style
         const styleVotes = new Map<string, number>();
-        
+
         analysis.genre.suggestedStyles.forEach(style => {
             styleVotes.set(style, (styleVotes.get(style) || 0) + analysis.genre.confidence);
         });
-        
+
         analysis.audience.suggestedStyles.forEach(style => {
             styleVotes.set(style, (styleVotes.get(style) || 0) + analysis.audience.confidence);
         });
-        
+
         analysis.writingStyle.suggestedStyles.forEach(style => {
             styleVotes.set(style, (styleVotes.get(style) || 0) + analysis.writingStyle.confidence);
         });
@@ -151,7 +148,7 @@ export class ImageStyleAnalyzer extends BaseService {
             .sort((a, b) => b[1] - a[1]);
 
         const primaryStyle = sortedStyles.length > 0 ? sortedStyles[0][0] : 'children_book_illustration';
-        
+
         // Check if we should fallback to user prompt
         const fallbackToUserPrompt = confidenceScore < 0.5 || styleVotes.size === 0;
 
@@ -159,7 +156,7 @@ export class ImageStyleAnalyzer extends BaseService {
         const styleModifiers = this.generateStyleModifiers(analysis, book);
 
         // Check audience appropriateness
-        const appropriateForAudience = this.checkAudienceAppropriateness(primaryStyle, book);
+        const appropriateForAudience = this.checkAudienceAppropriateness(primaryStyle, book, styleConfig);
 
         return {
             primaryStyle,
@@ -171,12 +168,16 @@ export class ImageStyleAnalyzer extends BaseService {
         };
     }
 
-    private analyzeGenre(genre: string): { suggestedStyles: string[], confidence: number } {
+    private analyzeGenre(genre: string, styleConfig: IImageStyleConfig): { suggestedStyles: string[], confidence: number } {
         const genreLower = genre.toLowerCase();
-        
-        if (this.styleConfig.genreMapping[genreLower]) {
+
+        const genreMapping = styleConfig.genreMapping.get ?
+            Object.fromEntries(styleConfig.genreMapping) :
+            styleConfig.genreMapping;
+
+        if (genreMapping[genreLower]) {
             return {
-                suggestedStyles: this.styleConfig.genreMapping[genreLower],
+                suggestedStyles: genreMapping[genreLower],
                 confidence: 0.8
             };
         }
@@ -201,16 +202,20 @@ export class ImageStyleAnalyzer extends BaseService {
         return { suggestedStyles: [], confidence: 0 };
     }
 
-    private analyzeAudience(targetAudience?: string): { suggestedStyles: string[], confidence: number } {
+    private analyzeAudience(targetAudience: string | undefined, styleConfig: IImageStyleConfig): { suggestedStyles: string[], confidence: number } {
         if (!targetAudience) {
             return { suggestedStyles: [], confidence: 0 };
         }
 
         const audienceLower = targetAudience.toLowerCase();
-        
-        if (this.styleConfig.audienceMapping[audienceLower]) {
+
+        const audienceMapping = styleConfig.audienceMapping.get ?
+            Object.fromEntries(styleConfig.audienceMapping) :
+            styleConfig.audienceMapping;
+
+        if (audienceMapping[audienceLower]) {
             return {
-                suggestedStyles: this.styleConfig.audienceMapping[audienceLower],
+                suggestedStyles: audienceMapping[audienceLower],
                 confidence: 0.9
             };
         }
@@ -229,16 +234,20 @@ export class ImageStyleAnalyzer extends BaseService {
         return { suggestedStyles: [], confidence: 0 };
     }
 
-    private analyzeWritingStyle(writingStyle: IWritingStyle): { suggestedStyles: string[], confidence: number } {
+    private analyzeWritingStyle(writingStyle: IWritingStyle, styleConfig: IImageStyleConfig): { suggestedStyles: string[], confidence: number } {
         const tone = writingStyle.tone;
         const vocabulary = writingStyle.vocabulary;
-        
+
         let suggestedStyles: string[] = [];
         let confidence = 0;
 
         // Tone-based suggestions
-        if (this.styleConfig.toneMapping[tone]) {
-            suggestedStyles.push(...this.styleConfig.toneMapping[tone]);
+        const toneMapping = styleConfig.toneMapping.get ?
+            Object.fromEntries(styleConfig.toneMapping) :
+            styleConfig.toneMapping;
+
+        if (toneMapping[tone]) {
+            suggestedStyles.push(...toneMapping[tone]);
             confidence += 0.6;
         }
 
@@ -259,15 +268,15 @@ export class ImageStyleAnalyzer extends BaseService {
                 break;
         }
 
-        return { 
+        return {
             suggestedStyles: [...new Set(suggestedStyles)], // Remove duplicates
-            confidence: Math.min(confidence, 1.0) 
+            confidence: Math.min(confidence, 1.0)
         };
     }
 
     private analyzeTheme(theme: string): { suggestedStyles: string[], confidence: number } {
         const themeLower = theme.toLowerCase();
-        
+
         if (themeLower.includes('adventure')) {
             return { suggestedStyles: ['adventure_illustration', 'digital_art'], confidence: 0.6 };
         }
@@ -324,17 +333,17 @@ export class ImageStyleAnalyzer extends BaseService {
         return modifiers;
     }
 
-    private checkAudienceAppropriateness(style: string, book: IBook): boolean {
-        const styleInfo = this.styleConfig.styles[style];
-        if (!styleInfo) return true;
+    private checkAudienceAppropriateness(style: string, book: IBook, styleConfig: IImageStyleConfig): boolean {
+        const styles = styleConfig.styles.get ? styleConfig.styles.get(style) : styleConfig.styles[style];
+        if (!styles) return true;
 
         // Check if target audience matches style age rating
         const audience = book.targetAudience?.toLowerCase() || '';
-        
+
         if (audience.includes('children') || audience.includes('kids')) {
-            return styleInfo.ageRating === 'all-ages';
+            return styles.ageRating === 'all-ages';
         }
-        
+
         return true; // Allow other combinations for now
     }
 
@@ -344,7 +353,7 @@ export class ImageStyleAnalyzer extends BaseService {
         if (analysis.genre.confidence > 0.5) {
             reasons.push(`Genre "${analysis.genre.suggestedStyles.join(', ')}" suggests appropriate style`);
         }
-        
+
         if (analysis.audience.confidence > 0.5) {
             reasons.push(`Target audience indicates suitable visual approach`);
         }
@@ -360,139 +369,27 @@ export class ImageStyleAnalyzer extends BaseService {
         return reasons.length > 0 ? reasons.join('. ') : `Selected ${primaryStyle} as default style`;
     }
 
-    private initializeStyleConfig(): ImageStyleConfig {
-        return {
-            styles: {
-                'children_book_illustration': {
-                    description: 'Bright, colorful illustrations perfect for children\'s books',
-                    dallePrompt: 'children\'s book illustration, bright colors, cartoon style, friendly characters, simple composition, kid-friendly',
-                    appropriateGenres: ['children', 'educational', 'fantasy', 'adventure'],
-                    appropriateAudiences: ['children', 'kids', 'young readers'],
-                    ageRating: 'all-ages',
-                    visualCharacteristics: ['bright colors', 'simple shapes', 'friendly characters']
-                },
-                'cartoon_colorful': {
-                    description: 'Vibrant cartoon-style illustrations',
-                    dallePrompt: 'cartoon illustration, vibrant colors, animated style, expressive characters, dynamic composition',
-                    appropriateGenres: ['comedy', 'adventure', 'children'],
-                    appropriateAudiences: ['children', 'family', 'young adult'],
-                    ageRating: 'all-ages',
-                    visualCharacteristics: ['bold colors', 'exaggerated features', 'dynamic poses']
-                },
-                'watercolor_soft': {
-                    description: 'Soft watercolor paintings with gentle aesthetics',
-                    dallePrompt: 'watercolor painting, soft colors, gentle brushstrokes, artistic illustration, dreamy atmosphere, pastel tones',
-                    appropriateGenres: ['romance', 'drama', 'poetry', 'literary fiction'],
-                    appropriateAudiences: ['adult', 'young adult', 'artistic readers'],
-                    ageRating: 'all-ages',
-                    visualCharacteristics: ['soft edges', 'flowing colors', 'artistic texture']
-                },
-                'realistic_artistic': {
-                    description: 'Realistic artistic illustrations for mature content',
-                    dallePrompt: 'realistic illustration, detailed artwork, professional quality, sophisticated composition, natural lighting',
-                    appropriateGenres: ['literary fiction', 'biography', 'historical', 'drama'],
-                    appropriateAudiences: ['adult', 'mature readers'],
-                    ageRating: 'adult',
-                    visualCharacteristics: ['realistic proportions', 'detailed textures', 'natural lighting']
-                },
-                'fantasy_illustration': {
-                    description: 'Epic fantasy artwork with magical elements',
-                    dallePrompt: 'fantasy illustration, magical elements, epic composition, detailed fantasy art, mythical creatures, enchanted atmosphere',
-                    appropriateGenres: ['fantasy', 'science fiction', 'adventure', 'mythology'],
-                    appropriateAudiences: ['young adult', 'adult', 'fantasy fans'],
-                    ageRating: 'teen',
-                    visualCharacteristics: ['magical effects', 'elaborate details', 'fantastical elements']
-                },
-                'noir_illustration': {
-                    description: 'Dark, moody illustrations for mystery and thriller',
-                    dallePrompt: 'noir illustration, dark atmosphere, dramatic shadows, black and white tones, mysterious mood, film noir style',
-                    appropriateGenres: ['mystery', 'thriller', 'crime', 'noir'],
-                    appropriateAudiences: ['adult', 'mature readers'],
-                    ageRating: 'adult',
-                    visualCharacteristics: ['high contrast', 'dramatic lighting', 'mysterious atmosphere']
-                },
-                'romantic_artistic': {
-                    description: 'Romantic and elegant artistic illustrations',
-                    dallePrompt: 'romantic illustration, elegant style, soft lighting, beautiful composition, artistic quality, warm tones',
-                    appropriateGenres: ['romance', 'drama', 'contemporary fiction'],
-                    appropriateAudiences: ['adult', 'young adult', 'romance readers'],
-                    ageRating: 'teen',
-                    visualCharacteristics: ['warm colors', 'soft lighting', 'elegant composition']
-                },
-                'digital_art': {
-                    description: 'Modern digital art style',
-                    dallePrompt: 'digital art, modern illustration, clean lines, contemporary style, polished finish, digital painting',
-                    appropriateGenres: ['science fiction', 'contemporary', 'young adult'],
-                    appropriateAudiences: ['young adult', 'adult', 'tech-savvy readers'],
-                    ageRating: 'teen',
-                    visualCharacteristics: ['clean lines', 'modern aesthetic', 'digital finish']
-                },
-                'anime_style': {
-                    description: 'Anime-inspired illustrations',
-                    dallePrompt: 'anime style illustration, manga-inspired art, detailed characters, dynamic poses, colorful anime aesthetic',
-                    appropriateGenres: ['young adult', 'adventure', 'fantasy', 'romance'],
-                    appropriateAudiences: ['young adult', 'teen', 'anime fans'],
-                    ageRating: 'teen',
-                    visualCharacteristics: ['anime character design', 'dynamic poses', 'detailed backgrounds']
-                },
-                'dark_artistic': {
-                    description: 'Dark and moody artistic style for mature themes',
-                    dallePrompt: 'dark artistic illustration, moody atmosphere, dramatic composition, mature themes, sophisticated art style',
-                    appropriateGenres: ['horror', 'thriller', 'dark fantasy', 'gothic'],
-                    appropriateAudiences: ['adult', 'mature readers'],
-                    ageRating: 'mature',
-                    visualCharacteristics: ['dark colors', 'dramatic mood', 'complex composition']
-                }
-            },
-            genreMapping: {
-                'children': ['children_book_illustration', 'cartoon_colorful'],
-                'childrens': ['children_book_illustration', 'cartoon_colorful'],
-                'kids': ['children_book_illustration', 'cartoon_colorful'],
-                'young adult': ['digital_art', 'anime_style', 'fantasy_illustration'],
-                'romance': ['romantic_artistic', 'watercolor_soft'],
-                'fantasy': ['fantasy_illustration', 'digital_art'],
-                'science fiction': ['digital_art', 'fantasy_illustration'],
-                'mystery': ['noir_illustration', 'realistic_artistic'],
-                'thriller': ['noir_illustration', 'dark_artistic'],
-                'horror': ['dark_artistic', 'noir_illustration'],
-                'drama': ['realistic_artistic', 'watercolor_soft'],
-                'comedy': ['cartoon_colorful', 'children_book_illustration'],
-                'adventure': ['fantasy_illustration', 'digital_art', 'children_book_illustration']
-            },
-            audienceMapping: {
-                'children': ['children_book_illustration', 'cartoon_colorful'],
-                'kids': ['children_book_illustration', 'cartoon_colorful'],
-                'young readers': ['children_book_illustration', 'cartoon_colorful'],
-                'family': ['children_book_illustration', 'watercolor_soft'],
-                'young adult': ['digital_art', 'anime_style', 'fantasy_illustration'],
-                'teen': ['anime_style', 'digital_art', 'fantasy_illustration'],
-                'adult': ['realistic_artistic', 'watercolor_soft', 'romantic_artistic'],
-                'mature readers': ['realistic_artistic', 'noir_illustration', 'dark_artistic']
-            },
-            toneMapping: {
-                'humorous': ['cartoon_colorful', 'children_book_illustration'],
-                'serious': ['realistic_artistic', 'noir_illustration'],
-                'inspirational': ['watercolor_soft', 'fantasy_illustration'],
-                'conversational': ['digital_art', 'watercolor_soft'],
-                'formal': ['realistic_artistic', 'professional_illustration'],
-                'informal': ['cartoon_colorful', 'digital_art'],
-                'academic': ['realistic_artistic', 'professional_illustration']
-            }
-        };
-    }
+
 
     /**
      * Get human-readable description of a style
      */
-    getStyleDescription(styleName: string): string {
-        return this.styleConfig.styles[styleName]?.description || 'Standard illustration style';
+    async getStyleDescription(styleName: string): Promise<string> {
+        const styleConfig = await this.styleConfigService.getActiveConfig();
+        const styles = styleConfig.styles.get ? styleConfig.styles.get(styleName) : styleConfig.styles[styleName];
+        return styles?.description || 'Standard illustration style';
     }
 
     /**
      * Get all available styles for user selection
      */
-    getAvailableStyles(): Array<{ name: string; description: string; ageRating: string }> {
-        return Object.entries(this.styleConfig.styles).map(([name, config]) => ({
+    async getAvailableStyles(): Promise<Array<{ name: string; description: string; ageRating: string }>> {
+        const styleConfig = await this.styleConfigService.getActiveConfig();
+        const styles = styleConfig.styles.get ?
+            Object.fromEntries(styleConfig.styles) :
+            styleConfig.styles;
+
+        return Object.entries(styles).map(([name, config]: [string, any]) => ({
             name,
             description: config.description,
             ageRating: config.ageRating
