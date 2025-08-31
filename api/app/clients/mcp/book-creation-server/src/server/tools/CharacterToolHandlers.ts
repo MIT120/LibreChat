@@ -10,135 +10,20 @@ import { ContentEnhancementService } from '../../services/ContentEnhancementServ
 import { NarrativeConsistencyService } from '../../services/NarrativeConsistencyService';
 import { ImageService } from '../../services/ImageService';
 import { CharacterVoiceService } from '../../services/CharacterVoiceService';
+import { Character, CharacterTemplate } from '../../../models/index.js';
+import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 
-interface Character {
-    _id: string;
-    bookId: string;
-    name: string;
-    role: 'protagonist' | 'antagonist' | 'supporting' | 'minor' | 'mentor' | 'love_interest' | 'comic_relief';
-
-    // Basic Info
-    age?: number;
-    gender?: string;
-    species?: string;
-    occupation?: string;
-
-    // Physical Description
-    physicalDescription: {
-        height?: string;
-        build?: string;
-        hairColor?: string;
-        hairStyle?: string;
-        eyeColor?: string;
-        skinTone?: string;
-        distinctiveFeatures: string[];
-        clothing?: {
-            style: string;
-            colors: string[];
-            accessories: string[];
-        };
-    };
-
-    // Personality
-    personality: {
-        coreTraits: string[];
-        motivations: string[];
-        fears: string[];
-        strengths: string[];
-        weaknesses: string[];
-        quirks: string[];
-        speechPattern?: string;
-        mannerisms: string[];
-    };
-
-    // Background
-    background: {
-        origin?: string;
-        family?: string;
-        education?: string;
-        pastEvents: string[];
-        secrets: string[];
-        skills: string[];
-    };
-
-    // Story Elements
-    goals: Array<{
-        description: string;
-        priority: 'low' | 'medium' | 'high';
-        status: 'active' | 'achieved' | 'failed' | 'abandoned';
-    }>;
-
-    arc: {
-        startingPoint: string;
-        majorBeats: Array<{
-            chapter?: number;
-            description: string;
-            transformation: string;
-        }>;
-        endingPoint: string;
-        theme?: string;
-    };
-
-    relationships: Array<{
-        characterId: string;
-        characterName: string;
-        relationship: string;
-        description: string;
-        dynamic: 'positive' | 'negative' | 'neutral' | 'complex';
-    }>;
-
-    // Appearance & Media
-    avatar?: {
-        url: string;
-        filename: string;
-        description?: string;
-        uploadedAt: Date;
-    };
-    referenceImages: Array<{
-        url: string;
-        filename: string;
-        description: string;
-        type: 'face' | 'full_body' | 'clothing' | 'expression' | 'pose' | 'other';
-        uploadedAt: Date;
-    }>;
-
-    // Meta
-    notes: string;
-    tags: string[];
-    isTemplate: boolean;
-    visibility: 'public' | 'private';
-    createdAt: Date;
-    updatedAt: Date;
-    version: number;
-
-    // Story Integration
-    appearances: Array<{
-        chapterId: string;
-        pageId: string;
-        sceneType: string;
-        description: string;
-    }>;
-
-    // Generation Settings
-    imageGenerationProfile: {
-        consistencyLevel: 'low' | 'medium' | 'high' | 'strict';
-        preferredStyles: string[];
-        excludedElements: string[];
-        customPromptAdditions: string;
-    };
-}
+// Import types from models
+import type { ICharacter, ICharacterTemplate } from '../../../models/index.js';
 
 export class CharacterToolHandlers extends BaseToolHandler {
     private contentEnhancementService?: ContentEnhancementService;
     private narrativeService?: NarrativeConsistencyService;
     private imageService?: ImageService;
     private voiceService?: CharacterVoiceService;
-
-    // In-memory character storage (replace with database in production)
-    private characters = new Map<string, Character>();
 
     // File upload configuration
     private upload = multer({
@@ -185,6 +70,47 @@ export class CharacterToolHandlers extends BaseToolHandler {
 
     override getTools(): IToolHandler[] {
         return [
+            {
+                name: 'get_character_templates',
+                description: 'Get available character templates for character creation',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        category: {
+                            type: 'string',
+                            enum: ['archetype', 'genre', 'role', 'personality', 'custom'],
+                            description: 'Filter by template category'
+                        },
+                        role: {
+                            type: 'string',
+                            enum: ['protagonist', 'antagonist', 'supporting', 'minor', 'mentor', 'love_interest', 'comic_relief'],
+                            description: 'Filter by character role'
+                        },
+                        genre: { 
+                            type: 'array', 
+                            items: { type: 'string' },
+                            description: 'Filter by genre tags'
+                        },
+                        difficulty: {
+                            type: 'string',
+                            enum: ['beginner', 'intermediate', 'advanced'],
+                            description: 'Filter by template difficulty'
+                        },
+                        popular: { 
+                            type: 'boolean',
+                            description: 'Get only popular templates',
+                            default: false
+                        },
+                        limit: { 
+                            type: 'number',
+                            description: 'Limit number of results',
+                            default: 20
+                        }
+                    },
+                    required: []
+                },
+                handler: this.handleGetCharacterTemplates.bind(this)
+            },
             {
                 name: 'create_character',
                 description: 'Create a new character for the book with comprehensive profile',
@@ -247,7 +173,8 @@ export class CharacterToolHandlers extends BaseToolHandler {
                         },
                         notes: { type: 'string', description: 'Additional character notes' },
                         tags: { type: 'array', items: { type: 'string' }, description: 'Character tags' },
-                        generateAIProfile: { type: 'boolean', description: 'Whether to use AI to enhance the character profile' }
+                        generateAIProfile: { type: 'boolean', description: 'Whether to use AI to enhance the character profile' },
+                        templateId: { type: 'string', description: 'Character template ID to use as base' }
                     },
                     required: ['bookId', 'name', 'role']
                 },
@@ -514,9 +441,64 @@ export class CharacterToolHandlers extends BaseToolHandler {
         ];
     }
 
+    async handleGetCharacterTemplates(args: any): Promise<any> {
+        try {
+            this.logger.info('Getting character templates', { 
+                category: args.category, 
+                role: args.role,
+                genre: args.genre,
+                difficulty: args.difficulty,
+                popular: args.popular
+            });
+
+            // Build query
+            const query: any = {
+                isActive: true,
+                isPublic: true
+            };
+
+            if (args.category) {
+                query.category = args.category;
+            }
+
+            if (args.role) {
+                query.role = args.role;
+            }
+
+            if (args.genre && args.genre.length > 0) {
+                query.genre = { $in: args.genre };
+            }
+
+            if (args.difficulty) {
+                query.difficulty = args.difficulty;
+            }
+
+            let templates;
+
+            if (args.popular) {
+                // Get popular templates using the static method
+                templates = await CharacterTemplate.getPopular(args.limit || 20);
+            } else {
+                // Regular query with filters
+                templates = await CharacterTemplate
+                    .find(query)
+                    .sort({ createdAt: -1 })
+                    .limit(args.limit || 20)
+                    .lean();
+            }
+
+            this.logger.info('Character templates retrieved', { count: templates.length });
+            return templates;
+
+        } catch (error) {
+            this.logger.error('Error getting character templates', error as Error);
+            throw error;
+        }
+    }
+
     async handleCreateCharacter(args: any): Promise<any> {
         try {
-            this.logger.info('Creating character', { bookId: args.bookId, name: args.name });
+            this.logger.info('Creating character', { bookId: args.bookId, name: args.name, templateId: args.templateId });
 
             // Validate inputs
             if (!args.bookId || !args.name || !args.role) {
@@ -528,10 +510,28 @@ export class CharacterToolHandlers extends BaseToolHandler {
             }
 
             // Generate character ID
-            const characterId = `char_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const characterId = uuidv4();
 
-            // Create character object
-            const character: Character = {
+            // Get template data if templateId is provided
+            let templateData: ICharacterTemplate | null = null;
+            if (args.templateId) {
+                try {
+                    templateData = await CharacterTemplate.findById(args.templateId);
+                    if (templateData) {
+                        // Increment usage count
+                        await CharacterTemplate.findByIdAndUpdate(
+                            args.templateId,
+                            { $inc: { usageCount: 1 } }
+                        );
+                        this.logger.info('Template found and usage count incremented', { templateId: args.templateId });
+                    }
+                } catch (templateError) {
+                    this.logger.warn('Failed to load template, continuing without it', templateError as Error);
+                }
+            }
+
+            // Create character data object, starting with template data if available
+            const characterData: Partial<ICharacter> = {
                 _id: characterId,
                 bookId: args.bookId,
                 name: args.name,
@@ -581,8 +581,6 @@ export class CharacterToolHandlers extends BaseToolHandler {
                 tags: args.tags || [],
                 isTemplate: false,
                 visibility: 'public',
-                createdAt: new Date(),
-                updatedAt: new Date(),
                 version: 1,
                 appearances: [],
                 imageGenerationProfile: {
@@ -593,6 +591,41 @@ export class CharacterToolHandlers extends BaseToolHandler {
                 }
             };
 
+            // Apply template data if available
+            if (templateData) {
+                // Merge template personality traits with provided ones
+                if (templateData.traits && templateData.traits.length > 0) {
+                    const existingTraits = characterData.personality?.coreTraits || [];
+                    characterData.personality = {
+                        ...characterData.personality!,
+                        coreTraits: [...new Set([...existingTraits, ...templateData.traits])],
+                        motivations: [...new Set([...(characterData.personality?.motivations || []), ...templateData.motivations])],
+                        fears: [...new Set([...(characterData.personality?.fears || []), ...templateData.fears])],
+                        strengths: [...new Set([...(characterData.personality?.strengths || []), ...templateData.strengths])],
+                        weaknesses: [...new Set([...(characterData.personality?.weaknesses || []), ...templateData.weaknesses])]
+                    };
+                }
+
+                // Add template tags
+                if (templateData.tags && templateData.tags.length > 0) {
+                    characterData.tags = [...new Set([...(characterData.tags || []), ...templateData.tags])];
+                }
+
+                // Add template notes to existing notes
+                if (templateData.description && templateData.description !== templateData.name) {
+                    const existingNotes = characterData.notes || '';
+                    characterData.notes = existingNotes ? 
+                        `${existingNotes}\n\nTemplate: ${templateData.description}` : 
+                        `Template: ${templateData.description}`;
+                }
+
+                this.logger.info('Applied template data to character', { 
+                    templateId: args.templateId,
+                    templateName: templateData.name,
+                    traitsAdded: templateData.traits?.length || 0
+                });
+            }
+
             // Enhance with AI if requested
             if (args.generateAIProfile && this.contentEnhancementService) {
                 try {
@@ -602,36 +635,35 @@ export class CharacterToolHandlers extends BaseToolHandler {
                         characterName: args.name,
                         role: args.role,
                         genre: args.genre || 'fiction',
-                        existingTraits: args.personality?.coreTraits || [],
+                        existingTraits: characterData.personality?.coreTraits || [],
                         storyContext: args.storyContext || ''
                     });
 
                     // Merge AI-generated profile
-                    character.physicalDescription = { ...character.physicalDescription, ...aiProfile.physicalDescription };
-                    character.personality = { ...character.personality, ...aiProfile.personality };
-                    character.background = { ...character.background, ...aiProfile.background };
+                    characterData.physicalDescription = { ...characterData.physicalDescription, ...aiProfile.physicalDescription };
+                    characterData.personality = { ...characterData.personality, ...aiProfile.personality };
+                    characterData.background = { ...characterData.background, ...aiProfile.background };
                     // Fix goals type mismatch
                     if (Array.isArray(aiProfile.goals)) {
-                        character.goals = aiProfile.goals;
-                    } else {
-                        character.goals = [];
+                        characterData.goals = aiProfile.goals;
                     }
                     // Fix arc type mismatch
                     if (aiProfile.arc && typeof aiProfile.arc === 'object' && 'majorBeats' in aiProfile.arc) {
-                        character.arc = aiProfile.arc as any;
+                        characterData.arc = aiProfile.arc as any;
                     }
                 } catch (error) {
                     this.logger.warn('Failed to enhance character with AI, continuing with basic profile', error as Error);
                 }
             }
 
-            // Store character
-            this.characters.set(characterId, character);
+            // Create character in database
+            const character = new Character(characterData);
+            const savedCharacter = await character.save();
 
             // Generate voice profile if voice service is available
             if (this.voiceService) {
                 try {
-                    await this.voiceService.generateVoiceProfile(character);
+                    await this.voiceService.generateVoiceProfile(savedCharacter);
                     this.logger.info('Voice profile generated for character', { characterId });
                 } catch (error) {
                     this.logger.warn('Failed to generate voice profile', error as Error);
@@ -646,10 +678,10 @@ export class CharacterToolHandlers extends BaseToolHandler {
                         args.bookId, // using bookId as conversationId
                         {
                             characterId,
-                            name: character.name,
-                            role: character.role,
-                            physicalTraits: character.physicalDescription,
-                            personality: character.personality
+                            name: savedCharacter.name,
+                            role: savedCharacter.role,
+                            physicalTraits: savedCharacter.physicalDescription,
+                            personality: savedCharacter.personality
                         }
                     );
                 } catch (error) {
@@ -663,20 +695,20 @@ export class CharacterToolHandlers extends BaseToolHandler {
                     this.logger.info('Auto-generating character images (portfolio + full body)', { characterId });
 
                     // Build base character description for image generation
-                    const physicalDesc = this.buildPhysicalDescription(character);
-                    const personalityDesc = character.personality.coreTraits.slice(0, 3).join(', ');
+                    const physicalDesc = this.buildPhysicalDescription(savedCharacter);
+                    const personalityDesc = savedCharacter.personality.coreTraits.slice(0, 3).join(', ');
 
                     // Add age and gender context if available
                     const ageGenderDesc = [];
-                    if (character.age) ageGenderDesc.push(`${character.age} years old`);
-                    if (character.gender) ageGenderDesc.push(character.gender);
+                    if (savedCharacter.age) ageGenderDesc.push(`${savedCharacter.age} years old`);
+                    if (savedCharacter.gender) ageGenderDesc.push(savedCharacter.gender);
                     const ageGenderContext = ageGenderDesc.length > 0 ? `. ${ageGenderDesc.join(', ')}` : '';
 
                     // Generate multiple images concurrently
                     const imageGenerationPromises = [];
 
                     // 1. Portfolio Portrait (Professional headshot style)
-                    let portfolioPrompt = `Professional portfolio portrait of ${character.name}`;
+                    let portfolioPrompt = `Professional portfolio portrait of ${savedCharacter.name}`;
                     if (physicalDesc) {
                         portfolioPrompt += `, ${physicalDesc}`;
                     }
@@ -687,13 +719,13 @@ export class CharacterToolHandlers extends BaseToolHandler {
                     portfolioPrompt += '. Professional headshot, studio lighting, clear facial features, confident expression, high quality portrait photography style';
 
                     const portfolioPromise = this.generateCharacterAvatarInternal(
-                        character,
+                        savedCharacter,
                         portfolioPrompt,
                         'portrait'
                     ).then(result => ({ type: 'portfolio', result }));
 
                     // 2. Full Body Image (Character design style)
-                    let fullBodyPrompt = `Full body character design of ${character.name}`;
+                    let fullBodyPrompt = `Full body character design of ${savedCharacter.name}`;
                     if (physicalDesc) {
                         fullBodyPrompt += `, ${physicalDesc}`;
                     }
@@ -703,13 +735,13 @@ export class CharacterToolHandlers extends BaseToolHandler {
                     fullBodyPrompt += ageGenderContext;
 
                     // Add occupation/role context for full body
-                    if (character.occupation) {
-                        fullBodyPrompt += `. Occupation: ${character.occupation}`;
+                    if (savedCharacter.occupation) {
+                        fullBodyPrompt += `. Occupation: ${savedCharacter.occupation}`;
                     }
                     fullBodyPrompt += `. Full body standing pose, character sheet style, clean background, detailed clothing and accessories, professional character design`;
 
                     const fullBodyPromise = this.generateCharacterAvatarInternal(
-                        character,
+                        savedCharacter,
                         fullBodyPrompt,
                         'full_body'
                     ).then(result => ({ type: 'full_body', result }));
@@ -720,7 +752,8 @@ export class CharacterToolHandlers extends BaseToolHandler {
                     // Wait for all images to complete
                     const imageResults = await Promise.allSettled(imageGenerationPromises);
 
-                    // Process results
+                    // Process results and update character in database
+                    const updateData: Partial<ICharacter> = {};
                     const timestamp = Date.now();
                     let avatarSet = false;
                     let generatedImages = 0;
@@ -732,10 +765,10 @@ export class CharacterToolHandlers extends BaseToolHandler {
                             if (result && result.imageUrl) {
                                 if (type === 'portfolio' && !avatarSet) {
                                     // Set the portfolio image as the main avatar
-                                    character.avatar = {
+                                    updateData.avatar = {
                                         url: result.imageUrl,
                                         filename: `avatar_${characterId}_${timestamp}.jpg`,
-                                        description: `Professional portfolio portrait of ${character.name}`,
+                                        description: `Professional portfolio portrait of ${savedCharacter.name}`,
                                         uploadedAt: new Date()
                                     };
                                     avatarSet = true;
@@ -746,13 +779,16 @@ export class CharacterToolHandlers extends BaseToolHandler {
                                         url: result.imageUrl,
                                         filename: `${type}_${characterId}_${timestamp}.jpg`,
                                         description: type === 'portfolio'
-                                            ? `Professional portfolio portrait of ${character.name}`
-                                            : `Full body character design of ${character.name}`,
-                                        type: type === 'portfolio' ? 'face' : 'full_body',
+                                            ? `Professional portfolio portrait of ${savedCharacter.name}`
+                                            : `Full body character design of ${savedCharacter.name}`,
+                                        type: type === 'portfolio' ? 'face' as const : 'full_body' as const,
                                         uploadedAt: new Date()
                                     };
 
-                                    character.referenceImages.push(referenceImage);
+                                    if (!updateData.referenceImages) {
+                                        updateData.referenceImages = [...savedCharacter.referenceImages];
+                                    }
+                                    updateData.referenceImages.push(referenceImage);
                                     generatedImages++;
                                 }
 
@@ -770,15 +806,20 @@ export class CharacterToolHandlers extends BaseToolHandler {
                         }
                     }
 
-                    // Update the stored character with new images
+                    // Update the character in database with new images
                     if (generatedImages > 0) {
-                        this.characters.set(characterId, character);
+                        const updatedCharacter = await Character.findByIdAndUpdate(
+                            characterId,
+                            updateData,
+                            { new: true }
+                        );
                         this.logger.info(`Character image generation completed`, {
                             characterId,
                             generatedImages,
-                            hasAvatar: !!character.avatar,
-                            referenceImages: character.referenceImages.length
+                            hasAvatar: !!updatedCharacter?.avatar,
+                            referenceImages: updatedCharacter?.referenceImages.length || 0
                         });
+                        return updatedCharacter;
                     }
 
                 } catch (error) {
@@ -791,7 +832,7 @@ export class CharacterToolHandlers extends BaseToolHandler {
             }
 
             this.logger.info('Character created successfully', { characterId });
-            return character;
+            return savedCharacter;
 
         } catch (error) {
             this.logger.error('Error creating character', error as Error);
@@ -803,24 +844,28 @@ export class CharacterToolHandlers extends BaseToolHandler {
         try {
             this.logger.info('Getting characters', { bookId: args.bookId });
 
-            // Get all characters for the book
-            const bookCharacters = Array.from(this.characters.values()).filter(char => char.bookId === args.bookId);
-
-            // Apply filters
-            let filteredCharacters = bookCharacters;
+            // Build query
+            const query: any = { 
+                bookId: args.bookId,
+                isTemplate: false  // Only get actual characters, not templates
+            };
 
             if (args.role) {
-                filteredCharacters = filteredCharacters.filter(char => char.role === args.role);
+                query.role = args.role;
             }
 
             if (args.tags && args.tags.length > 0) {
-                filteredCharacters = filteredCharacters.filter(char =>
-                    args.tags.some((tag: string) => char.tags.includes(tag))
-                );
+                query.tags = { $in: args.tags };
             }
 
-            this.logger.info('Characters retrieved', { count: filteredCharacters.length });
-            return filteredCharacters;
+            // Get characters from database
+            const characters = await Character
+                .find(query)
+                .sort({ createdAt: -1 })
+                .lean();
+
+            this.logger.info('Characters retrieved', { count: characters.length });
+            return characters;
 
         } catch (error) {
             this.logger.error('Error getting characters', error as Error);
@@ -832,7 +877,7 @@ export class CharacterToolHandlers extends BaseToolHandler {
         try {
             this.logger.info('Getting character', { characterId: args.characterId });
 
-            const character = this.characters.get(args.characterId);
+            const character = await Character.findById(args.characterId).lean();
             if (!character) {
                 throw new NotFoundError('Character', args.characterId);
             }
@@ -849,21 +894,23 @@ export class CharacterToolHandlers extends BaseToolHandler {
         try {
             this.logger.info('Updating character', { characterId: args.characterId });
 
-            const character = this.characters.get(args.characterId);
+            // Find and update character
+            const character = await Character.findById(args.characterId);
             if (!character) {
                 throw new NotFoundError('Character', args.characterId);
             }
 
-            // Apply updates
-            const updatedCharacter = {
-                ...character,
+            // Apply updates and increment version
+            const updateData = {
                 ...args.updates,
-                updatedAt: new Date(),
-                version: character.version + 1
+                $inc: { version: 1 }
             };
 
-            // Store updated character
-            this.characters.set(args.characterId, updatedCharacter);
+            const updatedCharacter = await Character.findByIdAndUpdate(
+                args.characterId,
+                updateData,
+                { new: true }
+            );
 
             // Update in narrative consistency system if available
             if (this.narrativeService && (args.updates.name || args.updates.physicalDescription || args.updates.personality)) {
@@ -873,10 +920,10 @@ export class CharacterToolHandlers extends BaseToolHandler {
                         character.bookId,
                         {
                             characterId: args.characterId,
-                            name: updatedCharacter.name,
-                            role: updatedCharacter.role,
-                            physicalTraits: updatedCharacter.physicalDescription,
-                            personality: updatedCharacter.personality
+                            name: updatedCharacter!.name,
+                            role: updatedCharacter!.role,
+                            physicalTraits: updatedCharacter!.physicalDescription,
+                            personality: updatedCharacter!.personality
                         }
                     );
                 } catch (error) {
@@ -897,13 +944,10 @@ export class CharacterToolHandlers extends BaseToolHandler {
         try {
             this.logger.info('Deleting character', { characterId: args.characterId });
 
-            const character = this.characters.get(args.characterId);
+            const character = await Character.findById(args.characterId);
             if (!character) {
                 throw new NotFoundError('Character', args.characterId);
             }
-
-            // Remove character
-            this.characters.delete(args.characterId);
 
             // Clean up avatar and reference images
             if (character.avatar) {
@@ -921,6 +965,9 @@ export class CharacterToolHandlers extends BaseToolHandler {
                     this.logger.warn('Failed to delete reference image file', error as Error);
                 }
             }
+
+            // Remove character from database
+            await Character.findByIdAndDelete(args.characterId);
 
             this.logger.info('Character deleted successfully', { characterId: args.characterId });
             return { success: true, characterId: args.characterId };
@@ -957,24 +1004,24 @@ export class CharacterToolHandlers extends BaseToolHandler {
             // Generate URL (replace with your actual URL generation logic)
             const url = `/uploads/characters/${filename}`;
 
-            // Update character
-            const updatedCharacter = {
-                ...character,
-                avatar: {
-                    url,
-                    filename,
-                    description: args.description,
-                    uploadedAt: new Date()
+            // Update character in database
+            const updatedCharacter = await Character.findByIdAndUpdate(
+                args.characterId,
+                {
+                    avatar: {
+                        url,
+                        filename,
+                        description: args.description,
+                        uploadedAt: new Date()
+                    }
                 },
-                updatedAt: new Date()
-            };
-
-            this.characters.set(args.characterId, updatedCharacter);
+                { new: true }
+            );
 
             this.logger.info('Avatar uploaded successfully', { characterId: args.characterId, filename });
             return {
                 success: true,
-                avatar: updatedCharacter.avatar,
+                avatar: updatedCharacter!.avatar,
                 character: updatedCharacter
             };
 
@@ -1019,14 +1066,14 @@ export class CharacterToolHandlers extends BaseToolHandler {
                 uploadedAt: new Date()
             };
 
-            // Update character
-            const updatedCharacter = {
-                ...character,
-                referenceImages: [...character.referenceImages, referenceImage],
-                updatedAt: new Date()
-            };
-
-            this.characters.set(args.characterId, updatedCharacter);
+            // Update character in database
+            const updatedCharacter = await Character.findByIdAndUpdate(
+                args.characterId,
+                {
+                    $push: { referenceImages: referenceImage }
+                },
+                { new: true }
+            );
 
             this.logger.info('Reference image uploaded successfully', { characterId: args.characterId, filename });
             return {
@@ -1411,8 +1458,8 @@ export class CharacterToolHandlers extends BaseToolHandler {
                 targetCharacterId: args.targetCharacterId
             });
 
-            const character = this.characters.get(args.characterId);
-            const targetCharacter = this.characters.get(args.targetCharacterId);
+            const character = await Character.findById(args.characterId);
+            const targetCharacter = await Character.findById(args.targetCharacterId);
 
             if (!character) {
                 throw new NotFoundError('Character', args.characterId);
@@ -1430,21 +1477,34 @@ export class CharacterToolHandlers extends BaseToolHandler {
                 dynamic: args.dynamic
             };
 
-            // Update character's relationships
-            const existingIndex = character.relationships.findIndex(r => r.characterId === args.targetCharacterId);
-            if (existingIndex >= 0) {
-                character.relationships[existingIndex] = relationship;
+            // Update character's relationships in database
+            const existingRelationship = character.relationships.find(r => r.characterId === args.targetCharacterId);
+            
+            let updatedCharacter;
+            if (existingRelationship) {
+                // Update existing relationship
+                updatedCharacter = await Character.findOneAndUpdate(
+                    { 
+                        _id: args.characterId,
+                        'relationships.characterId': args.targetCharacterId
+                    },
+                    {
+                        $set: {
+                            'relationships.$': relationship
+                        }
+                    },
+                    { new: true }
+                );
             } else {
-                character.relationships.push(relationship);
+                // Add new relationship
+                updatedCharacter = await Character.findByIdAndUpdate(
+                    args.characterId,
+                    {
+                        $push: { relationships: relationship }
+                    },
+                    { new: true }
+                );
             }
-
-            // Update the character
-            const updatedCharacter = {
-                ...character,
-                updatedAt: new Date()
-            };
-
-            this.characters.set(args.characterId, updatedCharacter);
 
             this.logger.info('Character relationship created', { characterId: args.characterId, targetCharacterId: args.targetCharacterId });
             return relationship;
