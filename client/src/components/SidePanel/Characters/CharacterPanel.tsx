@@ -100,29 +100,7 @@ const CHARACTER_ROLES = [
     { value: 'minor', label: 'Minor', icon: User, color: 'bg-gray-100 text-gray-800 border-gray-300' }
 ];
 
-const CHARACTER_TEMPLATES = [
-    {
-        name: 'Hero',
-        role: 'protagonist',
-        traits: ['brave', 'determined', 'loyal'],
-        motivations: ['save the world', 'protect loved ones'],
-        description: 'A classic heroic protagonist'
-    },
-    {
-        name: 'Villain',
-        role: 'antagonist',
-        traits: ['cunning', 'ruthless', 'charismatic'],
-        motivations: ['power', 'revenge'],
-        description: 'A compelling antagonist'
-    },
-    {
-        name: 'Mentor',
-        role: 'mentor',
-        traits: ['wise', 'patient', 'experienced'],
-        motivations: ['guide the hero', 'pass on knowledge'],
-        description: 'A wise guide and teacher'
-    }
-];
+// Character templates are now fetched from the backend
 
 export default function CharacterPanel({ className }: CharacterPanelProps) {
     const params = useParams();
@@ -155,6 +133,8 @@ export default function CharacterPanel({ className }: CharacterPanelProps) {
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [showCharacterDialog, setShowCharacterDialog] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
+    const [templates, setTemplates] = useState<any[]>([]);
+    const [templatesLoading, setTemplatesLoading] = useState(false);
     const [newCharacter, setNewCharacter] = useState({
         name: '',
         role: 'supporting' as const,
@@ -234,19 +214,99 @@ export default function CharacterPanel({ className }: CharacterPanelProps) {
         }
     }, [bookId, newCharacter, createCharacter]);
 
+    // Fetch character templates
+    const fetchTemplates = useCallback(async () => {
+        if (templatesLoading || templates.length > 0) return; // Don't fetch if already loaded
+
+        setTemplatesLoading(true);
+        try {
+            const response = await fetch('/api/characters/templates', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setTemplates(data.templates || []);
+            } else {
+                console.error('Failed to fetch templates:', response.statusText);
+                // Fallback to basic templates
+                setTemplates([
+                    {
+                        name: 'Hero',
+                        role: 'protagonist',
+                        traits: ['brave', 'determined', 'loyal'],
+                        motivations: ['save the world', 'protect loved ones'],
+                        description: 'A classic heroic protagonist'
+                    },
+                    {
+                        name: 'Villain',
+                        role: 'antagonist',
+                        traits: ['cunning', 'ruthless', 'charismatic'],
+                        motivations: ['power', 'revenge'],
+                        description: 'A compelling antagonist'
+                    },
+                    {
+                        name: 'Mentor',
+                        role: 'mentor',
+                        traits: ['wise', 'patient', 'experienced'],
+                        motivations: ['guide the hero', 'pass on knowledge'],
+                        description: 'A wise guide and teacher'
+                    }
+                ]);
+            }
+        } catch (error) {
+            console.error('Error fetching templates:', error);
+            // Fallback to basic templates
+            setTemplates([
+                {
+                    name: 'Hero',
+                    role: 'protagonist',
+                    traits: ['brave', 'determined', 'loyal'],
+                    motivations: ['save the world', 'protect loved ones'],
+                    description: 'A classic heroic protagonist'
+                },
+                {
+                    name: 'Villain',
+                    role: 'antagonist',
+                    traits: ['cunning', 'ruthless', 'charismatic'],
+                    motivations: ['power', 'revenge'],
+                    description: 'A compelling antagonist'
+                },
+                {
+                    name: 'Mentor',
+                    role: 'mentor',
+                    traits: ['wise', 'patient', 'experienced'],
+                    motivations: ['guide the hero', 'pass on knowledge'],
+                    description: 'A wise guide and teacher'
+                }
+            ]);
+        } finally {
+            setTemplatesLoading(false);
+        }
+    }, [templatesLoading, templates.length]);
+
     // Apply character template
-    const applyTemplate = useCallback((template: typeof CHARACTER_TEMPLATES[0]) => {
+    const applyTemplate = useCallback((template: any) => {
         setNewCharacter(prev => ({
             ...prev,
             role: template.role as any,
             personality: {
                 ...prev.personality,
-                coreTraits: template.traits,
-                motivations: template.motivations
+                coreTraits: template.traits || [],
+                motivations: template.motivations || []
             },
-            notes: template.description
+            notes: template.description || ''
         }));
     }, []);
+
+    // Fetch templates when dialog opens
+    useEffect(() => {
+        if (showCreateDialog) {
+            fetchTemplates();
+        }
+    }, [showCreateDialog, fetchTemplates]);
 
     // Add trait/motivation helpers
     const addTrait = useCallback((trait: string) => {
@@ -511,20 +571,33 @@ export default function CharacterPanel({ className }: CharacterPanelProps) {
                         {/* Quick Templates */}
                         <div>
                             <Label className="text-sm font-medium mb-2 block">Quick Start Templates</Label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {CHARACTER_TEMPLATES.map((template, i) => (
-                                    <Button
-                                        key={i}
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => applyTemplate(template)}
-                                        className="h-auto p-2 flex flex-col items-center text-xs"
-                                    >
-                                        <span className="font-medium">{template.name}</span>
-                                        <span className="text-xs text-text-secondary">{template.role}</span>
-                                    </Button>
-                                ))}
-                            </div>
+                            {templatesLoading ? (
+                                <div className="flex justify-center py-4">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span className="ml-2 text-sm text-text-secondary">Loading templates...</span>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto">
+                                    {templates.map((template, i) => (
+                                        <Button
+                                            key={template._id || i}
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => applyTemplate(template)}
+                                            className="h-auto p-2 flex flex-col items-center text-xs"
+                                            title={template.description}
+                                        >
+                                            <span className="font-medium">{template.name}</span>
+                                            <span className="text-xs text-text-secondary">{template.role}</span>
+                                            {template.difficulty && (
+                                                <span className="text-xs text-text-tertiary">
+                                                    {template.difficulty}
+                                                </span>
+                                            )}
+                                        </Button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <Separator />

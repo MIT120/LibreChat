@@ -553,6 +553,35 @@ router.post('/import/:bookId', requireJwtAuth, upload.single('file'), async (req
     }
 });
 
+// Get character templates
+router.get('/templates', requireJwtAuth, async (req, res) => {
+    try {
+        const { category, role, genre, difficulty, popular, limit } = req.query;
+
+        // TODO: Replace with actual MCP client call
+        const mcpResponse = await global.mcpClient?.callTool('get_character_templates', {
+            category: category || undefined,
+            role: role || undefined,
+            genre: genre ? genre.split(',') : undefined,
+            difficulty: difficulty || undefined,
+            popular: popular === 'true',
+            limit: limit ? parseInt(limit) : 20
+        });
+
+        res.json({
+            success: true,
+            templates: mcpResponse || [],
+            total: mcpResponse?.length || 0
+        });
+    } catch (error) {
+        console.error('Error getting character templates:', error);
+        res.status(500).json({
+            error: 'Internal server error',
+            message: error.message
+        });
+    }
+});
+
 // Get character voice profile
 router.get('/:characterId/voice-profile', requireJwtAuth, async (req, res) => {
     try {

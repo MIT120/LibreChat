@@ -52,7 +52,7 @@ const characterTemplateSchema = new Schema({
         default: TemplateOrigin.SYSTEM,
         index: true
     },
-    
+
     // Template data
     role: {
         type: String,
@@ -60,32 +60,32 @@ const characterTemplateSchema = new Schema({
         required: true,
         index: true
     },
-    traits: [{ 
+    traits: [{
         type: String,
         trim: true,
         maxlength: 50
     }],
-    motivations: [{ 
+    motivations: [{
         type: String,
         trim: true,
         maxlength: 100
     }],
-    fears: [{ 
+    fears: [{
         type: String,
         trim: true,
         maxlength: 100
     }],
-    strengths: [{ 
+    strengths: [{
         type: String,
         trim: true,
         maxlength: 100
     }],
-    weaknesses: [{ 
+    weaknesses: [{
         type: String,
         trim: true,
         maxlength: 100
     }],
-    
+
     // Physical appearance suggestions
     physicalSuggestions: {
         build: [{ type: String }],
@@ -94,7 +94,7 @@ const characterTemplateSchema = new Schema({
         distinctiveFeatures: [{ type: String }],
         clothingStyles: [{ type: String }]
     },
-    
+
     // Background suggestions
     backgroundSuggestions: {
         origins: [{ type: String }],
@@ -102,7 +102,7 @@ const characterTemplateSchema = new Schema({
         skills: [{ type: String }],
         pastEventTypes: [{ type: String }]
     },
-    
+
     // Story integration
     commonGoalTypes: [{ type: String }],
     arcSuggestions: {
@@ -110,14 +110,14 @@ const characterTemplateSchema = new Schema({
         transformationTypes: [{ type: String }],
         endingTypes: [{ type: String }]
     },
-    
+
     // Usage metadata
-    genre: [{ 
+    genre: [{
         type: String,
         trim: true,
         maxlength: 50
     }],
-    tags: [{ 
+    tags: [{
         type: String,
         trim: true,
         maxlength: 50,
@@ -128,7 +128,7 @@ const characterTemplateSchema = new Schema({
         enum: ['beginner', 'intermediate', 'advanced'],
         default: 'beginner'
     },
-    
+
     // Template settings
     isPublic: {
         type: Boolean,
@@ -140,13 +140,13 @@ const characterTemplateSchema = new Schema({
         default: true,
         index: true
     },
-    
+
     // Creation metadata
     createdBy: {
         type: String,  // user ID
         index: true
     },
-    
+
     // Usage statistics
     usageCount: {
         type: Number,
@@ -166,20 +166,20 @@ const characterTemplateSchema = new Schema({
             min: 0
         }
     },
-    
+
     // Version control
     version: {
         type: Number,
         default: 1,
         min: 1
     },
-    
+
     // Template customization
     allowCustomization: {
         type: Boolean,
         default: true
     },
-    
+
     // AI generation hints
     aiPromptHints: {
         type: String,
@@ -201,12 +201,12 @@ characterTemplateSchema.index({ usageCount: -1, rating: -1 }); // For popular te
 characterTemplateSchema.index({ createdBy: 1, createdAt: -1 });
 
 // Virtual for popularity score
-characterTemplateSchema.virtual('popularityScore').get(function() {
+characterTemplateSchema.virtual('popularityScore').get(function () {
     return (this.usageCount * 0.3) + (this.rating.average * this.rating.count * 0.7);
 });
 
 // Static method to get popular templates
-characterTemplateSchema.statics.getPopular = function(limit = 10) {
+characterTemplateSchema.statics.getPopular = function (limit = 10) {
     return this.aggregate([
         { $match: { isPublic: true, isActive: true } },
         {

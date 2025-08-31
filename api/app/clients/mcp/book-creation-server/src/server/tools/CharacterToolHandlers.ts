@@ -86,8 +86,8 @@ export class CharacterToolHandlers extends BaseToolHandler {
                             enum: ['protagonist', 'antagonist', 'supporting', 'minor', 'mentor', 'love_interest', 'comic_relief'],
                             description: 'Filter by character role'
                         },
-                        genre: { 
-                            type: 'array', 
+                        genre: {
+                            type: 'array',
                             items: { type: 'string' },
                             description: 'Filter by genre tags'
                         },
@@ -96,12 +96,12 @@ export class CharacterToolHandlers extends BaseToolHandler {
                             enum: ['beginner', 'intermediate', 'advanced'],
                             description: 'Filter by template difficulty'
                         },
-                        popular: { 
+                        popular: {
                             type: 'boolean',
                             description: 'Get only popular templates',
                             default: false
                         },
-                        limit: { 
+                        limit: {
                             type: 'number',
                             description: 'Limit number of results',
                             default: 20
@@ -443,8 +443,8 @@ export class CharacterToolHandlers extends BaseToolHandler {
 
     async handleGetCharacterTemplates(args: any): Promise<any> {
         try {
-            this.logger.info('Getting character templates', { 
-                category: args.category, 
+            this.logger.info('Getting character templates', {
+                category: args.category,
                 role: args.role,
                 genre: args.genre,
                 difficulty: args.difficulty,
@@ -614,12 +614,12 @@ export class CharacterToolHandlers extends BaseToolHandler {
                 // Add template notes to existing notes
                 if (templateData.description && templateData.description !== templateData.name) {
                     const existingNotes = characterData.notes || '';
-                    characterData.notes = existingNotes ? 
-                        `${existingNotes}\n\nTemplate: ${templateData.description}` : 
+                    characterData.notes = existingNotes ?
+                        `${existingNotes}\n\nTemplate: ${templateData.description}` :
                         `Template: ${templateData.description}`;
                 }
 
-                this.logger.info('Applied template data to character', { 
+                this.logger.info('Applied template data to character', {
                     templateId: args.templateId,
                     templateName: templateData.name,
                     traitsAdded: templateData.traits?.length || 0
@@ -845,7 +845,7 @@ export class CharacterToolHandlers extends BaseToolHandler {
             this.logger.info('Getting characters', { bookId: args.bookId });
 
             // Build query
-            const query: any = { 
+            const query: any = {
                 bookId: args.bookId,
                 isTemplate: false  // Only get actual characters, not templates
             };
@@ -1368,7 +1368,7 @@ export class CharacterToolHandlers extends BaseToolHandler {
             if (args.includeOtherCharacters && args.includeOtherCharacters.length > 0) {
                 const otherCharacters = [];
                 for (const otherId of args.includeOtherCharacters) {
-                    const otherChar = this.characters.get(otherId);
+                    const otherChar = await Character.findById(otherId);
                     if (otherChar) {
                         const otherDesc = this.buildPhysicalDescription(otherChar);
                         otherCharacters.push(`${otherChar.name}${otherDesc ? `, ${otherDesc}` : ''}`);
@@ -1398,8 +1398,12 @@ export class CharacterToolHandlers extends BaseToolHandler {
                     uploadedAt: new Date()
                 };
 
-                character.referenceImages.push(referenceImage);
-                this.characters.set(character._id, character);
+                await Character.findByIdAndUpdate(
+                    character._id,
+                    {
+                        $push: { referenceImages: referenceImage }
+                    }
+                );
 
                 this.logger.info('Character contextual image generated successfully', {
                     characterId: args.characterId,
@@ -1431,7 +1435,7 @@ export class CharacterToolHandlers extends BaseToolHandler {
         try {
             this.logger.info('Getting character relationships', { characterId: args.characterId });
 
-            const character = this.characters.get(args.characterId);
+            const character = await Character.findById(args.characterId);
             if (!character) {
                 throw new NotFoundError('Character', args.characterId);
             }
@@ -1479,12 +1483,12 @@ export class CharacterToolHandlers extends BaseToolHandler {
 
             // Update character's relationships in database
             const existingRelationship = character.relationships.find(r => r.characterId === args.targetCharacterId);
-            
+
             let updatedCharacter;
             if (existingRelationship) {
                 // Update existing relationship
                 updatedCharacter = await Character.findOneAndUpdate(
-                    { 
+                    {
                         _id: args.characterId,
                         'relationships.characterId': args.targetCharacterId
                     },
@@ -1515,7 +1519,7 @@ export class CharacterToolHandlers extends BaseToolHandler {
         }
     }
 
-    private buildPhysicalDescription(character: Character): string {
+    private buildPhysicalDescription(character: any): string {
         const desc = character.physicalDescription;
         const parts: string[] = [];
 

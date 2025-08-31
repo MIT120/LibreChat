@@ -164,7 +164,7 @@ const characterSchema = new Schema({
         required: true,
         index: true
     },
-    
+
     // Basic info
     age: {
         type: Number,
@@ -239,7 +239,7 @@ const characterSchema = new Schema({
         type: String,
         maxlength: 5000
     },
-    tags: [{ 
+    tags: [{
         type: String,
         trim: true,
         maxlength: 50
@@ -261,7 +261,7 @@ const characterSchema = new Schema({
 
     // Story integration
     appearances: [appearanceSchema],
-    
+
     // Generation settings
     imageGenerationProfile: {
         type: imageGenerationProfileSchema,
@@ -287,7 +287,7 @@ characterSchema.index({ tags: 1 });
 characterSchema.index({ visibility: 1, isTemplate: 1 });
 
 // Virtual for character type
-characterSchema.virtual('type').get(function() {
+characterSchema.virtual('type').get(function () {
     return this.isTemplate ? 'template' : 'character';
 });
 
@@ -389,7 +389,7 @@ export interface ICharacter {
     updatedAt: Date;
 }
 
-export interface CharacterDocument extends ICharacter, Document {}
+export interface CharacterDocument extends ICharacter, Document { }
 
 // Create and export the model
 export const Character = mongoose.model<CharacterDocument>('Character', characterSchema);

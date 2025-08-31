@@ -1,11 +1,87 @@
 /**
  * Seed Character Templates - Populate database with initial character templates
+ * Simple JavaScript version that directly connects to MongoDB
  */
 
-import { Character } from '../models/Character.js';
-import { CharacterTemplate } from '../models/CharacterTemplate.js';
-import { v4 as uuidv4 } from 'uuid';
-import mongoose from 'mongoose';
+const mongoose = require('mongoose');
+const { v4: uuidv4 } = require('uuid');
+
+// Define the character template schema inline
+const characterTemplateSchema = new mongoose.Schema({
+    _id: String,
+    name: String,
+    description: String,
+    category: {
+        type: String,
+        enum: ['archetype', 'genre', 'role', 'personality', 'custom'],
+        default: 'archetype'
+    },
+    origin: {
+        type: String,
+        enum: ['system', 'community', 'user'],
+        default: 'system'
+    },
+    role: {
+        type: String,
+        enum: ['protagonist', 'antagonist', 'supporting', 'minor', 'mentor', 'love_interest', 'comic_relief'],
+        required: true
+    },
+    traits: [String],
+    motivations: [String],
+    fears: [String],
+    strengths: [String],
+    weaknesses: [String],
+    physicalSuggestions: {
+        build: [String],
+        hairColors: [String],
+        eyeColors: [String],
+        distinctiveFeatures: [String],
+        clothingStyles: [String]
+    },
+    backgroundSuggestions: {
+        origins: [String],
+        occupations: [String],
+        skills: [String],
+        pastEventTypes: [String]
+    },
+    commonGoalTypes: [String],
+    arcSuggestions: {
+        startingPoints: [String],
+        transformationTypes: [String],
+        endingTypes: [String]
+    },
+    genre: [String],
+    tags: [String],
+    difficulty: {
+        type: String,
+        enum: ['beginner', 'intermediate', 'advanced'],
+        default: 'beginner'
+    },
+    isPublic: {
+        type: Boolean,
+        default: true
+    },
+    isActive: {
+        type: Boolean,
+        default: true
+    },
+    usageCount: {
+        type: Number,
+        default: 0
+    },
+    rating: {
+        average: { type: Number, default: 0 },
+        count: { type: Number, default: 0 }
+    },
+    version: { type: Number, default: 1 },
+    allowCustomization: { type: Boolean, default: true },
+    aiPromptHints: String
+}, {
+    _id: false,
+    timestamps: true
+});
+
+const CharacterTemplate = mongoose.model('CharacterTemplate', characterTemplateSchema);
 
 const characterTemplates = [
     {
@@ -252,11 +328,8 @@ async function seedCharacterTemplates() {
     }
 }
 
-// Export for use in other scripts
-export { seedCharacterTemplates, characterTemplates };
-
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (require.main === module) {
     async function run() {
         try {
             // Connect to MongoDB
@@ -277,3 +350,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
     run();
 }
+
+module.exports = { seedCharacterTemplates, characterTemplates };
