@@ -281,3 +281,4 @@ export interface CharacterTemplateDocument extends ICharacterTemplate, Document 
 // Create and export the model
 export const CharacterTemplate = mongoose.model<CharacterTemplateDocument>('CharacterTemplate', characterTemplateSchema);
 export default CharacterTemplate;
+

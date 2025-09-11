@@ -394,3 +394,4 @@ export interface CharacterDocument extends ICharacter, Document { }
 // Create and export the model
 export const Character = mongoose.model<CharacterDocument>('Character', characterSchema);
 export default Character;
+

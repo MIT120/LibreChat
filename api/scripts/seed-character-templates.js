@@ -352,3 +352,4 @@ if (require.main === module) {
 }
 
 module.exports = { seedCharacterTemplates, characterTemplates };
+
