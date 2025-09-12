@@ -1,107 +1,202 @@
-#!/usr/bin/env node
-
 /**
- * Toki Looker MCP Server - TypeScript Implementation
- * Main entry point for the server
+ * Refactored Looker MCP Server - Main entry point using improved architecture
  */
 
-// Load environment variables
-import { config } from 'dotenv';
-config();
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import { Logger, LogLevel } from './core/Logger.js';
-import { LookerService } from './services/LookerService.js';
-import { MCPServer } from './server/MCPServer.js';
-import { LookerConfig, ConfigurationError } from '../types/index.js';
+// Import components
+import { LookerConfigManager } from './config/LookerConfig.js';
+import { LookerServiceFactory } from './factories/LookerServiceFactory.js';
+import { LookerToolHandlers } from './server/tools/LookerToolHandlers.js';
+import { QueryValidator } from './validation/QueryValidator.js';
 
-async function main(): Promise<void> {
-    const logger = new Logger('TokiLookerServer');
+// Import interfaces
+import { ILogger, LogLevel } from './interfaces/ILogger.js';
 
-    try {
-        // Set log level from environment
-        const logLevel = process.env.LOG_LEVEL?.toLowerCase() || 'info';
-        switch (logLevel) {
-            case 'debug':
-                logger.setLevel(LogLevel.DEBUG);
-                break;
-            case 'warn':
-                logger.setLevel(LogLevel.WARN);
-                break;
-            case 'error':
-                logger.setLevel(LogLevel.ERROR);
-                break;
-            default:
-                logger.setLevel(LogLevel.INFO);
+// Simple console logger implementation
+class ConsoleLogger implements ILogger {
+    private logLevel: LogLevel = LogLevel.INFO;
+
+    setLevel(level: LogLevel): void {
+        this.logLevel = level;
+    }
+
+    info(message: string, meta?: any): void {
+        console.log(`[INFO] ${message}`, meta ? JSON.stringify(meta, null, 2) : '');
+    }
+
+    debug(message: string, meta?: any): void {
+        if (this.logLevel <= LogLevel.DEBUG || process.env.LOG_LEVEL === 'debug') {
+            console.log(`[DEBUG] ${message}`, meta ? JSON.stringify(meta, null, 2) : '');
         }
+    }
 
-        logger.info('Starting Toki Looker MCP Server v1.0.0');
-        logger.info('Environment configuration', {
-            nodeEnv: process.env.NODE_ENV || 'development',
-            logLevel,
-            lookerBaseUrl: process.env.LOOKER_BASE_URL ? 'configured' : 'not configured',
-            lookerClientId: process.env.LOOKER_CLIENT_ID ? 'configured' : 'not configured',
-            lookerClientSecret: process.env.LOOKER_CLIENT_SECRET ? 'configured' : 'not configured',
-        });
+    warn(message: string, meta?: any): void {
+        console.warn(`[WARN] ${message}`, meta ? JSON.stringify(meta, null, 2) : '');
+    }
 
-        // Create configuration (defer validation until first use)
-        const config = createConfiguration();
-        if (config.isValid) {
-            logger.info('Looker configuration found and validated');
-        } else {
-            logger.warn('Looker configuration is incomplete. Tools will fail until credentials are properly configured.');
-        }
-
-        // Create services
-        const lookerService = new LookerService(logger, config.config);
-
-        // Create and start the MCP server
-        const mcpServer = new MCPServer(logger, lookerService);
-        await mcpServer.initialize();
-        await mcpServer.start();
-
-        logger.info('Toki Looker MCP Server started successfully');
-
-        // Keep the process alive
-        process.on('exit', async () => {
-            logger.info('Shutting down Toki Looker MCP Server');
-            await mcpServer.stop();
-        });
-
-    } catch (error) {
-        logger.error('Failed to start Toki Looker MCP Server', error as Error);
-        process.exit(1);
+    error(message: string, error?: any): void {
+        console.error(`[ERROR] ${message}`, error);
     }
 }
 
-function createConfiguration(): { config: LookerConfig; isValid: boolean } {
-    const baseUrl = process.env.LOOKER_BASE_URL;
-    const clientId = process.env.LOOKER_CLIENT_ID;
-    const clientSecret = process.env.LOOKER_CLIENT_SECRET;
+class LookerMCPServer {
+    private server: Server;
+    private logger: ILogger;
+    private configManager: LookerConfigManager;
+    private factory: LookerServiceFactory;
+    private toolHandlers?: LookerToolHandlers;
 
-    const isValid = !!(baseUrl && clientId && clientSecret);
+    constructor() {
+        this.logger = new ConsoleLogger();
+        this.configManager = new LookerConfigManager(this.logger);
+        this.factory = LookerServiceFactory.getInstance();
 
-    // Ensure the base URL ends with the API version
-    const normalizedBaseUrl = baseUrl
-        ? (baseUrl.endsWith('/api/4.0') ? baseUrl : `${baseUrl.replace(/\/$/, '')}/api/4.0`)
-        : 'https://example.looker.com/api/4.0';
+        // Initialize server
+        this.server = new Server(
+            {
+                name: 'looker-mcp-server',
+                version: '1.0.0',
+            },
+            {
+                capabilities: {
+                    tools: {},
+                },
+            }
+        );
 
-    return {
-        config: {
-            baseUrl: normalizedBaseUrl,
-            clientId: clientId || 'not-configured',
-            clientSecret: clientSecret || 'not-configured',
-            apiVersion: '4.0'
-        },
-        isValid
-    };
+        this.setupHandlers();
+    }
+
+    private setupHandlers(): void {
+        // List tools handler
+        this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+            try {
+                const config = this.configManager.loadConfig();
+                const lookerService = this.factory.createLookerService(this.logger, config);
+                this.toolHandlers = new LookerToolHandlers(this.logger, lookerService);
+                const tools = this.toolHandlers.getTools();
+
+                this.logger.info(`Listing ${tools.length} tools`);
+                return {
+                    tools: tools.map((tool: any) => ({
+                        name: tool.name,
+                        description: tool.description,
+                        inputSchema: tool.inputSchema
+                    }))
+                };
+            } catch (error) {
+                this.logger.error('Failed to list tools', error);
+                throw error;
+            }
+        });
+
+        // Call tool handler
+        this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+            try {
+                const { name, arguments: args } = request.params;
+                this.logger.info(`Calling tool: ${name}`, { args });
+
+                if (!this.toolHandlers) {
+                    const config = this.configManager.loadConfig();
+                    const lookerService = this.factory.createLookerService(this.logger, config);
+                    this.toolHandlers = new LookerToolHandlers(this.logger, lookerService);
+                }
+
+                const tools = this.toolHandlers.getTools();
+                const tool = tools.find((t: any) => t.name === name);
+
+                if (!tool) {
+                    throw new Error(`Tool not found: ${name}`);
+                }
+
+                // Validate arguments if validator is available
+                if (args && this.shouldValidateTool(name)) {
+                    this.validateToolArguments(name, args);
+                }
+
+                const result = await tool.handler(args);
+                this.logger.info(`Tool ${name} completed successfully`);
+
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: JSON.stringify(result, null, 2)
+                        }
+                    ]
+                };
+            } catch (error) {
+                this.logger.error(`Tool ${request.params.name} failed`, error);
+
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: JSON.stringify({
+                                success: false,
+                                error: error instanceof Error ? error.message : String(error),
+                                message: `Tool execution failed: ${request.params.name}`
+                            }, null, 2)
+                        }
+                    ],
+                    isError: true
+                };
+            }
+        });
+    }
+
+    private shouldValidateTool(toolName: string): boolean {
+        const validationRequiredTools = [
+            'looker-query',
+            'looker-query-sql',
+            'looker-query-url',
+            'looker-make-look',
+            'looker-analyze-electricity'
+        ];
+        return validationRequiredTools.includes(toolName);
+    }
+
+    private validateToolArguments(toolName: string, args: any): void {
+        try {
+            switch (toolName) {
+                case 'looker-query':
+                case 'looker-query-sql':
+                case 'looker-query-url':
+                    if (args.model && args.explore) {
+                        QueryValidator.validateQuery({
+                            model: args.model,
+                            explore: args.explore,
+                            dimensions: args.dimensions,
+                            measures: args.measures,
+                            filters: args.filters,
+                            sorts: args.sorts,
+                            limit: args.limit
+                        });
+                    }
+                    break;
+                case 'looker-analyze-electricity':
+                    QueryValidator.validateElectricityAnalysisRequest(args);
+                    break;
+            }
+        } catch (error) {
+            this.logger.warn(`Validation failed for tool ${toolName}`, error);
+            // Don't throw here - let the tool handle the validation error
+        }
+    }
+
+    async run(): Promise<void> {
+        const transport = new StdioServerTransport();
+        await this.server.connect(transport);
+        this.logger.info('Looker MCP Server started successfully');
+    }
 }
 
 // Start the server
-if (import.meta.url === `file://${process.argv[1]}`) {
-    main().catch((error) => {
-        console.error('Fatal error:', error);
-        process.exit(1);
-    });
-}
-
-export { main };
+const server = new LookerMCPServer();
+server.run().catch((error) => {
+    console.error('Failed to start Looker MCP Server:', error);
+    process.exit(1);
+});

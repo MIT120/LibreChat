@@ -670,7 +670,7 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
         };
       } catch (error) {
         console.log('Error setting up iframe listeners:', error);
-        return () => {};
+        return () => { };
       }
     } else {
       // For interactive mode or fallback to document
@@ -1169,11 +1169,10 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
                         setCurrentPreviewUrl(exp.url);
                       }, 100);
                     }}
-                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-blue-200 dark:hover:bg-blue-800 ${
-                      isCurrentlyViewed
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-blue-200 dark:hover:bg-blue-800 ${isCurrentlyViewed
                         ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
                         : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                    }`}
+                      }`}
                     title={`${exp.filename} - Click to preview (${exp.format})`}
                   >
                     <span>📄</span>
@@ -1232,11 +1231,10 @@ ${change.reason ? `**Reason:** ${change.reason}` : ''}
                         setCurrentPreviewUrl(fullUrl);
                       }, 100);
                     }}
-                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-green-200 dark:hover:bg-green-800 ${
-                      isCurrentlyViewed
+                    className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-green-200 dark:hover:bg-green-800 ${isCurrentlyViewed
                         ? 'bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100'
                         : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                    }`}
+                      }`}
                     title={`${exp.title || exp.filename} - Click to preview`}
                   >
                     <span>📄</span>

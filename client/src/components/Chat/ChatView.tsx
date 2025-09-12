@@ -85,7 +85,7 @@ function ChatView({ index = 0 }: { index?: number }) {
       <div className="flex h-full w-full flex-col overflow-hidden">
         <div className="flex h-full w-full overflow-hidden">
           <div className="flex-1 overflow-hidden">
-            <BookPreview className="h-full" />
+            {/* <BookPreview className="h-full" /> */}
           </div>
         </div>
       </div>
@@ -97,14 +97,6 @@ function ChatView({ index = 0 }: { index?: number }) {
   const RightPanel = (
     <div className="flex h-full w-full flex-col">
       <Tabs defaultValue="chat" className="flex h-full w-full flex-col">
-        <div className="border-b border-border-light bg-surface-primary px-2 pt-2">
-          <TabsList className="flex w-full justify-start gap-1 overflow-x-auto">
-            <TabsTrigger value="chat">{localize('com_ui_chat')}</TabsTrigger>
-            <TabsTrigger value="tools">{localize('com_ui_tools')}</TabsTrigger>
-            <TabsTrigger value="files">{localize('com_ui_files')}</TabsTrigger>
-            <TabsTrigger value="history">{localize('com_ui_chat_history')}</TabsTrigger>
-          </TabsList>
-        </div>
         <div className="min-h-0 flex-1 overflow-hidden p-2">
           <TabsContent value="chat" className="mt-0 h-full rounded-none p-0">
             <div className="flex h-full min-h-0 flex-col">
@@ -130,15 +122,16 @@ function ChatView({ index = 0 }: { index?: number }) {
     <ChatFormProvider {...methods}>
       <ChatContext.Provider value={chatHelpers}>
         <AddedChatContext.Provider value={addedChatHelpers}>
-          <Presentation rightPanel={RightPanel}>
-            <div className="flex h-full w-full flex-col">
-              {!isLoading && <Header />}
-              <div className={cn('flex h-full flex-col overflow-hidden')}>
-                {/* Center book/editor view */}
-                <div className={cn('flex-1 overflow-hidden')}>{content}</div>
-              </div>
-            </div>
-          </Presentation>
+          {/* <Presentation rightPanel={ }> */}
+          <div className="flex h-full w-full flex-col">
+            {!isLoading && <Header />}
+            {RightPanel}
+            {/* <div className={cn('flex h-full flex-col overflow-hidden')}> */}
+            {/* Center book/editor view */}
+            {/* <div className={cn('flex-1 overflow-hidden')}>{content}</div> */}
+            {/* </div> */}
+          </div>
+          {/* </Presentation> */}
         </AddedChatContext.Provider>
       </ChatContext.Provider>
     </ChatFormProvider>

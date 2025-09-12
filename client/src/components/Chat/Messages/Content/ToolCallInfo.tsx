@@ -1,5 +1,7 @@
 import React from 'react';
 import { useLocalize } from '~/hooks';
+import CsvExportResult from './CsvExportResult';
+import { extractCsvExportData } from '~/utils/csvUtils';
 
 function OptimizedCodeBlock({ text, maxHeight = 320 }: { text: string; maxHeight?: number }) {
   return (
@@ -64,7 +66,19 @@ export default function ToolCallInfo({
               {localize('com_ui_result')}
             </div>
             <div>
-              <OptimizedCodeBlock text={formatText(output)} maxHeight={250} />
+              {/* Check if output contains CSV export data */}
+              {(() => {
+                try {
+                  const parsedOutput = JSON.parse(output);
+                  const csvData = extractCsvExportData(parsedOutput);
+                  if (csvData) {
+                    return <CsvExportResult data={parsedOutput} className="mb-2" />;
+                  }
+                } catch (e) {
+                  // Not JSON, continue with normal display
+                }
+                return <OptimizedCodeBlock text={formatText(output)} maxHeight={250} />;
+              })()}
             </div>
           </>
         )}

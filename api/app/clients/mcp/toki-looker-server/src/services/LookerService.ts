@@ -1,14 +1,11 @@
 /**
- * Looker Service Implementation
- * Handles all interactions with Looker API
+ * Looker Service - Uses composition pattern for better maintainability
  */
 
-import axios, { AxiosInstance, AxiosError } from 'axios';
 import { ILookerService } from '../interfaces/ILookerService.js';
 import { ILogger } from '../interfaces/ILogger.js';
+import { LookerConfig } from '../../types/index.js';
 import {
-    LookerConfig,
-    LookerCredentials,
     LookerModel,
     LookerExplore,
     LookerDimension,
@@ -22,573 +19,272 @@ import {
     LookerQueryResult,
     ElectricityAnalysisRequest,
     ElectricityAnalysisResult,
-    ElectricityMetrics
+    CsvExportResult,
+    TableExportRequest,
+    ReportExportRequest
 } from '../../types/index.js';
-import {
-    AuthenticationError,
-    AuthorizationError,
-    NotFoundError,
-    ValidationError,
-    RateLimitError,
-    NetworkError,
-    LookerError
-} from '../../types/errors.js';
+
+// Import specialized services
+import { LookerMetadataService } from './core/LookerMetadataService.js';
+import { LookerQueryService } from './core/LookerQueryService.js';
+import { LookerContentService } from './core/LookerContentService.js';
+import { LookerCsvExportService } from './core/LookerCsvExportService.js';
+import { LookerAdvancedExportService } from './core/LookerAdvancedExportService.js';
+import { LookerLookMLService } from './core/LookerLookMLService.js';
+import { LookerEmbedService } from './core/LookerEmbedService.js';
+import { ElectricityAnalyticsService } from './analytics/ElectricityAnalyticsService.js';
+import { LookerAdvancedAnalyticsService } from './analytics/LookerAdvancedAnalyticsService.js';
+import { LookerDiagnosticsService } from './diagnostics/LookerDiagnosticsService.js';
 
 export class LookerService implements ILookerService {
     private logger: ILogger;
     private config: LookerConfig;
-    private credentials?: LookerCredentials;
-    private client: AxiosInstance;
-    private authTime?: Date;
+
+    // Specialized services
+    private metadataService: LookerMetadataService;
+    private queryService: LookerQueryService;
+    private contentService: LookerContentService;
+    private csvExportService: LookerCsvExportService;
+    private advancedExportService: LookerAdvancedExportService;
+    private lookmlService: LookerLookMLService;
+    private embedService: LookerEmbedService;
+    private analyticsService: ElectricityAnalyticsService;
+    private advancedAnalyticsService: LookerAdvancedAnalyticsService;
+    private diagnosticsService: LookerDiagnosticsService;
 
     constructor(logger: ILogger, config: LookerConfig) {
         this.logger = logger;
         this.config = config;
 
-        this.client = axios.create({
-            baseURL: config.baseUrl,
-            timeout: 30000,
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
+        // Initialize specialized services
+        this.metadataService = new LookerMetadataService(logger, config);
+        this.queryService = new LookerQueryService(logger, config);
+        this.contentService = new LookerContentService(logger, config);
+        this.csvExportService = new LookerCsvExportService(logger, config);
+        this.advancedExportService = new LookerAdvancedExportService(logger, config);
+        this.lookmlService = new LookerLookMLService(logger, config);
+        this.embedService = new LookerEmbedService(logger, config);
+        this.analyticsService = new ElectricityAnalyticsService(logger, config, this.queryService, this.metadataService);
+        this.advancedAnalyticsService = new LookerAdvancedAnalyticsService(logger, config);
+        this.diagnosticsService = new LookerDiagnosticsService(logger, config);
 
-        this.setupInterceptors();
+        this.logger.info('Initialized Looker service with specialized components');
     }
 
-    private setupInterceptors(): void {
-        // Request interceptor to add auth token
-        this.client.interceptors.request.use(
-            (config) => {
-                if (this.credentials?.access_token && config.url !== '/login') {
-                    config.headers.Authorization = `Bearer ${this.credentials.access_token}`;
-                }
-                return config;
-            },
-            (error) => Promise.reject(error)
-        );
-
-        // Response interceptor to handle errors
-        this.client.interceptors.response.use(
-            (response) => response,
-            async (error: AxiosError) => {
-                if (error.response?.status === 401) {
-                    // Token expired, try to reauthenticate
-                    try {
-                        await this.authenticate();
-                        // Retry the original request
-                        return this.client.request(error.config!);
-                    } catch (authError) {
-                        throw new AuthenticationError('Authentication failed');
-                    }
-                }
-                return Promise.reject(this.handleAxiosError(error));
-            }
-        );
-    }
-
-    private handleAxiosError(error: AxiosError): Error {
-        if (error.response) {
-            const status = error.response.status;
-            const message = error.response.data || error.message;
-
-            switch (status) {
-                case 401:
-                    return new AuthenticationError('Authentication failed', message);
-                case 403:
-                    return new AuthorizationError('Access forbidden', message);
-                case 404:
-                    return new NotFoundError('Resource', 'not found');
-                case 400:
-                    return new ValidationError('Invalid request', message);
-                case 429:
-                    return new RateLimitError('Rate limit exceeded');
-                default:
-                    return new LookerError(`HTTP ${status}: ${error.message}`, status, message);
-            }
-        } else if (error.request) {
-            return new NetworkError('Network error: No response received');
-        } else {
-            return new NetworkError(`Request setup error: ${error.message}`);
-        }
-    }
-
+    // Authentication - delegate to any service (they all extend BaseLookerService)
     async authenticate(): Promise<void> {
-        try {
-            this.logger.info('Authenticating with Looker API');
-
-            const response = await this.client.post('/login', {
-                client_id: this.config.clientId,
-                client_secret: this.config.clientSecret,
-            });
-
-            this.credentials = response.data;
-            this.authTime = new Date();
-
-            this.logger.info('Successfully authenticated with Looker API');
-        } catch (error) {
-            this.logger.error('Failed to authenticate with Looker API', error);
-            throw new AuthenticationError('Failed to authenticate with Looker API');
-        }
+        return this.metadataService.authenticate();
     }
 
     isAuthenticated(): boolean {
-        if (!this.credentials || !this.authTime) {
-            return false;
-        }
-
-        const now = new Date();
-        const expiresAt = new Date(this.authTime.getTime() + (this.credentials.expires_in * 1000));
-
-        return now < expiresAt;
+        return this.metadataService.isAuthenticated();
     }
 
-    private async ensureAuthenticated(): Promise<void> {
-        if (!this.isAuthenticated()) {
-            try {
-                await this.authenticate();
-            } catch (error) {
-                this.logger.error('Failed to authenticate with Looker. Please check your credentials.', error);
-                throw new AuthenticationError(
-                    'Looker authentication failed. Please verify LOOKER_BASE_URL, LOOKER_CLIENT_ID, and LOOKER_CLIENT_SECRET environment variables are set correctly.'
-                );
-            }
-        }
-    }
-
+    // Metadata operations - delegate to metadata service
     async getModels(): Promise<LookerModel[]> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Fetching Looker models');
-            const response = await this.client.get('/lookml_models');
-            return response.data || [];
-        } catch (error) {
-            this.logger.error('Failed to fetch models', error);
-            throw error;
-        }
+        return this.metadataService.getModels();
     }
 
     async getExplores(modelName: string): Promise<LookerExplore[]> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Fetching explores for model', { model: modelName });
-            const response = await this.client.get(`/lookml_models/${modelName}/explores`);
-            return response.data || [];
-        } catch (error) {
-            this.logger.error('Failed to fetch explores', error);
-            throw error;
-        }
+        return this.metadataService.getExplores(modelName);
     }
 
     async getDimensions(modelName: string, exploreName: string): Promise<LookerDimension[]> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Fetching dimensions', { model: modelName, explore: exploreName });
-            const response = await this.client.get(`/lookml_models/${modelName}/explores/${exploreName}`);
-            return response.data?.dimensions || [];
-        } catch (error) {
-            this.logger.error('Failed to fetch dimensions', error);
-            throw error;
-        }
+        return this.metadataService.getDimensions(modelName, exploreName);
     }
 
     async getMeasures(modelName: string, exploreName: string): Promise<LookerMeasure[]> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Fetching measures', { model: modelName, explore: exploreName });
-            const response = await this.client.get(`/lookml_models/${modelName}/explores/${exploreName}`);
-            return response.data?.measures || [];
-        } catch (error) {
-            this.logger.error('Failed to fetch measures', error);
-            throw error;
-        }
+        return this.metadataService.getMeasures(modelName, exploreName);
     }
 
     async getFilters(modelName: string, exploreName: string): Promise<LookerFilter[]> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Fetching filters', { model: modelName, explore: exploreName });
-            const response = await this.client.get(`/lookml_models/${modelName}/explores/${exploreName}`);
-            const explore = response.data;
-
-            // Filters can come from dimensions that are filterable
-            const filters: LookerFilter[] = [];
-            if (explore?.dimensions) {
-                explore.dimensions.forEach((dim: any) => {
-                    if (dim.can_filter) {
-                        filters.push({
-                            name: dim.name,
-                            label: dim.label_short || dim.label,
-                            description: dim.description,
-                            type: dim.type,
-                            suggestions: dim.suggestions
-                        });
-                    }
-                });
-            }
-
-            return filters;
-        } catch (error) {
-            this.logger.error('Failed to fetch filters', error);
-            throw error;
-        }
+        return this.metadataService.getFilters(modelName, exploreName);
     }
 
     async getParameters(modelName: string, exploreName: string): Promise<LookerParameter[]> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Fetching parameters', { model: modelName, explore: exploreName });
-            const response = await this.client.get(`/lookml_models/${modelName}/explores/${exploreName}`);
-            return response.data?.parameters || [];
-        } catch (error) {
-            this.logger.error('Failed to fetch parameters', error);
-            throw error;
-        }
+        return this.metadataService.getParameters(modelName, exploreName);
     }
 
-    async getLooks(search?: string): Promise<LookerLook[]> {
-        await this.ensureAuthenticated();
+    async getAvailableFields(modelName: string, exploreName: string): Promise<{
+        dimensions: string[];
+        measures: string[];
+        allFields: string[];
+    }> {
+        return this.metadataService.getAvailableFields(modelName, exploreName);
+    }
 
-        try {
-            this.logger.debug('Fetching looks', { search });
-            const params = search ? { title: search } : {};
-            const response = await this.client.get('/looks/search', { params });
-            return response.data || [];
-        } catch (error) {
-            this.logger.error('Failed to fetch looks', error);
-            throw error;
-        }
+    async getAllAvailableFields(): Promise<{
+        models: Array<{
+            name: string;
+            explores: Array<{
+                name: string;
+                dimensions: string[];
+                measures: string[];
+                allFields: string[];
+            }>;
+        }>;
+        totalModels: number;
+        totalExplores: number;
+        totalFields: number;
+    }> {
+        return this.metadataService.getAllAvailableFields();
+    }
+
+    // Content operations - delegate to content service
+    async getLooks(search?: string): Promise<LookerLook[]> {
+        return this.contentService.getLooks(search);
     }
 
     async runLook(lookId: number): Promise<LookerQueryResult> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Running look', { lookId });
-            const response = await this.client.get(`/looks/${lookId}/run/json`);
-            return {
-                data: response.data || [],
-                fields: [], // Would need additional API call to get field metadata
-                truncated: false,
-                query_run_time: 0
-            };
-        } catch (error) {
-            this.logger.error('Failed to run look', error);
-            throw error;
-        }
+        return this.contentService.runLook(lookId);
     }
 
     async makeLook(query: LookerQuery, title: string, description?: string): Promise<LookerLook> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Creating look', { title, query });
-
-            // First create the query
-            const queryResponse = await this.client.post('/queries', query);
-            const queryId = queryResponse.data.id;
-
-            // Then create the look
-            const lookData = {
-                title,
-                description,
-                query_id: queryId,
-                public: false
-            };
-
-            const response = await this.client.post('/looks', lookData);
-            return response.data;
-        } catch (error) {
-            this.logger.error('Failed to create look', error);
-            throw error;
-        }
+        return this.contentService.makeLook(query, title, description);
     }
 
     async getDashboards(search?: string): Promise<LookerDashboard[]> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Fetching dashboards', { search });
-            const params = search ? { title: search } : {};
-            const response = await this.client.get('/dashboards/search', { params });
-            return response.data || [];
-        } catch (error) {
-            this.logger.error('Failed to fetch dashboards', error);
-            throw error;
-        }
+        return this.contentService.getDashboards(search);
     }
 
     async makeDashboard(title: string, description?: string): Promise<LookerDashboard> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Creating dashboard', { title });
-
-            const dashboardData = {
-                title,
-                description,
-                hidden: false,
-                elements: []
-            };
-
-            const response = await this.client.post('/dashboards', dashboardData);
-            return response.data;
-        } catch (error) {
-            this.logger.error('Failed to create dashboard', error);
-            throw error;
-        }
+        return this.contentService.makeDashboard(title, description);
     }
 
     async addDashboardElement(dashboardId: number, element: Partial<LookerDashboardElement>): Promise<LookerDashboardElement> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Adding dashboard element', { dashboardId, element });
-
-            const elementData = {
-                dashboard_id: dashboardId,
-                ...element
-            };
-
-            const response = await this.client.post(`/dashboard_elements`, elementData);
-            return response.data;
-        } catch (error) {
-            this.logger.error('Failed to add dashboard element', error);
-            throw error;
-        }
+        return this.contentService.addDashboardElement(dashboardId, element);
     }
 
+    // Query operations - delegate to query service
     async query(query: LookerQuery): Promise<LookerQueryResult> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Running query', { query });
-
-            const response = await this.client.post('/queries/run/json', query);
-
-            return {
-                data: response.data || [],
-                fields: [], // Would need additional processing to extract field metadata
-                truncated: false,
-                sql: '',
-                query_run_time: 0,
-                applied_filters: query.filters || {}
-            };
-        } catch (error) {
-            this.logger.error('Failed to run query', error);
-            throw error;
-        }
+        return this.queryService.query(query);
     }
 
     async querySQL(query: LookerQuery): Promise<string> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Generating SQL for query', { query });
-
-            const response = await this.client.post('/queries/run/sql', query);
-            return response.data || '';
-        } catch (error) {
-            this.logger.error('Failed to generate SQL', error);
-            throw error;
-        }
+        return this.queryService.querySQL(query);
     }
 
     async queryUrl(query: LookerQuery): Promise<string> {
-        await this.ensureAuthenticated();
-
-        try {
-            this.logger.debug('Generating URL for query', { query });
-
-            // First create the query to get an ID
-            const queryResponse = await this.client.post('/queries', query);
-            const queryId = queryResponse.data.id;
-
-            // Generate explore URL
-            const baseUrl = this.config.baseUrl.replace('/api/4.0', '');
-            return `${baseUrl}/explore/${query.model}/${query.explore}?qid=${queryId}`;
-        } catch (error) {
-            this.logger.error('Failed to generate query URL', error);
-            throw error;
-        }
+        return this.queryService.queryUrl(query);
     }
 
+    // Analytics operations - delegate to analytics service
     async analyzeElectricity(request: ElectricityAnalysisRequest): Promise<ElectricityAnalysisResult> {
-        this.logger.debug('Analyzing electricity data', { request });
+        return this.analyticsService.analyzeElectricity(request);
+    }
 
+    // Diagnostics operations - delegate to diagnostics service
+    async diagnostics(): Promise<{
+        config: {
+            baseUrl: string;
+            timeout: number;
+            clientIdConfigured: boolean;
+            clientSecretConfigured: boolean;
+        };
+        connection: {
+            canReachServer: boolean;
+            canAuthenticate: boolean;
+            responseTime?: number;
+        };
+        status: 'healthy' | 'degraded' | 'unhealthy';
+        errors: string[];
+    }> {
+        return this.diagnosticsService.diagnostics();
+    }
+
+    // CSV Export operations - delegate to CSV export service
+    async exportQueryResultToCsv(request: ReportExportRequest): Promise<CsvExportResult> {
+        return this.csvExportService.exportQueryResultToCsv(request);
+    }
+
+    async exportTableToCsv(request: TableExportRequest): Promise<CsvExportResult> {
+        return this.csvExportService.exportTableToCsv(request);
+    }
+
+    async exportElectricityAnalysisToCsv(analysisData: any[], title?: string, options?: any): Promise<CsvExportResult> {
+        return this.csvExportService.exportElectricityAnalysisToCsv(analysisData, title, options);
+    }
+
+    // Utility methods for accessing specialized services directly if needed
+    getMetadataService(): LookerMetadataService {
+        return this.metadataService;
+    }
+
+    getQueryService(): LookerQueryService {
+        return this.queryService;
+    }
+
+    getContentService(): LookerContentService {
+        return this.contentService;
+    }
+
+    getAnalyticsService(): ElectricityAnalyticsService {
+        return this.analyticsService;
+    }
+
+    getDiagnosticsService(): LookerDiagnosticsService {
+        return this.diagnosticsService;
+    }
+
+    getCsvExportService(): LookerCsvExportService {
+        return this.csvExportService;
+    }
+
+    // Helper method to validate and suggest field names
+    async validateAndSuggestFields(modelName: string, exploreName: string, fields: string[]): Promise<{
+        validFields: string[];
+        invalidFields: string[];
+        suggestions: Record<string, string[]>;
+    }> {
         try {
-            // Build Looker query for electricity analysis
-            const query: LookerQuery = {
-                model: 'electricity',
-                explore: 'electricity_metrics',
-                dimensions: [
-                    'electricity_metrics.timestamp_date',
-                    ...(request.groupBy ? [`electricity_metrics.timestamp_${request.groupBy}`] : [])
-                ],
-                measures: request.metrics.map(metric => `electricity_metrics.${metric}`),
-                filters: {
-                    'electricity_metrics.timestamp_date': `${request.timeRange.start} to ${request.timeRange.end}`,
-                    ...request.filters
-                },
-                sorts: ['electricity_metrics.timestamp_date'],
-                limit: 10000
-            };
+            const availableFields = await this.getAvailableFields(modelName, exploreName);
+            const validFields: string[] = [];
+            const invalidFields: string[] = [];
+            const suggestions: Record<string, string[]> = {};
 
-            // Execute the query
-            const result = await this.query(query);
+            for (const field of fields) {
+                // Check if field exists in available fields (exact match)
+                if (availableFields.allFields.includes(field)) {
+                    validFields.push(field);
+                } else {
+                    invalidFields.push(field);
 
-            // Process the results into electricity metrics format
-            const electricityData: ElectricityMetrics[] = result.data?.map((row: any) => ({
-                timestamp: row['electricity_metrics.timestamp_date'] || '',
-                consumption_kwh: parseFloat(row['electricity_metrics.consumption_kwh'] || 0),
-                generation_kwh: parseFloat(row['electricity_metrics.generation_kwh'] || 0),
-                grid_import_kwh: parseFloat(row['electricity_metrics.grid_import_kwh'] || 0),
-                grid_export_kwh: parseFloat(row['electricity_metrics.grid_export_kwh'] || 0),
-                solar_generation_kwh: parseFloat(row['electricity_metrics.solar_generation_kwh'] || 0),
-                wind_generation_kwh: parseFloat(row['electricity_metrics.wind_generation_kwh'] || 0),
-                battery_charge_kwh: parseFloat(row['electricity_metrics.battery_charge_kwh'] || 0),
-                battery_discharge_kwh: parseFloat(row['electricity_metrics.battery_discharge_kwh'] || 0),
-                demand_kw: parseFloat(row['electricity_metrics.demand_kw'] || 0),
-                peak_demand_kw: parseFloat(row['electricity_metrics.peak_demand_kw'] || 0),
-                voltage_v: parseFloat(row['electricity_metrics.voltage_v'] || 0),
-                frequency_hz: parseFloat(row['electricity_metrics.frequency_hz'] || 0),
-                power_factor: parseFloat(row['electricity_metrics.power_factor'] || 0),
-                cost_eur: parseFloat(row['electricity_metrics.cost_eur'] || 0),
-                carbon_emissions_kg: parseFloat(row['electricity_metrics.carbon_emissions_kg'] || 0),
-            })) || [];
+                    // Find similar field names
+                    const similarFields = availableFields.allFields.filter(availableField =>
+                        availableField.toLowerCase().includes(field.toLowerCase()) ||
+                        field.toLowerCase().includes(availableField.toLowerCase())
+                    );
 
-            // Calculate summary statistics
-            const summary = this.calculateElectricitySummary(electricityData);
-            const trends = this.calculateElectricityTrends(electricityData);
+                    if (similarFields.length > 0) {
+                        suggestions[field] = similarFields.slice(0, 5); // Limit to 5 suggestions
+                    }
+                }
+            }
 
             return {
-                data: electricityData,
-                summary,
-                trends,
-                // Note: Forecasting and comparisons would require additional queries or ML models
-                ...(request.includeForecasting && { forecasting: await this.generateForecasting(electricityData) }),
-                ...(request.includeComparisons && { comparisons: await this.generateComparisons(request, electricityData) })
+                validFields,
+                invalidFields,
+                suggestions
             };
         } catch (error) {
-            this.logger.error('Failed to analyze electricity data', error);
-            throw error;
-        }
-    }
-
-    private calculateElectricitySummary(data: ElectricityMetrics[]) {
-        if (data.length === 0) {
+            this.logger.error('Failed to validate fields', { modelName, exploreName, fields, error });
             return {
-                totalConsumption: 0,
-                totalGeneration: 0,
-                netConsumption: 0,
-                peakDemand: 0,
-                averageDemand: 0,
-                totalCost: 0,
-                totalEmissions: 0,
-                selfSufficiency: 0,
-                gridDependency: 0
+                validFields: [],
+                invalidFields: fields,
+                suggestions: {}
             };
         }
-
-        const totalConsumption = data.reduce((sum, d) => sum + d.consumption_kwh, 0);
-        const totalGeneration = data.reduce((sum, d) => sum + (d.generation_kwh || 0), 0);
-        const netConsumption = totalConsumption - totalGeneration;
-        const peakDemand = Math.max(...data.map(d => d.demand_kw || 0));
-        const averageDemand = data.reduce((sum, d) => sum + (d.demand_kw || 0), 0) / data.length;
-        const totalCost = data.reduce((sum, d) => sum + (d.cost_eur || 0), 0);
-        const totalEmissions = data.reduce((sum, d) => sum + (d.carbon_emissions_kg || 0), 0);
-
-        const selfSufficiency = totalGeneration > 0 ? Math.min(100, (totalGeneration / totalConsumption) * 100) : 0;
-        const gridDependency = totalConsumption > 0 ? Math.max(0, ((totalConsumption - totalGeneration) / totalConsumption) * 100) : 0;
-
-        return {
-            totalConsumption,
-            totalGeneration,
-            netConsumption,
-            peakDemand,
-            averageDemand,
-            totalCost,
-            totalEmissions,
-            selfSufficiency,
-            gridDependency
-        };
     }
 
-    private calculateElectricityTrends(data: ElectricityMetrics[]): {
-        consumptionTrend: 'increasing' | 'decreasing' | 'stable';
-        generationTrend?: 'increasing' | 'decreasing' | 'stable';
-        costTrend?: 'increasing' | 'decreasing' | 'stable';
-    } {
-        if (data.length < 2) {
-            return {
-                consumptionTrend: 'stable',
-                generationTrend: 'stable',
-                costTrend: 'stable'
-            };
-        }
-
-        const midpoint = Math.floor(data.length / 2);
-        const firstHalf = data.slice(0, midpoint);
-        const secondHalf = data.slice(midpoint);
-
-        const firstHalfConsumption = firstHalf.reduce((sum, d) => sum + d.consumption_kwh, 0) / firstHalf.length;
-        const secondHalfConsumption = secondHalf.reduce((sum, d) => sum + d.consumption_kwh, 0) / secondHalf.length;
-
-        const firstHalfGeneration = firstHalf.reduce((sum, d) => sum + (d.generation_kwh || 0), 0) / firstHalf.length;
-        const secondHalfGeneration = secondHalf.reduce((sum, d) => sum + (d.generation_kwh || 0), 0) / secondHalf.length;
-
-        const firstHalfCost = firstHalf.reduce((sum, d) => sum + (d.cost_eur || 0), 0) / firstHalf.length;
-        const secondHalfCost = secondHalf.reduce((sum, d) => sum + (d.cost_eur || 0), 0) / secondHalf.length;
-
-        const getTrend = (first: number, second: number): 'increasing' | 'decreasing' | 'stable' => {
-            const change = ((second - first) / first) * 100;
-            if (change > 5) return 'increasing';
-            if (change < -5) return 'decreasing';
-            return 'stable';
-        };
-
-        return {
-            consumptionTrend: getTrend(firstHalfConsumption, secondHalfConsumption),
-            generationTrend: getTrend(firstHalfGeneration, secondHalfGeneration),
-            costTrend: getTrend(firstHalfCost, secondHalfCost)
-        };
-    }
-
-    private async generateForecasting(data: ElectricityMetrics[]) {
-        // Simple linear trend forecasting (in production, would use proper ML models)
-        if (data.length < 3) {
-            return {
-                nextPeriod: [],
-                confidence: 0,
-                methodology: 'Insufficient data for forecasting'
-            };
-        }
-
-        // For demo purposes, return a simple projection
-        return {
-            nextPeriod: [],
-            confidence: 0.7,
-            methodology: 'Linear trend projection (demo)'
-        };
-    }
-
-    private async generateComparisons(request: ElectricityAnalysisRequest, currentData: ElectricityMetrics[]) {
-        // Would implement period-over-period comparisons
-        return {
-            previousPeriod: {
-                change: 0,
-                changePercent: 0
-            },
-            yearOverYear: {
-                change: 0,
-                changePercent: 0
-            }
-        };
-    }
+    // Getters for specialized services
+    get metadata(): LookerMetadataService { return this.metadataService; }
+    get queryHandler(): LookerQueryService { return this.queryService; }
+    get content(): LookerContentService { return this.contentService; }
+    get csvExport(): LookerCsvExportService { return this.csvExportService; }
+    get advancedExport(): LookerAdvancedExportService { return this.advancedExportService; }
+    get lookml(): LookerLookMLService { return this.lookmlService; }
+    get embed(): LookerEmbedService { return this.embedService; }
+    get analytics(): ElectricityAnalyticsService { return this.analyticsService; }
+    get advancedAnalytics(): LookerAdvancedAnalyticsService { return this.advancedAnalyticsService; }
+    get diagnosticsHandler(): LookerDiagnosticsService { return this.diagnosticsService; }
 }

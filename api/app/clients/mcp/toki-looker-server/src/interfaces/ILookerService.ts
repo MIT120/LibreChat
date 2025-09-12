@@ -15,7 +15,10 @@ import {
     LookerQuery,
     LookerQueryResult,
     ElectricityAnalysisRequest,
-    ElectricityAnalysisResult
+    ElectricityAnalysisResult,
+    CsvExportResult,
+    TableExportRequest,
+    ReportExportRequest
 } from '../../types/index.js';
 
 export interface ILookerService {
@@ -34,6 +37,25 @@ export interface ILookerService {
     getMeasures(modelName: string, exploreName: string): Promise<LookerMeasure[]>;
     getFilters(modelName: string, exploreName: string): Promise<LookerFilter[]>;
     getParameters(modelName: string, exploreName: string): Promise<LookerParameter[]>;
+    getAvailableFields(modelName: string, exploreName: string): Promise<{
+        dimensions: string[];
+        measures: string[];
+        allFields: string[];
+    }>;
+    getAllAvailableFields(): Promise<{
+        models: Array<{
+            name: string;
+            explores: Array<{
+                name: string;
+                dimensions: string[];
+                measures: string[];
+                allFields: string[];
+            }>;
+        }>;
+        totalModels: number;
+        totalExplores: number;
+        totalFields: number;
+    }>;
 
     // Looks
     getLooks(search?: string): Promise<LookerLook[]>;
@@ -52,4 +74,27 @@ export interface ILookerService {
 
     // Electricity Analytics
     analyzeElectricity(request: ElectricityAnalysisRequest): Promise<ElectricityAnalysisResult>;
+
+    // Diagnostics
+    diagnostics(): Promise<{
+        config: {
+            baseUrl: string;
+            timeout: number;
+            clientIdConfigured: boolean;
+            clientSecretConfigured: boolean;
+        };
+        connection: {
+            canReachServer: boolean;
+            canAuthenticate: boolean;
+            responseTime?: number;
+        };
+        status: 'healthy' | 'degraded' | 'unhealthy';
+        errors: string[];
+    }>;
+
+    // CSV Export
+    exportQueryResultToCsv(request: ReportExportRequest): Promise<CsvExportResult>;
+    exportTableToCsv(request: TableExportRequest): Promise<CsvExportResult>;
+    exportElectricityAnalysisToCsv(analysisData: any[], title?: string, options?: any): Promise<CsvExportResult>;
+    getCsvExportService(): any; // Return the CSV export service instance
 }

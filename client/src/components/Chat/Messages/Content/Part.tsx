@@ -16,6 +16,7 @@ import WebSearch from './WebSearch';
 import ToolCall from './ToolCall';
 import ImageGen from './ImageGen';
 import Image from './Image';
+import CsvExportResult from './CsvExportResult';
 
 type PartProps = {
   part?: TMessageContentParts;
@@ -55,20 +56,6 @@ const Part = memo(
             </Container>
           )}
         </>
-      );
-    } else if (part.type === ContentTypes.TEXT) {
-      const text = typeof part.text === 'string' ? part.text : part.text.value;
-
-      if (typeof text !== 'string') {
-        return null;
-      }
-      if (part.tool_call_ids != null && !text) {
-        return null;
-      }
-      return (
-        <Container>
-          <Text text={text} isCreatedByUser={isCreatedByUser} showCursor={showCursor} />
-        </Container>
       );
     } else if (part.type === ContentTypes.THINK) {
       const reasoning = typeof part.think === 'string' ? part.think : part.think.value;
@@ -195,6 +182,64 @@ const Part = memo(
             width: width + 'px',
           }}
         />
+      );
+    } else if (part.type === ContentTypes.TEXT) {
+      const text = typeof part.text === 'string' ? part.text : part.text.value;
+
+      // Check if the text contains CSV export data (JSON format)
+      if (typeof text === 'string') {
+        try {
+          // Look for JSON objects that might contain CSV export data
+          const jsonMatches = text.match(/\{[^{}]*"csvExport"[^{}]*\}/g);
+          if (jsonMatches) {
+            for (const match of jsonMatches) {
+              try {
+                const parsed = JSON.parse(match);
+                if (parsed.csvExport && parsed.csvExport.filename && parsed.csvExport.content) {
+                  return (
+                    <Container>
+                      <CsvExportResult data={parsed} />
+                    </Container>
+                  );
+                }
+              } catch (e) {
+                // Continue trying other matches
+              }
+            }
+          }
+
+          // Also check for larger JSON objects that might contain CSV data
+          const largeJsonMatch = text.match(/\{.*"csvExport".*\}/s);
+          if (largeJsonMatch) {
+            try {
+              const parsed = JSON.parse(largeJsonMatch[0]);
+              if (parsed.csvExport && parsed.csvExport.filename && parsed.csvExport.content) {
+                return (
+                  <Container>
+                    <CsvExportResult data={parsed} />
+                  </Container>
+                );
+              }
+            } catch (e) {
+              // Continue with normal text rendering
+            }
+          }
+        } catch (e) {
+          // Continue with normal text rendering
+        }
+      }
+
+      // Normal text rendering
+      if (typeof text !== 'string') {
+        return null;
+      }
+      if (part.tool_call_ids != null && !text) {
+        return null;
+      }
+      return (
+        <Container>
+          <Text text={text} isCreatedByUser={isCreatedByUser} showCursor={showCursor} />
+        </Container>
       );
     }
 
